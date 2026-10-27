@@ -11,6 +11,7 @@ import { Lobby, lobbyRoutes, type LobbyOptions } from "./lobby";
 import { MatchRuntime, profileRoom, type Match } from "./matches";
 import { matchRoutes, Recorder, type StoredMatch } from "./recorder";
 import { rewardRoutes, Rewards } from "./rewards";
+import { Social, socialRoutes } from "./social";
 import { FileStore, type Store } from "./store";
 
 export interface AppOptions {
@@ -64,12 +65,15 @@ export function createApp(options: AppOptions = {}) {
   // Watching a match to the end counts towards the Watcher badge.
   matches.on("spectated", (m: Match, ids: string[]) => ids.forEach((id) => rewards.spectated(id, m.id, m.endedAt ?? Date.now())));
   const chat = new Chat(io, matches, lobby, identity, { clock: options.clock });
+  const social = new Social(io, store, identity, matches, lobby, recorder);
+  app.use(socialRoutes(social, identity));
 
   io.on("connection", (socket) => {
     matches.attach(socket, socket.data.profileId as string);
     lobby.attach(socket, socket.data.profileId as string);
     chat.attach(socket, socket.data.profileId as string);
+    social.attach(socket, socket.data.profileId as string);
   });
 
-  return { app, httpServer, io, store, identity, ledger, matches, recorder, lobby, rewards, chat };
+  return { app, httpServer, io, store, identity, ledger, matches, recorder, lobby, rewards, chat, social };
 }
