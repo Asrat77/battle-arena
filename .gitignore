@@ -1,0 +1,19 @@
+# deps and build output
+node_modules/
+.next/
+out/
+build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# local env and secrets
+.env*
+*.pem
+
+# logs and OS noise
+*.log
+.DS_Store
+
+# server data (profiles, ledger)
+/data/
