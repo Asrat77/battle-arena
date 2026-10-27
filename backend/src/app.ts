@@ -13,6 +13,7 @@ import { matchRoutes, Recorder, type StoredMatch } from "./recorder";
 import { rewardRoutes, Rewards } from "./rewards";
 import { Social, socialRoutes } from "./social";
 import { FileStore, type Store } from "./store";
+import { tournamentRoutes, Tournaments } from "./tournaments";
 
 export interface AppOptions {
   store?: Store;
@@ -67,13 +68,20 @@ export function createApp(options: AppOptions = {}) {
   const chat = new Chat(io, matches, lobby, identity, { clock: options.clock });
   const social = new Social(io, store, identity, matches, lobby, recorder);
   app.use(socialRoutes(social, identity));
+  const tournaments = new Tournaments(store, io, matches, identity, {
+    clock: options.clock,
+    games: options.games,
+    onChampion: (id, tournamentId, ts) => rewards.tournamentWon(id, tournamentId, ts),
+  });
+  app.use(tournamentRoutes(tournaments));
 
   io.on("connection", (socket) => {
     matches.attach(socket, socket.data.profileId as string);
     lobby.attach(socket, socket.data.profileId as string);
     chat.attach(socket, socket.data.profileId as string);
     social.attach(socket, socket.data.profileId as string);
+    tournaments.attach(socket, socket.data.profileId as string);
   });
 
-  return { app, httpServer, io, store, identity, ledger, matches, recorder, lobby, rewards, chat, social };
+  return { app, httpServer, io, store, identity, ledger, matches, recorder, lobby, rewards, chat, social, tournaments };
 }

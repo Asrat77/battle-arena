@@ -90,9 +90,9 @@ export class Lobby {
         gameName: m.game.name,
         players: m.players.map((p, seat) => ({
           profileId: p,
-          name: seat === m.botSeat ? "Bot" : (this.identity.get(p)?.name ?? null),
+          name: m.bots.includes(seat as Seat) ? "Bot" : (this.identity.get(p)?.name ?? null),
         })),
-        bot: m.botSeat !== null,
+        bot: m.bots.length > 0,
         startedAt: m.startedAt,
         spectators: this.matches.spectators(m).length,
         room: this.roomOfMatch(m.id)?.code ?? null,

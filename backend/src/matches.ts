@@ -20,8 +20,10 @@ export interface Match {
   game: AnyGame;
   seed: string;
   players: [string, string];
-  /** Seat played by the server's bot, or null for human vs human. */
+  /** Seat played by the server's bot, or null for human vs human. The first one when both seats are bots. */
   botSeat: Seat | null;
+  /** Every seat the server's bot plays (both in a bot-vs-bot tournament match). */
+  bots: Seat[];
   log: LogEntry[];
   cur: MatchState<unknown>;
   deadline: number | null;
@@ -31,7 +33,7 @@ export interface Match {
   committed: boolean;
   startedAt: number;
   endedAt: number | null;
-  timers: { deadline?: TimerHandle; bot?: TimerHandle; disconnect: [TimerHandle?, TimerHandle?] };
+  timers: { deadline?: TimerHandle; bot: [TimerHandle?, TimerHandle?]; disconnect: [TimerHandle?, TimerHandle?] };
   active: Seat[];
 }
 
@@ -39,6 +41,8 @@ export interface CreateMatchInput {
   game: AnyGame;
   players: [string, string];
   botSeat?: Seat | null;
+  /** Bot seats, for a bot-vs-bot match. Overrides botSeat. */
+  botSeats?: Seat[];
   seed?: string;
 }
 
@@ -85,12 +89,14 @@ export class MatchRuntime extends EventEmitter {
     const id = randomBytes(8).toString("hex");
     const seed = input.seed ?? randomBytes(16).toString("hex");
     const cur = initial(game, seed);
+    const bots: Seat[] = input.botSeats ?? (input.botSeat != null ? [input.botSeat] : []);
     const m: Match = {
       id,
       game,
       seed,
       players,
-      botSeat: input.botSeat ?? null,
+      botSeat: bots[0] ?? null,
+      bots,
       log: [],
       cur,
       deadline: null,
@@ -98,13 +104,13 @@ export class MatchRuntime extends EventEmitter {
       committed: false,
       startedAt: this.clock.now(),
       endedAt: null,
-      timers: { disconnect: [] },
+      timers: { bot: [], disconnect: [] },
       active: [],
     };
     this.matches.set(id, m);
 
     for (const seat of [0, 1] as const) {
-      if (seat === m.botSeat) continue;
+      if (m.bots.includes(seat)) continue;
       this.io.in(profileRoom(players[seat])).socketsJoin(seatRoom(id, seat));
       this.io.to(profileRoom(players[seat])).emit("match:start", this.startPayload(m, seat));
     }
@@ -112,7 +118,7 @@ export class MatchRuntime extends EventEmitter {
     this.advanced(m, true);
     // A seated player who is not connected right now starts the forfeit clock.
     for (const seat of [0, 1] as const) {
-      if (seat !== m.botSeat && !this.isOnline(players[seat])) this.startDisconnectTimer(m, seat);
+      if (!m.bots.includes(seat) && !this.isOnline(players[seat])) this.startDisconnectTimer(m, seat);
     }
     return m;
   }
@@ -266,13 +272,17 @@ export class MatchRuntime extends EventEmitter {
   }
 
   private scheduleBot(m: Match) {
-    const seat = m.botSeat;
-    if (seat === null || !m.active.includes(seat) || m.timers.bot) return;
-    const rng = createRng(`${m.seed}:bot:${m.log.length}`);
+    for (const seat of m.bots) this.scheduleBotSeat(m, seat);
+  }
+
+  private scheduleBotSeat(m: Match, seat: Seat) {
+    if (!m.active.includes(seat) || m.timers.bot[seat]) return;
+    // A second bot gets its own stream so the two never mirror each other.
+    const rng = createRng(m.bots.length > 1 ? `${m.seed}:bot:${seat}:${m.log.length}` : `${m.seed}:bot:${m.log.length}`);
     let delay = BOT_DELAY_MS[0] + rng.int(BOT_DELAY_MS[1] - BOT_DELAY_MS[0] + 1);
     if (m.deadline !== null) delay = Math.min(delay, Math.max(0, m.deadline - this.clock.now() - 250));
-    m.timers.bot = this.clock.setTimeout(() => {
-      m.timers.bot = undefined;
+    m.timers.bot[seat] = this.clock.setTimeout(() => {
+      m.timers.bot[seat] = undefined;
       if (m.cur.outcome || !m.active.includes(seat)) return;
       const move = m.game.bot(m.game.view(m.cur.state, seat), seat, rng);
       const entry: LogEntry = { t: this.clock.now(), seat, move };
@@ -299,9 +309,9 @@ export class MatchRuntime extends EventEmitter {
     m.endedAt = this.clock.now();
     m.deadline = null;
     m.timers.deadline?.cancel();
-    m.timers.bot?.cancel();
+    m.timers.bot.forEach((t) => t?.cancel());
     m.timers.disconnect.forEach((t) => t?.cancel());
-    m.timers = { disconnect: [] };
+    m.timers = { bot: [], disconnect: [] };
 
     this.pushViews(m);
     this.io.to(this.allRooms(m)).emit("match:end", this.endPayload(m));
@@ -340,7 +350,7 @@ export class MatchRuntime extends EventEmitter {
       matchId: m.id,
       gameId: m.game.id,
       players: m.players,
-      bot: m.botSeat !== null,
+      bot: m.bots.length > 0,
       seed: m.seed,
       log: m.log,
       outcome: m.cur.outcome,
@@ -351,7 +361,7 @@ export class MatchRuntime extends EventEmitter {
 
   private pushViews(m: Match) {
     for (const seat of [0, 1] as const) {
-      if (seat !== m.botSeat) this.io.to(seatRoom(m.id, seat)).emit("match:view", this.viewPayload(m, seat));
+      if (!m.bots.includes(seat)) this.io.to(seatRoom(m.id, seat)).emit("match:view", this.viewPayload(m, seat));
     }
     this.io.to(specRoom(m.id)).emit("match:view", this.viewPayload(m, "spectator"));
   }
@@ -368,7 +378,7 @@ export class MatchRuntime extends EventEmitter {
       matchId: m.id,
       gameId: m.game.id,
       players: m.players,
-      bot: m.botSeat !== null,
+      bot: m.bots.length > 0,
       botSeat: m.botSeat,
       seat: viewer,
       commitments: m.commitments,
@@ -401,7 +411,7 @@ export class MatchRuntime extends EventEmitter {
 
   private seatOf(m: Match, profileId: string): Seat | null {
     const seat = m.players.indexOf(profileId);
-    return seat === 0 || seat === 1 ? (seat === m.botSeat ? null : seat) : null;
+    return seat === 0 || seat === 1 ? (m.bots.includes(seat) ? null : seat) : null;
   }
 
   private isOnline(profileId: string) {

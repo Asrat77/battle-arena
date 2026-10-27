@@ -4,6 +4,7 @@
 
 import { Router } from "express";
 import type { Server, Socket } from "socket.io";
+import type { Seat } from "../../engine/types";
 import { bearerToken, type Identity } from "./identity";
 import type { Lobby } from "./lobby";
 import { profileRoom, type Match, type MatchRuntime } from "./matches";
@@ -143,9 +144,9 @@ export class Social {
   private matchStarted(m: Match) {
     const players = m.players;
     for (const [seat, p] of players.entries()) {
-      if (seat === m.botSeat) continue;
+      if (m.bots.includes(seat as Seat)) continue;
       const other = players[1 - seat];
-      const bot = m.botSeat !== null;
+      const bot = m.bots.length > 0;
       this.notify(p, {
         kind: "matchFound",
         matchId: m.id,
