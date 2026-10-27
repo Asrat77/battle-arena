@@ -69,6 +69,11 @@ export class MatchRuntime extends EventEmitter {
     return this.matches.get(id);
   }
 
+  /** Matches still in progress. */
+  live(): Match[] {
+    return [...this.matches.values()].filter((m) => !m.cur.outcome);
+  }
+
   /** Live matches a profile is seated in. */
   activeFor(profileId: string): Match[] {
     return [...this.matches.values()].filter((m) => !m.cur.outcome && m.players.includes(profileId));

@@ -77,7 +77,8 @@ describe("recording and verify", () => {
     assert.equal((await api(`/api/matches/${m.id}`)).status, 409, "record must not be served while live");
 
     assert.deepEqual(await alice.move(m.id, { type: "secret", code: "1234" }), { ok: true });
-    clock.advance(BOT_DELAY_MS[1]);
+    // Step only until the bot's secret lands; one big advance could also fire its first guess.
+    for (let t = 0; (m.cur.state as CtcState).phase === "setup" && t < BOT_DELAY_MS[1]; t += 100) clock.advance(100);
     assert.equal((m.cur.state as CtcState).phase, "rounds");
 
     // The commit block goes out once both secrets exist, before any guess.
