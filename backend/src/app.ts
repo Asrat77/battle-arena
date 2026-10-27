@@ -4,10 +4,11 @@ import cors from "cors";
 import express from "express";
 import { Server } from "socket.io";
 import type { Clock } from "./clock";
+import { Chat } from "./chat";
 import { Identity, identityRoutes } from "./identity";
 import { Ledger, ledgerRoutes, type LedgerOptions } from "./ledger";
 import { Lobby, lobbyRoutes, type LobbyOptions } from "./lobby";
-import { MatchRuntime, profileRoom } from "./matches";
+import { MatchRuntime, profileRoom, type Match } from "./matches";
 import { matchRoutes, Recorder, type StoredMatch } from "./recorder";
 import { rewardRoutes, Rewards } from "./rewards";
 import { FileStore, type Store } from "./store";
@@ -60,11 +61,15 @@ export function createApp(options: AppOptions = {}) {
   });
   recorder.on("recorded", (stored: StoredMatch) => rewards.matchRecorded(stored));
   app.use(rewardRoutes(rewards, (id) => identity.get(id) !== null));
+  // Watching a match to the end counts towards the Watcher badge.
+  matches.on("spectated", (m: Match, ids: string[]) => ids.forEach((id) => rewards.spectated(id, m.id, m.endedAt ?? Date.now())));
+  const chat = new Chat(io, matches, lobby, identity, { clock: options.clock });
 
   io.on("connection", (socket) => {
     matches.attach(socket, socket.data.profileId as string);
     lobby.attach(socket, socket.data.profileId as string);
+    chat.attach(socket, socket.data.profileId as string);
   });
 
-  return { app, httpServer, io, store, identity, ledger, matches, recorder, lobby, rewards };
+  return { app, httpServer, io, store, identity, ledger, matches, recorder, lobby, rewards, chat };
 }

@@ -45,13 +45,14 @@ export interface CreateMatchInput {
 type Ack = (res: { ok: true } | { ok: false; reason: string }) => void;
 
 const seatRoom = (id: string, seat: Seat) => `match:${id}:${seat}`;
-const specRoom = (id: string) => `match:${id}:spectators`;
+export const specRoom = (id: string) => `match:${id}:spectators`;
 export const profileRoom = (profileId: string) => `profile:${profileId}`;
 
 /**
- * Emits "start" (match), "commit" (match, once every seat's commitment exists)
- * and "end" (match, record) so recording, rewards and the lobby can hook in
- * without the runtime knowing about them.
+ * Emits "start" (match), "commit" (match, once every seat's commitment exists),
+ * "end" (match, record) and "spectated" (match, profileIds still watching at
+ * the end) so recording, rewards and the lobby can hook in without the
+ * runtime knowing about them.
  */
 export class MatchRuntime extends EventEmitter {
   private matches = new Map<string, Match>();
@@ -148,20 +149,37 @@ export class MatchRuntime extends EventEmitter {
         socket.emit("match:start", this.startPayload(m, "spectator"));
         socket.emit("match:view", this.viewPayload(m, "spectator"));
         if (m.cur.outcome) socket.emit("match:end", this.endPayload(m));
+        else this.sendSpectatorCount(m);
       }
       if (typeof ack === "function") ack({ ok: true });
     });
 
-    socket.on("match:leave", (msg: { matchId?: string } | undefined, ack?: Ack) => {
+    socket.on("match:leave", (msg: { matchId?: string } | Ack | undefined, ack?: Ack) => {
+      if (typeof msg === "function") [ack, msg] = [msg, undefined];
+      const matchId = (msg as { matchId?: string } | undefined)?.matchId;
+      // Spectators just stop watching; players forfeit.
+      for (const m of this.watchedBy(socket)) {
+        if (matchId && matchId !== m.id) continue;
+        socket.leave(specRoom(m.id));
+        this.sendSpectatorCount(m);
+      }
       for (const m of this.activeFor(profileId)) {
-        if (msg?.matchId && msg.matchId !== m.id) continue;
+        if (matchId && matchId !== m.id) continue;
         const seat = this.seatOf(m, profileId);
         if (seat !== null) this.append(m, { t: this.clock.now(), seat: "system", move: { type: "forfeit", seat } });
       }
       if (typeof ack === "function") ack({ ok: true });
     });
 
+    // Rooms are already left by the time "disconnect" fires, so note which
+    // matches this socket was watching while it still knows.
+    let watching: Match[] = [];
+    socket.on("disconnecting", () => {
+      watching = this.watchedBy(socket);
+    });
+
     socket.on("disconnect", () => {
+      watching.forEach((m) => this.sendSpectatorCount(m));
       if (this.isOnline(profileId)) return;
       for (const m of this.activeFor(profileId)) {
         const seat = this.seatOf(m, profileId);
@@ -288,6 +306,32 @@ export class MatchRuntime extends EventEmitter {
     this.pushViews(m);
     this.io.to(this.allRooms(m)).emit("match:end", this.endPayload(m));
     this.emit("end", m, this.record(m));
+    const watchers = this.spectators(m);
+    if (watchers.length) this.emit("spectated", m, watchers);
+  }
+
+  /** Distinct profiles watching a match (players' own sockets never count). */
+  spectators(m: Match): string[] {
+    const ids = new Set<string>();
+    for (const sid of this.io.sockets.adapter.rooms.get(specRoom(m.id)) ?? []) {
+      const profileId = this.io.sockets.sockets.get(sid)?.data.profileId as string | undefined;
+      if (profileId && this.seatOf(m, profileId) === null) ids.add(profileId);
+    }
+    return [...ids];
+  }
+
+  /** Whether this socket is watching the match as a spectator. */
+  isWatching(socket: Socket, matchId: string): boolean {
+    return socket.rooms.has(specRoom(matchId));
+  }
+
+  private watchedBy(socket: Socket): Match[] {
+    return [...this.matches.values()].filter((m) => this.isWatching(socket, m.id));
+  }
+
+  private sendSpectatorCount(m: Match) {
+    if (m.cur.outcome) return;
+    this.broadcast(m, "match:spectators", { matchId: m.id, count: this.spectators(m).length });
   }
 
   record(m: Match): MatchRecord | null {
@@ -329,6 +373,7 @@ export class MatchRuntime extends EventEmitter {
       seat: viewer,
       commitments: m.commitments,
       startedAt: m.startedAt,
+      spectators: this.spectators(m).length,
     };
   }
 

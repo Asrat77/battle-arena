@@ -46,7 +46,7 @@ export interface LobbyOptions {
 
 type Ack = (res: { ok: true; [k: string]: unknown } | { ok: false; reason: string }) => void;
 
-const roomChannel = (code: string) => `room:${code}`;
+export const roomChannel = (code: string) => `room:${code}`;
 
 export class Lobby {
   private queues = new Map<string, QueueEntry[]>();
@@ -76,6 +76,40 @@ export class Lobby {
       queue: this.queue(g.id).length,
       live: live.filter((m) => m.game.id === g.id).length,
     }));
+  }
+
+  /** Live matches anyone can watch, newest first, for the lobby's "watch" list. */
+  liveMatches(gameId?: string) {
+    return this.matches
+      .live()
+      .filter((m) => !gameId || m.game.id === gameId)
+      .sort((a, b) => b.startedAt - a.startedAt)
+      .map((m) => ({
+        matchId: m.id,
+        gameId: m.game.id,
+        gameName: m.game.name,
+        players: m.players.map((p, seat) => ({
+          profileId: p,
+          name: seat === m.botSeat ? "Bot" : (this.identity.get(p)?.name ?? null),
+        })),
+        bot: m.botSeat !== null,
+        startedAt: m.startedAt,
+        spectators: this.matches.spectators(m).length,
+        room: this.roomOfMatch(m.id)?.code ?? null,
+        link: `/watch/${m.id}`,
+      }));
+  }
+
+  /** Room code and members for chat, by code. */
+  roomInfo(code: string): { code: string; members: string[]; matchId: string | null } | undefined {
+    const room = this.rooms.get(code.trim().toUpperCase());
+    return room && { code: room.code, members: room.members.map((x) => x.profileId), matchId: room.matchId };
+  }
+
+  /** The room a live match was started from, if any. */
+  roomOfMatch(matchId: string) {
+    for (const room of this.rooms.values()) if (room.matchId === matchId) return this.roomInfo(room.code);
+    return undefined;
   }
 
   attach(socket: Socket, profileId: string) {
@@ -342,6 +376,10 @@ export function lobbyRoutes(lobby: Lobby): Router {
 
   router.get("/api/games", (_req, res) => {
     res.json(lobby.gameList());
+  });
+
+  router.get("/api/live", (req, res) => {
+    res.json(lobby.liveMatches(typeof req.query.game === "string" ? req.query.game : undefined));
   });
 
   // The /r/<code> page looks the room up before joining it.
