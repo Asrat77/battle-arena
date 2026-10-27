@@ -25,7 +25,10 @@ export interface Match {
   log: LogEntry[];
   cur: MatchState<unknown>;
   deadline: number | null;
+  /** Grows as seats commit; final once `committed` is true. */
   commitments: Record<string, string>;
+  /** Every seat has committed (e.g. both secrets set). "commit" has been emitted. */
+  committed: boolean;
   startedAt: number;
   endedAt: number | null;
   timers: { deadline?: TimerHandle; bot?: TimerHandle; disconnect: [TimerHandle?, TimerHandle?] };
@@ -46,8 +49,9 @@ const specRoom = (id: string) => `match:${id}:spectators`;
 export const profileRoom = (profileId: string) => `profile:${profileId}`;
 
 /**
- * Emits "start" (match) and "end" (match, record) so recording, rewards and
- * the lobby can hook in without the runtime knowing about them.
+ * Emits "start" (match), "commit" (match, once every seat's commitment exists)
+ * and "end" (match, record) so recording, rewards and the lobby can hook in
+ * without the runtime knowing about them.
  */
 export class MatchRuntime extends EventEmitter {
   private matches = new Map<string, Match>();
@@ -84,7 +88,8 @@ export class MatchRuntime extends EventEmitter {
       log: [],
       cur,
       deadline: null,
-      commitments: game.commitments?.(cur.state) ?? {},
+      commitments: {},
+      committed: false,
       startedAt: this.clock.now(),
       endedAt: null,
       timers: { disconnect: [] },
@@ -192,6 +197,7 @@ export class MatchRuntime extends EventEmitter {
     const { state, outcome } = m.cur;
     const prev = m.active;
     m.active = outcome ? [] : m.game.activeSeats(state);
+    this.checkCommitments(m);
 
     if (outcome) {
       this.finish(m);
@@ -217,6 +223,23 @@ export class MatchRuntime extends EventEmitter {
 
     this.pushViews(m);
     this.scheduleBot(m);
+  }
+
+  // Commitments only exist once each seat has chosen its hidden data (a Crack
+  // the Code secret is set during setup), so they are published when the last
+  // seat commits rather than at match creation.
+  private checkCommitments(m: Match) {
+    if (m.committed || !m.game.commitments) return;
+    m.commitments = m.game.commitments(m.cur.state);
+    if ((["0", "1"] as const).every((seat) => seat in m.commitments)) {
+      m.committed = true;
+      this.emit("commit", m);
+    }
+  }
+
+  /** Send an event to everyone in the match: both seats, spectators, and the players' other sockets. */
+  broadcast(m: Match, event: string, payload: unknown) {
+    this.io.to([...this.allRooms(m), ...m.players.map(profileRoom)]).emit(event, payload);
   }
 
   private scheduleBot(m: Match) {

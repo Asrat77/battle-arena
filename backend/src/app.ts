@@ -7,6 +7,7 @@ import type { Clock } from "./clock";
 import { Identity, identityRoutes } from "./identity";
 import { Ledger, ledgerRoutes, type LedgerOptions } from "./ledger";
 import { MatchRuntime } from "./matches";
+import { matchRoutes, Recorder } from "./recorder";
 import { FileStore, type Store } from "./store";
 
 export interface AppOptions {
@@ -45,10 +46,12 @@ export function createApp(options: AppOptions = {}) {
   });
 
   const matches = new MatchRuntime(io, { clock: options.clock });
+  const recorder = new Recorder(store, ledger, matches);
+  app.use(matchRoutes(recorder, matches));
 
   io.on("connection", (socket) => {
     matches.attach(socket, socket.data.profileId as string);
   });
 
-  return { app, httpServer, io, store, identity, ledger, matches };
+  return { app, httpServer, io, store, identity, ledger, matches, recorder };
 }
