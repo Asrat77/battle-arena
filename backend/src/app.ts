@@ -3,13 +3,16 @@ import { createServer } from "node:http";
 import cors from "cors";
 import express from "express";
 import { Server } from "socket.io";
+import type { Clock } from "./clock";
 import { Identity, identityRoutes } from "./identity";
 import { Ledger, ledgerRoutes, type LedgerOptions } from "./ledger";
+import { MatchRuntime } from "./matches";
 import { FileStore, type Store } from "./store";
 
 export interface AppOptions {
   store?: Store;
   ledger?: LedgerOptions;
+  clock?: Clock;
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -33,5 +36,19 @@ export function createApp(options: AppOptions = {}) {
     cors: { origin, methods: ["GET", "POST"], credentials: true },
   });
 
-  return { app, httpServer, io, store, identity, ledger };
+  // Sockets authenticate with the session token from signup: io(url, { auth: { token } }).
+  io.use((socket, next) => {
+    const profile = identity.byToken(socket.handshake.auth?.token);
+    if (!profile) return next(new Error("unauthorized"));
+    socket.data.profileId = profile.id;
+    next();
+  });
+
+  const matches = new MatchRuntime(io, { clock: options.clock });
+
+  io.on("connection", (socket) => {
+    matches.attach(socket, socket.data.profileId as string);
+  });
+
+  return { app, httpServer, io, store, identity, ledger, matches };
 }
