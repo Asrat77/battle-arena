@@ -7,8 +7,9 @@ import type { Clock } from "./clock";
 import { Identity, identityRoutes } from "./identity";
 import { Ledger, ledgerRoutes, type LedgerOptions } from "./ledger";
 import { Lobby, lobbyRoutes, type LobbyOptions } from "./lobby";
-import { MatchRuntime } from "./matches";
-import { matchRoutes, Recorder } from "./recorder";
+import { MatchRuntime, profileRoom } from "./matches";
+import { matchRoutes, Recorder, type StoredMatch } from "./recorder";
+import { rewardRoutes, Rewards } from "./rewards";
 import { FileStore, type Store } from "./store";
 
 export interface AppOptions {
@@ -52,11 +53,18 @@ export function createApp(options: AppOptions = {}) {
   app.use(matchRoutes(recorder, matches));
   const lobby = new Lobby(io, matches, identity, { clock: options.clock, games: options.games });
   app.use(lobbyRoutes(lobby));
+  const rewards = new Rewards(store, ledger, {
+    isPlayer: (id) => identity.get(id) !== null,
+    nameOf: (id) => identity.get(id)?.name ?? id,
+    notify: (id, payload) => io.to(profileRoom(id)).emit("notify", payload),
+  });
+  recorder.on("recorded", (stored: StoredMatch) => rewards.matchRecorded(stored));
+  app.use(rewardRoutes(rewards, (id) => identity.get(id) !== null));
 
   io.on("connection", (socket) => {
     matches.attach(socket, socket.data.profileId as string);
     lobby.attach(socket, socket.data.profileId as string);
   });
 
-  return { app, httpServer, io, store, identity, ledger, matches, recorder, lobby };
+  return { app, httpServer, io, store, identity, ledger, matches, recorder, lobby, rewards };
 }
