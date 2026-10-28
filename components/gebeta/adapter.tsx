@@ -96,7 +96,7 @@ function ReplayStep({ log, step: at, seed, names, players }: ReplayStepProps) {
   );
 }
 
-function moveLine(view: GebetaView, names: [string, string]): string {
+export function moveLine(view: GebetaView, names: [string, string]): string {
   const last = view.last;
   if (!last) return gebetaStatus(view, "spectator", names);
   const parts = [`${names[last.seat]} sows pit ${last.pit + 1}`];
