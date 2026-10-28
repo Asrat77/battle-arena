@@ -2,20 +2,172 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Arena Night: dark by default, day theme on .light. Colours are RGB triplets
+   so Tailwind can apply opacity (bg-sf/80); soft tints are full colours. */
+@layer base {
+  :root {
+    --bg: 12 10 9;
+    --sf: 22 19 17;
+    --sf2: 32 27 24;
+    --sf3: 43 36 32;
+    --ln: 42 36 33;
+    --ink: 247 243 239;
+    --ink2: 168 160 154;
+    --ink3: 142 135 129;
+    --acc: 243 181 66;
+    --act: 243 181 66;
+    --on-act: 22 16 10;
+    --you: 143 184 255;
+    --opp: 255 143 115;
+    --pend: 230 172 98;
+    --rec: 120 198 154;
+    --bad: 240 146 141;
+    --you-s: rgb(143 184 255 / 0.14);
+    --opp-s: rgb(255 143 115 / 0.14);
+    --pend-s: rgb(230 172 98 / 0.14);
+    --rec-s: rgb(120 198 154 / 0.14);
+    --bad-s: rgb(240 146 141 / 0.14);
+    --glass: rgb(22 19 17 / 0.82);
+    --edge: rgb(255 255 255 / 0.07);
+    --plate: radial-gradient(circle at 50% 36%, #3a302a, #1a1513 72%);
+    --sh: 0 18px 40px rgb(0 0 0 / 0.45);
+    --scrim: rgb(0 0 0 / 0.6);
+    --sow-ms: 120ms;
+    color-scheme: dark;
+  }
+
+  .light {
+    --bg: 246 242 236;
+    --sf: 255 255 255;
+    --sf2: 239 233 225;
+    --sf3: 228 220 209;
+    --ln: 227 218 207;
+    --ink: 26 20 18;
+    --ink2: 95 85 78;
+    --ink3: 115 104 95;
+    --acc: 201 133 16;
+    --act: 26 20 18;
+    --on-act: 255 248 238;
+    --you: 47 98 200;
+    --opp: 196 71 44;
+    --pend: 141 82 11;
+    --rec: 47 104 79;
+    --bad: 162 44 44;
+    --you-s: rgb(47 98 200 / 0.1);
+    --opp-s: rgb(196 71 44 / 0.1);
+    --pend-s: #f7e8bf;
+    --rec-s: #dcede3;
+    --bad-s: #f6dedb;
+    --glass: rgb(255 255 255 / 0.86);
+    --edge: rgb(26 20 18 / 0.08);
+    --plate: radial-gradient(circle at 50% 36%, #ffffff, #eae2d7 72%);
+    --sh: 0 16px 34px rgb(52 27 17 / 0.14);
+    --scrim: rgb(26 20 18 / 0.4);
+    color-scheme: light;
+  }
+
+  body {
+    @apply bg-bg font-sans text-body text-ink antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--acc));
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --sow-ms: 0ms;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
 @layer components {
+  .mono {
+    @apply font-mono tabular-nums;
+    overflow-wrap: anywhere;
+  }
+  .eyebrow {
+    @apply font-mono text-eyebrow uppercase text-ink-3;
+  }
+
+  /* Buttons: 52 px, radius 16. One saffron (action) button per screen. */
   .btn {
-    @apply rounded border border-gray-900 bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40;
+    @apply inline-flex h-[52px] cursor-pointer select-none items-center justify-center gap-2.5 whitespace-nowrap rounded-2xl border-0 px-5 text-base font-semibold no-underline transition-transform duration-100 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100;
+  }
+  .btn-act {
+    @apply bg-action text-action-ink;
+  }
+  .btn-sec {
+    @apply bg-sf-2 text-ink;
+  }
+  .btn-ghost {
+    @apply bg-transparent text-ink-2;
+  }
+  .btn-bad {
+    @apply bg-mismatch-soft text-mismatch;
+  }
+  .btn-sm {
+    @apply h-[38px] rounded-xl px-3.5 text-sm;
+  }
+  /* Older screens use bare .btn (primary) and .btn-outline. */
+  .btn:not(.btn-sec, .btn-ghost, .btn-bad) {
+    @apply bg-action text-action-ink;
   }
   .btn-outline {
-    @apply rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40;
+    @apply btn btn-sec btn-sm;
   }
+
   .card {
-    @apply rounded border border-gray-200 bg-white p-4;
+    @apply rounded-card bg-sf p-4;
   }
+  .light .card {
+    box-shadow: 0 0 0 1px rgb(var(--ln));
+  }
+
+  .chip {
+    @apply inline-flex h-7 flex-none items-center gap-1.5 whitespace-nowrap rounded-chip bg-sf-2 px-[11px] text-[12.5px] font-semibold text-ink-2 no-underline;
+  }
+
   .input {
-    @apply rounded border border-gray-300 px-3 py-1.5 text-sm;
+    @apply h-14 w-full rounded-2xl border-0 bg-sf-2 px-[18px] text-[17px] text-ink shadow-edge outline-none placeholder:text-ink-3 focus:shadow-[inset_0_0_0_2px_rgb(var(--acc))];
   }
-  .mono {
-    @apply font-mono text-xs break-all;
+  .input[aria-invalid="true"] {
+    box-shadow: inset 0 0 0 2px rgb(var(--bad));
+  }
+
+  .glass {
+    background: var(--glass);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: var(--sh), inset 0 0 0 1px var(--edge);
+  }
+
+  .plate {
+    background: var(--plate);
+  }
+
+  .spin {
+    @apply h-3 w-3 flex-none animate-spin rounded-full border-2 border-current border-r-transparent;
+  }
+
+  /* Saffron dot texture behind page headers. */
+  .dither {
+    @apply pointer-events-none absolute inset-x-0 top-0 h-[260px] opacity-40;
+    background-image: radial-gradient(rgb(243 181 66 / 0.6) 1px, transparent 1.4px);
+    background-size: 5px 5px;
+    -webkit-mask-image: radial-gradient(90% 100% at 50% 0%, #000 0%, transparent 72%);
+    mask-image: radial-gradient(90% 100% at 50% 0%, #000 0%, transparent 72%);
+  }
+
+  .row {
+    @apply flex items-center gap-3 border-t border-line py-3 first:border-t-0;
   }
 }
