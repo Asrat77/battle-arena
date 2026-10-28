@@ -18,6 +18,8 @@ import { Dialog } from "@/components/ui/Overlay";
 import { useToast } from "@/components/ui/Toast";
 import type { RoomState } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { InviteSheet, useFriends } from "./InviteSheet";
+import { RoomChat } from "./RoomChat";
 import { useRoom } from "./useRoom";
 
 const MATCHED_HOLD_MS = 1200;
@@ -53,6 +55,8 @@ function Room({ code, me }: { code: string; me: string }) {
   const toast = useToast();
   const { phase, busy, setReady, leave, retry } = useRoom(code);
   const [leaving, setLeaving] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const friends = useFriends();
   const room = phase.kind === "in" ? phase.room : null;
   const matchId = room?.state === "playing" ? room.matchId : null;
 
@@ -167,7 +171,13 @@ function Room({ code, me }: { code: string; me: string }) {
           {them && <CopyChip link={room.link} />}
         </header>
 
-        {!them && <CodeBox room={room} />}
+        {!them && (
+          <CodeBox
+            room={room}
+            onlineFriends={friends?.filter((f) => f.status === "online").length ?? 0}
+            onInvite={() => setInviting(true)}
+          />
+        )}
 
         <ul className="flex flex-col gap-2.5" aria-label="Seats">
           {you && (
@@ -213,7 +223,11 @@ function Room({ code, me }: { code: string; me: string }) {
         </ul>
 
         {them && you && <StatusLine youReady={you.ready} themReady={them.ready} theirName={theirName} />}
+
+        <RoomChat code={room.code} me={me} />
       </div>
+
+      <InviteSheet open={inviting && !them} onClose={() => setInviting(false)} code={room.code} friends={friends} />
 
       <Dialog
         open={leaving}
@@ -299,7 +313,7 @@ function useSecondsLeft(ms: number | null): number {
   return Math.max(1, Math.ceil(left / 1000));
 }
 
-function CodeBox({ room }: { room: RoomState }) {
+function CodeBox({ room, onlineFriends, onInvite }: { room: RoomState; onlineFriends: number; onInvite: () => void }) {
   const toast = useToast();
   const url = useAbsolute(room.link);
   const share = async () => {
@@ -334,6 +348,9 @@ function CodeBox({ room }: { room: RoomState }) {
         </Button>
         <Button size="sm" icon="link" onClick={() => copy(url, toast)}>
           Copy
+        </Button>
+        <Button size="sm" icon="handshake" onClick={onInvite}>
+          {onlineFriends ? `Invite · ${onlineFriends}` : "Invite"}
         </Button>
       </div>
     </section>
