@@ -17,3 +17,6 @@ next-env.d.ts
 
 # server data (profiles, ledger)
 /data/
+
+# but keep the documented example
+!.env.example

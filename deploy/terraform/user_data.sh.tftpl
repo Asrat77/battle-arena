@@ -1,0 +1,16 @@
+#!/bin/bash
+set -euxo pipefail
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y docker.io docker-compose-v2 git
+systemctl enable --now docker
+
+git clone --branch ${repo_ref} ${repo_url} /opt/battle-arena
+cd /opt/battle-arena
+umask 077
+cat > .env <<ENV
+WEB_HOST=${web_host}
+API_HOST=${api_host}
+LEDGER_PRIVATE_KEY=${ledger_key}
+ENV
+docker compose up -d --build
