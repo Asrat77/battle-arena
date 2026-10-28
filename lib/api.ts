@@ -141,5 +141,6 @@ export const api = {
     request<{ game: string | null; rows: LeaderboardRow[] }>(`/api/leaderboard${game ? `?game=${encodeURIComponent(game)}` : ""}`),
   badges: () => request<BadgeInfo[]>("/api/badges"),
   ledger: () => request<LedgerResponse>("/api/ledger"),
+  matchRoom: (id: string) => request<{ code: string }>(`/api/matches/${id}/room`),
   room: (code: string) => request<RoomState>(`/api/rooms/${encodeURIComponent(code)}`),
 };

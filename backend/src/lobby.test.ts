@@ -276,6 +276,12 @@ describe("private rooms", () => {
     }
     const back = await waitFor(a, "room:update", (d) => d.state === "ready-check" && d.matchId === null);
     assert.ok(back.members.every((x: any) => !x.ready));
+
+    // The result card links back to the room, live or after the match ended.
+    const roomOf = await getJson(`/api/matches/${matchId}/room`);
+    assert.equal(roomOf.status, 200);
+    assert.equal(roomOf.body.code, code);
+    assert.equal((await getJson("/api/matches/nope/room")).status, 404);
   });
 
   test("un-ready, leaving, or closing the tab stops the countdown", async () => {

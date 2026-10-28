@@ -48,6 +48,7 @@ export function ResultCard({
   const won = result.kind === "win";
   useRewardToasts(matchId);
   const capped = useCapped(matchId, !spectating && !seats[right].bot);
+  const room = useRoomCode(matchId, !spectating && !seats[right].bot);
   return (
     <section aria-labelledby="result-title" className="relative mx-auto flex w-full max-w-[520px] flex-col gap-2.5 pb-2" data-testid="match-end">
       <div className="dither h-[300px]" aria-hidden />
@@ -117,6 +118,11 @@ export function ResultCard({
       <ButtonLink href={`/replay/${matchId}`} variant="act" icon="verified" block className="relative">
         Replay &amp; verify
       </ButtonLink>
+      {room && (
+        <ButtonLink href={`/r/${room}`} variant="ghost" block className="relative" data-testid="back-to-room">
+          Back to room
+        </ButtonLink>
+      )}
       <EndActions matchId={matchId} opponent={spectating ? null : seats[right].name} />
     </section>
   );
@@ -206,4 +212,23 @@ function useCapped(matchId: string, enabled: boolean) {
   }, [socket, profile, matchId, enabled]);
 
   return capped;
+}
+
+/** Code of the private room the match was started from, if any. */
+function useRoomCode(matchId: string, enabled: boolean) {
+  const [code, setCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let live = true;
+    api.matchRoom(matchId).then(
+      (r) => live && setCode(r.code),
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+  }, [matchId, enabled]);
+
+  return code;
 }
