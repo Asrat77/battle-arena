@@ -51,6 +51,12 @@ export interface LedgerResponse {
   blocks: Block[];
 }
 
+/** Subset of GET /api/profiles/:id/rewards the UI reads so far. */
+export interface PlayerRewards {
+  points: number;
+  tokens: number;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -77,5 +83,6 @@ export const api = {
   games: () => request<GameSummary[]>("/api/games"),
   matches: (player: string) => request<MatchSummary[]>(`/api/matches?player=${encodeURIComponent(player)}`),
   match: (id: string) => request<StoredMatch>(`/api/matches/${id}`),
+  rewards: (id: string) => request<PlayerRewards>(`/api/profiles/${id}/rewards`),
   ledger: () => request<LedgerResponse>("/api/ledger"),
 };
