@@ -20,6 +20,7 @@ import { Segmented } from "@/components/ui/Segmented";
 import { useToast } from "@/components/ui/Toast";
 import { useTheme } from "@/lib/theme";
 import { MatchPrimitives } from "./MatchPrimitives";
+import { ResultStates } from "./ResultStates";
 
 function Spec({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -256,6 +257,10 @@ export default function KitPage() {
 
       <Spec title="Match header">
         <MatchPrimitives />
+      </Spec>
+
+      <Spec title="Match result">
+        <ResultStates />
       </Spec>
 
       <Spec title="Gebeta board">

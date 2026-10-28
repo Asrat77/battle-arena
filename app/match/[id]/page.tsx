@@ -5,7 +5,8 @@ import { use, useEffect, useState } from "react";
 import type { AdapterPlayer, MatchCommit } from "@/components/match/adapter";
 import { adapterFor } from "@/components/match/adapters";
 import { MatchFrame, type FrameSeat, type StatusTone } from "@/components/match/MatchFrame";
-import { RecordChip } from "@/components/ui/Chip";
+import { ResultCard, type ResultSeat } from "@/components/match/ResultCard";
+import { resultSummary } from "@/components/match/result";
 import { getGame } from "@/engine/registry";
 import type { Seat } from "@/engine/types";
 import { useSession } from "@/lib/session";
@@ -57,6 +58,7 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
     AdapterPlayer,
   ];
   const clock = adapter && !end ? adapter.timer(view.view) : null;
+  const gameName = getGame(start.gameId)?.name ?? start.gameId;
   const { status, tone } =
     adapter && !end
       ? { status: adapter.status(view.view, seat, seatNames), tone: actTone(view, seat) }
@@ -64,7 +66,7 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
 
   return (
     <MatchFrame
-      game={getGame(start.gameId)?.name ?? start.gameId}
+      game={gameName}
       icon={adapter?.icon ?? GAME_ICONS[start.gameId as keyof typeof GAME_ICONS] ?? "controller"}
       matchId={id}
       you={frameSeat(left)}
@@ -76,6 +78,27 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
       spectating={spectating}
       over={Boolean(end)}
       rules={adapter?.rules}
+      result={
+        end && (
+          <ResultCard
+            matchId={id}
+            result={resultSummary({
+              gameId: start.gameId,
+              gameName,
+              outcome: end.outcome,
+              reveal: end.reveal,
+              view: view.view,
+              seat,
+              names: seatNames,
+              bots: [Boolean(players[0].bot), Boolean(players[1].bot)],
+            })}
+            left={left}
+            right={right}
+            seats={players.map((p, s) => ({ ...p, label: s === seat ? "You" : p.name })) as [ResultSeat, ResultSeat]}
+            ledgerIndex={ledger.state === "recorded" ? ledger.ledgerIndex : null}
+          />
+        )
+      }
       onForfeit={leave}
     >
       <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -98,8 +121,6 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
             {error.reason}
           </p>
         )}
-
-        {end && <PlainEnd id={id} end={end} labels={labels} ledgerIndex={ledger.state === "recorded" ? ledger.ledgerIndex : null} />}
 
         <Commitments start={start} commit={commit} labels={labels} over={Boolean(end)} />
       </div>
@@ -145,40 +166,6 @@ function plainStatus(
   if (view.activeSeats.includes(seat)) return { status: "Your move", tone: "mine" };
   const other: Seat = seat === 0 ? 1 : 0;
   return { status: `Waiting for ${name(other)}`, tone: "wait" };
-}
-
-/** Stand-in end card until the MatchEnd screen lands. */
-function PlainEnd({
-  id,
-  end,
-  labels,
-  ledgerIndex,
-}: {
-  id: string;
-  end: MatchEnd;
-  labels: [string, string];
-  ledgerIndex: number | null;
-}) {
-  const secrets = (end.reveal as { secrets?: [string | null, string | null] }).secrets;
-  return (
-    <section className="card flex flex-col gap-3 p-4" data-testid="match-end">
-      <RecordChip state={ledgerIndex === null ? "pending" : "recorded"} block={ledgerIndex} long />
-      {secrets && (
-        <p className="text-sm">
-          Secrets revealed: {labels[0]} <span className="mono">{secrets[0] ?? "none"}</span>, {labels[1]}{" "}
-          <span className="mono">{secrets[1] ?? "none"}</span>
-        </p>
-      )}
-      <div className="flex gap-2">
-        <Link href={`/replay/${id}`} className="btn btn-act btn-sm">
-          Replay and verify
-        </Link>
-        <Link href="/" className="btn btn-sec btn-sm">
-          Home
-        </Link>
-      </div>
-    </section>
-  );
 }
 
 function Commitments({

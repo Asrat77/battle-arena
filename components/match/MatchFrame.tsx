@@ -2,7 +2,8 @@
 
 // The screen around every live match: game title row, two seats with the turn
 // timer and bar, an aria-live status line, the game slot that fills the rest,
-// and a bottom bar with Forfeit (or a "Spectating" pill for watchers).
+// and a bottom bar with Forfeit (or a "Spectating" pill for watchers). Once
+// the match is over, `result` covers the board until the viewer asks to see it.
 
 import { useState } from "react";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -42,6 +43,7 @@ export function MatchFrame({
   spectating,
   over,
   rules,
+  result,
   onForfeit,
   children,
 }: {
@@ -60,11 +62,15 @@ export function MatchFrame({
   /** Hides Forfeit and stops the clock once the match has ended. */
   over: boolean;
   rules?: { title: string; lines: string[]; art: Icon3DName };
+  /** The result card, shown over the board once the match has ended. */
+  result?: React.ReactNode;
   onForfeit(): void;
   children: React.ReactNode;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [boardOpen, setBoardOpen] = useState(false);
+  const covered = Boolean(result) && !boardOpen;
   const clock = over ? null : deadline;
 
   return (
@@ -95,10 +101,17 @@ export function MatchFrame({
         >
           {status}
         </p>
-        <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+        {covered && <div className="flex min-h-0 flex-1 flex-col">{result}</div>}
+        {/* Kept mounted under the card so the board keeps its end state. */}
+        <div className={covered ? "hidden" : "flex min-h-0 flex-1 flex-col"}>{children}</div>
       </div>
 
       <footer className="sticky bottom-0 flex flex-none items-center gap-1.5 bg-bg px-3 pb-3 pt-2 md:px-0">
+        {result && (
+          <Button variant="ghost" size="sm" icon={covered ? icon : "trophy"} onClick={() => setBoardOpen(covered)}>
+            {covered ? "See the board" : "Show result"}
+          </Button>
+        )}
         <div className="flex-1" />
         {spectating ? (
           <Chip tone="act" icon="binoculars">
