@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import type { AdapterPlayer } from "@/components/match/adapter";
+import type { AdapterPlayer, MatchCommit } from "@/components/match/adapter";
 import { adapterFor } from "@/components/match/adapters";
 import { MatchFrame, type FrameSeat, type StatusTone } from "@/components/match/MatchFrame";
 import { RecordChip } from "@/components/ui/Chip";
@@ -80,19 +80,28 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
     >
       <div className="flex min-h-0 flex-1 flex-col gap-3">
         {adapter ? (
-          <adapter.Board view={view.view} seat={seat} onMove={move} disabled={Boolean(end)} names={seatNames} players={players} />
+          <adapter.Board
+            view={view.view}
+            seat={seat}
+            onMove={move}
+            disabled={Boolean(end)}
+            names={seatNames}
+            players={players}
+            commit={commit}
+            error={error}
+          />
         ) : (
           <pre className="card mono overflow-x-auto whitespace-pre-wrap p-4 text-[13px]">{JSON.stringify(view.view, null, 2)}</pre>
         )}
-        {error && (
+        {error && !adapter?.showsErrors && (
           <p role="alert" className="text-sm font-semibold text-mismatch">
-            {error}
+            {error.reason}
           </p>
         )}
 
         {end && <PlainEnd id={id} end={end} labels={labels} ledgerIndex={ledger.state === "recorded" ? ledger.ledgerIndex : null} />}
 
-        <Commitments start={start} commit={commit} labels={labels} />
+        <Commitments start={start} commit={commit} labels={labels} over={Boolean(end)} />
       </div>
     </MatchFrame>
   );
@@ -176,10 +185,12 @@ function Commitments({
   start,
   commit,
   labels,
+  over,
 }: {
   start: MatchStart;
-  commit: { commitments: Record<string, string>; ledgerIndex: number } | null;
+  commit: MatchCommit | null;
   labels: [string, string];
+  over: boolean;
 }) {
   const hashes = commit?.commitments ?? start.commitments;
   if (!Object.keys(hashes).length && start.gameId !== "crack-the-code") return null;
@@ -196,7 +207,9 @@ function Commitments({
           {commit && <li className="text-xs text-ink-3">Published in block #{commit.ledgerIndex} before the first guess.</li>}
         </ul>
       ) : (
-        <p className="mt-2 text-ink-3">Published once both secrets are locked.</p>
+        <p className="mt-2 text-ink-3">
+          {over ? "None. The match ended before both secrets were locked." : "Published once both secrets are locked."}
+        </p>
       )}
     </section>
   );

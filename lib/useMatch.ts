@@ -4,6 +4,7 @@
 // this viewer, the end (outcome + reveal) and the ledger status.
 
 import { useCallback, useEffect, useState } from "react";
+import type { MatchCommit, MoveError } from "@/components/match/adapter";
 import type { Outcome, Seat, Viewer } from "@/engine/types";
 import { api } from "./api";
 import { useSession } from "./session";
@@ -43,9 +44,9 @@ export function useMatch<V>(matchId: string) {
   const [start, setStart] = useState<MatchStart | null>(null);
   const [view, setView] = useState<MatchViewMsg<V> | null>(null);
   const [end, setEnd] = useState<MatchEnd | null>(null);
-  const [commit, setCommit] = useState<{ commitments: Record<string, string>; ledgerIndex: number } | null>(null);
+  const [commit, setCommit] = useState<MatchCommit | null>(null);
   const [ledger, setLedger] = useState<LedgerStatus>({ state: "none" });
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<MoveError | null>(null);
   const [missing, setMissing] = useState(false);
 
   useEffect(() => {
@@ -69,7 +70,7 @@ export function useMatch<V>(matchId: string) {
     const onError = (msg: { matchId?: string; reason: string }) => {
       if (!mine(msg)) return;
       if (msg.reason === "no such match") setMissing(true);
-      else setError(msg.reason);
+      else setError((e) => ({ reason: msg.reason, n: (e?.n ?? 0) + 1 }));
     };
 
     socket.on("match:start", onStart);
@@ -91,13 +92,20 @@ export function useMatch<V>(matchId: string) {
     };
   }, [socket, connected, matchId]);
 
-  // A refresh after the end misses match:recorded, so ask the server instead.
+  // A refresh after the end misses match:recorded (and match:committed), so
+  // ask the server instead.
   const waitingForBlock = end !== null && ledger.state !== "recorded";
   useEffect(() => {
     if (!waitingForBlock) return;
     const t = setInterval(() => {
       api.match(matchId).then(
-        (m) => m.status === "recorded" && m.resultIndex !== null && setLedger({ state: "recorded", ledgerIndex: m.resultIndex }),
+        (m) => {
+          if (m.commitIndex !== null) {
+            const commitIndex = m.commitIndex;
+            setCommit((c) => c ?? { commitments: m.commitments, ledgerIndex: commitIndex });
+          }
+          if (m.status === "recorded" && m.resultIndex !== null) setLedger({ state: "recorded", ledgerIndex: m.resultIndex });
+        },
         () => {},
       );
     }, 2000);

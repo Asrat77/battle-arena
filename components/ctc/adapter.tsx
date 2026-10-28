@@ -1,23 +1,45 @@
 "use client";
 
 // Crack the Code inside MatchFrame: the secret setup, the guessing rounds and
-// the round history, plus the status line and clock the frame shows.
+// the round history, plus the status line and clock the frame shows. The
+// moments (commit notice, illegal-move shake, end reveal) are in moments.tsx.
 
 import { useState } from "react";
-import type { GameAdapter } from "@/components/match/adapter";
+import type { GameAdapter, MatchCommit, MoveError } from "@/components/match/adapter";
 import { Chip } from "@/components/ui/Chip";
 import { Icon3D } from "@/components/ui/Icon3D";
 import { MAX_ROUNDS, ROUND_MS, SETUP_MS, type CtcMove, type CtcView } from "@/engine/games/crackTheCode";
 import type { Seat, Viewer } from "@/engine/types";
 import { CodeSlots } from "./CodeSlots";
 import { Keypad } from "./Keypad";
+import { COMMIT_MS, CommitMoment, IllegalReason, Shake, useHeld, useIllegal } from "./moments";
 import { RoundHistory } from "./RoundHistory";
 
-type BoardProps = { view: CtcView; seat: Viewer; onMove(m: CtcMove): void; disabled: boolean; names: [string, string] };
+type BoardProps = {
+  view: CtcView;
+  seat: Viewer;
+  onMove(m: CtcMove): void;
+  disabled: boolean;
+  names: [string, string];
+  commit?: MatchCommit | null;
+  error?: MoveError | null;
+};
 
 const other = (s: Seat): Seat => (s === 0 ? 1 : 0);
 
-function Board({ view, seat, onMove, disabled, names }: BoardProps) {
+function Board(props: BoardProps) {
+  // Only a commit seen live gets the notice; one that lands after the end does not.
+  const live = props.view.phase !== "over" && !props.disabled;
+  const moment = useHeld(live ? (props.commit ?? null) : null, COMMIT_MS);
+  return (
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <Play {...props} />
+      {moment && <CommitMoment commit={moment} />}
+    </div>
+  );
+}
+
+function Play({ view, seat, onMove, disabled, names, error }: BoardProps) {
   const playing = seat !== "spectator" && view.phase !== "over" && !disabled;
   const opp = names[seat === "spectator" ? 1 : other(seat)];
 
@@ -25,7 +47,7 @@ function Board({ view, seat, onMove, disabled, names }: BoardProps) {
     return view.submitted[seat] ? (
       <Locked opp={opp} oppDone={view.submitted[other(seat)]} />
     ) : (
-      <SecretEntry onLock={(code) => onMove({ type: "secret", code })} />
+      <SecretEntry error={error} onLock={(code) => onMove({ type: "secret", code })} />
     );
   }
 
@@ -61,6 +83,7 @@ function Board({ view, seat, onMove, disabled, names }: BoardProps) {
           round={view.round}
           pending={view.myPending}
           opp={opp}
+          error={error}
           onGuess={(code) => onMove({ type: "guess", code })}
         />
       )}
@@ -68,8 +91,9 @@ function Board({ view, seat, onMove, disabled, names }: BoardProps) {
   );
 }
 
-function SecretEntry({ onLock }: { onLock(code: string): void }) {
+function SecretEntry({ error, onLock }: { error?: MoveError | null; onLock(code: string): void }) {
   const [code, setCode] = useState("");
+  const [illegal, reject] = useIllegal(error);
   return (
     <div className="flex flex-1 flex-col gap-4 pb-2">
       <div className="mt-2 flex items-center gap-3.5">
@@ -80,9 +104,14 @@ function SecretEntry({ onLock }: { onLock(code: string): void }) {
         </div>
       </div>
       <div className="flex-1" />
-      <CodeSlots value={code} label="Your secret" />
+      <div className="flex flex-col gap-2">
+        <Shake illegal={illegal}>
+          <CodeSlots value={code} invalid={Boolean(illegal)} label="Your secret" />
+        </Shake>
+        <IllegalReason illegal={illegal} />
+      </div>
       <div className="flex-1" />
-      <Keypad value={code} onChange={setCode} onSubmit={onLock} submitLabel="Lock in" />
+      <Keypad value={code} onChange={setCode} onSubmit={onLock} onInvalid={reject} submitLabel="Lock in" />
     </div>
   );
 }
@@ -127,7 +156,7 @@ function SpectatorSecrets({ setup }: { setup: boolean }) {
   );
 }
 
-/** Both secrets once the match is over. C3 adds the flip. */
+/** Both secrets once the match is over, flipping open 120 ms apart. */
 function Secrets({ secrets, seat, names }: { secrets: [string | null, string | null]; seat: Viewer; names: [string, string] }) {
   const left: Seat = seat === "spectator" ? 0 : seat;
   const cards = [left, other(left)].map((s, i) => ({
@@ -137,8 +166,8 @@ function Secrets({ secrets, seat, names }: { secrets: [string | null, string | n
   }));
   return (
     <div className="grid grid-cols-2 gap-2.5" data-testid="secrets">
-      {cards.map(({ s, label, tone }) => (
-        <div key={s} className={`card px-3.5 py-3 ${tone}`}>
+      {cards.map(({ s, label, tone }, i) => (
+        <div key={s} className={`card animate-flip px-3.5 py-3 ${tone}`} style={{ animationDelay: `${i * 120}ms` }}>
           <span className="block truncate text-sm text-ink-3">{label}</span>
           <span className="mono text-[26px] font-semibold tracking-[.12em]">{secrets[s] ?? "none"}</span>
         </div>
@@ -147,8 +176,21 @@ function Secrets({ secrets, seat, names }: { secrets: [string | null, string | n
   );
 }
 
-function GuessEntry({ round, pending, opp, onGuess }: { round: number; pending: string | null; opp: string; onGuess(code: string): void }) {
+function GuessEntry({
+  round,
+  pending,
+  opp,
+  error,
+  onGuess,
+}: {
+  round: number;
+  pending: string | null;
+  opp: string;
+  error?: MoveError | null;
+  onGuess(code: string): void;
+}) {
   const [code, setCode] = useState("");
+  const [illegal, reject] = useIllegal(error);
   if (pending)
     return (
       <div className="card flex flex-col items-start gap-2 px-3.5 py-3" data-testid="guess-pending">
@@ -161,8 +203,11 @@ function GuessEntry({ round, pending, opp, onGuess }: { round: number; pending: 
     );
   return (
     <div className="flex flex-col gap-2.5 pb-1">
-      <CodeSlots value={code} size="sm" label="Your guess" />
-      <Keypad value={code} onChange={setCode} onSubmit={onGuess} submitLabel="Guess" size="sm" />
+      <Shake illegal={illegal}>
+        <CodeSlots value={code} size="sm" invalid={Boolean(illegal)} label="Your guess" />
+      </Shake>
+      <IllegalReason illegal={illegal} />
+      <Keypad value={code} onChange={setCode} onSubmit={onGuess} onInvalid={reject} submitLabel="Guess" size="sm" />
     </div>
   );
 }
@@ -218,4 +263,5 @@ export const ctcAdapter: GameAdapter<CtcView, CtcMove> = {
     ],
   },
   hasHiddenInfo: true,
+  showsErrors: true,
 };
