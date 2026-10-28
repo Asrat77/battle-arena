@@ -2,7 +2,8 @@
 
 // The screen around every live match: game title row, two seats with the turn
 // timer and bar, an aria-live status line, the game slot that fills the rest,
-// and a bottom bar with Forfeit (or a "Spectating" pill for watchers). Once
+// and a bottom bar with reactions and Forfeit (or a "Spectating" pill for
+// watchers). Once
 // the match is over, `result` covers the board until the viewer asks to see it.
 
 import { useState } from "react";
@@ -11,6 +12,7 @@ import { Chip } from "@/components/ui/Chip";
 import { Icon3D, type Icon3DName } from "@/components/ui/Icon3D";
 import { Dialog, Sheet } from "@/components/ui/Overlay";
 import { PlayerSeat } from "./PlayerSeat";
+import { ReactionBar } from "./ReactionBar";
 import { TurnBar, TurnTimer } from "./TurnTimer";
 
 export interface FrameSeat {
@@ -109,13 +111,15 @@ export function MatchFrame({
       <footer className="sticky bottom-0 flex flex-none items-center gap-1.5 bg-bg px-3 pb-3 pt-2 md:px-0">
         {result && (
           <Button variant="ghost" size="sm" icon={covered ? icon : "trophy"} onClick={() => setBoardOpen(covered)}>
-            {covered ? "See the board" : "Show result"}
+            {/* Phones keep just the icon so the reactions and the pill still fit. */}
+            <span className="max-sm:sr-only">{covered ? "See the board" : "Show result"}</span>
           </Button>
         )}
+        <ReactionBar matchId={matchId} spectating={spectating} />
         <div className="flex-1" />
         {spectating ? (
           <Chip tone="act" icon="binoculars">
-            Spectating
+            <span className={result ? "max-sm:sr-only" : undefined}>Spectating</span>
           </Chip>
         ) : (
           !over && (
