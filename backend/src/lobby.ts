@@ -568,5 +568,15 @@ export function lobbyRoutes(lobby: Lobby): Router {
     res.json(room);
   });
 
+  // The room a match was started from, so its result card can link back.
+  router.get("/api/matches/:id/room", (req, res) => {
+    const room = lobby.roomOfMatch(req.params.id);
+    if (!room) {
+      res.status(404).json({ error: "not a room match" });
+      return;
+    }
+    res.json({ code: room.code });
+  });
+
   return router;
 }
