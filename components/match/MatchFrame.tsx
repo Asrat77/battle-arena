@@ -6,11 +6,13 @@
 // watchers). Once
 // the match is over, `result` covers the board until the viewer asks to see it.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ChatPanel } from "@/components/chat/ChatPanel";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { Icon3D, type Icon3DName } from "@/components/ui/Icon3D";
 import { Dialog, Sheet } from "@/components/ui/Overlay";
+import { useSession } from "@/lib/session";
 import { PlayerSeat } from "./PlayerSeat";
 import { ReactionBar } from "./ReactionBar";
 import { TurnBar, TurnTimer } from "./TurnTimer";
@@ -72,6 +74,9 @@ export function MatchFrame({
   const [confirming, setConfirming] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const desktop = useIsDesktop();
+  const { profile } = useSession();
   const covered = Boolean(result) && !boardOpen;
   const clock = over ? null : deadline;
 
@@ -117,6 +122,14 @@ export function MatchFrame({
         )}
         <ReactionBar matchId={matchId} spectating={spectating} />
         <div className="flex-1" />
+        {profile && (
+          <IconButton
+            icon="chat"
+            label={chatOpen ? "Close chat" : "Open chat"}
+            aria-expanded={chatOpen}
+            onClick={() => setChatOpen((o) => !o)}
+          />
+        )}
         {spectating ? (
           <Chip tone="act" icon="binoculars">
             <span className={result ? "max-sm:sr-only" : undefined}>Spectating</span>
@@ -153,6 +166,24 @@ export function MatchFrame({
         The match ends now and is recorded as a forfeit.
       </Dialog>
 
+      {profile && chatOpen && desktop && (
+        // Desktop: a panel beside the column, so the board never moves.
+        <aside className="fixed bottom-4 right-4 top-[88px] z-30 flex w-[320px] flex-col gap-2.5 rounded-sheet bg-sf p-4 shadow-float">
+          <div className="flex items-center justify-between">
+            <span className="eyebrow">Chat</span>
+            <button type="button" onClick={() => setChatOpen(false)} className="text-small font-semibold text-ink-2">
+              Close
+            </button>
+          </div>
+          <ChatPanel roomId={matchId} me={profile.id} label="Match chat" />
+        </aside>
+      )}
+      {profile && !desktop && (
+        <Sheet open={chatOpen} onClose={() => setChatOpen(false)} title="Chat">
+          <ChatPanel roomId={matchId} me={profile.id} label="Match chat" listClass="h-[38vh]" />
+        </Sheet>
+      )}
+
       {rules && (
         <Sheet open={showRules} onClose={() => setShowRules(false)} title={rules.title}>
           <Icon3D name={rules.art} size={72} />
@@ -165,6 +196,19 @@ export function MatchFrame({
       )}
     </div>
   );
+}
+
+/** Tailwind `md` (768 px): where the chat becomes a side panel instead of a sheet. */
+function useIsDesktop(): boolean {
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => {
+    const q = window.matchMedia("(min-width: 768px)");
+    const sync = () => setDesktop(q.matches);
+    sync();
+    q.addEventListener("change", sync);
+    return () => q.removeEventListener("change", sync);
+  }, []);
+  return desktop;
 }
 
 function shortId(id: string): string {
