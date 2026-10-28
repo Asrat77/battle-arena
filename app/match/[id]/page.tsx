@@ -2,11 +2,9 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { CtcPlay } from "@/components/ctc/CtcPlay";
 import { adapterFor } from "@/components/match/adapters";
 import { MatchFrame, type FrameSeat, type StatusTone } from "@/components/match/MatchFrame";
 import { RecordChip } from "@/components/ui/Chip";
-import type { CtcView } from "@/engine/games/crackTheCode";
 import { getGame } from "@/engine/registry";
 import type { Seat } from "@/engine/types";
 import { useSession } from "@/lib/session";
@@ -49,13 +47,15 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
     id: start.players[s],
     name: name(s),
     bot: start.bot && start.botSeat === s,
-    state: seatState(s, view, end),
+    state: end ? endState(s, end) : (adapter?.seatState?.(view.view, s) ?? seatState(s, view)),
   });
 
+  const seatNames: [string, string] = [name(0), name(1)];
   const clock = adapter && !end ? adapter.timer(view.view) : null;
-  const { status, tone } = adapter
-    ? { status: adapter.status(view.view, seat), tone: undefined }
-    : plainStatus(view, end, seat, name);
+  const { status, tone } =
+    adapter && !end
+      ? { status: adapter.status(view.view, seat, seatNames), tone: actTone(view, seat) }
+      : plainStatus(view, end, seat, name);
 
   return (
     <MatchFrame
@@ -73,13 +73,9 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
       rules={adapter?.rules}
       onForfeit={leave}
     >
-      <div className="flex flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-3">
         {adapter ? (
-          <adapter.Board view={view.view} seat={seat} onMove={move} disabled={Boolean(end)} />
-        ) : start.gameId === "crack-the-code" ? (
-          <section className="card p-4">
-            <CtcPlay view={view.view as CtcView} seat={seat} labels={labels} onMove={move} />
-          </section>
+          <adapter.Board view={view.view} seat={seat} onMove={move} disabled={Boolean(end)} names={seatNames} />
         ) : (
           <pre className="card mono overflow-x-auto whitespace-pre-wrap p-4 text-[13px]">{JSON.stringify(view.view, null, 2)}</pre>
         )}
@@ -106,9 +102,17 @@ function useTurnLength(deadline: number | null): number {
   return total;
 }
 
-function seatState(s: Seat, view: MatchViewMsg<unknown>, end: MatchEnd | null): string {
-  if (end) return end.outcome.draw ? "Draw" : end.outcome.winner === s ? "Won" : "Lost";
+function endState(s: Seat, end: MatchEnd): string {
+  return end.outcome.draw ? "Draw" : end.outcome.winner === s ? "Won" : "Lost";
+}
+
+function seatState(s: Seat, view: MatchViewMsg<unknown>): string {
   return view.activeSeats.includes(s) ? "Thinking" : "Waiting";
+}
+
+/** Saffron while the viewer still has to act, quiet otherwise. */
+function actTone(view: MatchViewMsg<unknown>, seat: MatchStart["seat"]): StatusTone {
+  return seat !== "spectator" && view.activeSeats.includes(seat) ? "mine" : "wait";
 }
 
 function plainStatus(

@@ -5,7 +5,7 @@
 
 import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
-import { CtcRounds } from "@/components/ctc/CtcRounds";
+import { RoundHistory } from "@/components/ctc/RoundHistory";
 import { VerifyPanel } from "@/components/VerifyPanel";
 import type { CtcState } from "@/engine/games/crackTheCode";
 import { getGame } from "@/engine/registry";
@@ -125,7 +125,7 @@ export default function ReplayPage({ params }: { params: Promise<{ id: string }>
                 {(cur.state as CtcState).pending.map((code, s) => (code ? `${labels[s]} guessed ${code}` : null)).filter(Boolean).join(", ")}
               </p>
             )}
-            <CtcRounds history={(cur.state as CtcState).history} labels={labels} />
+            <RoundHistory history={(cur.state as CtcState).history} seat="spectator" names={labels} />
           </>
         ) : (
           cur && <pre className="mono whitespace-pre-wrap">{JSON.stringify(cur.state, null, 2)}</pre>
