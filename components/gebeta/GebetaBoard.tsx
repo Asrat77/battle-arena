@@ -7,6 +7,7 @@
 import type { CSSProperties } from "react";
 import type { Seat } from "@/engine/types";
 import { Pit } from "./Pit";
+import { sameSpot, type Spot } from "./sowing";
 import { Store } from "./Store";
 
 export type Orientation = "auto" | "vertical" | "horizontal";
@@ -34,8 +35,30 @@ export interface GebetaBoardProps {
   spectating?: boolean;
   /** Marks the pit the last move was sown from. */
   last?: { seat: Seat; pit: number } | null;
+  /** Where the sowing animation just dropped a seed. */
+  hit?: Spot | null;
+  /** Pits emptied by a capture, flashed. */
+  flash?: Spot[];
+  /** Store ringed in saffron for a "go again" or a capture. */
+  glow?: Seat | null;
+  /** Pit on the viewer's row that plays itself at 0:00. */
+  auto?: number | null;
+  /** A short pill over the board, near a seat's store or in the middle. */
+  callout?: { text: string; at: Seat | "center"; key: number } | null;
+  /** While sowing: the whole board is one button that skips to the end. */
+  onSkip?: () => void;
   className?: string;
 }
+
+// Where a callout sits: just off the store it's about, or the middle.
+const CALLOUT: Record<Orientation, { you: string; opp: string }> = {
+  auto: {
+    you: "bottom-[92px] right-[18px] sm:bottom-6 sm:right-[136px]",
+    opp: "left-[18px] top-[92px] sm:left-[136px] sm:top-6",
+  },
+  vertical: { you: "bottom-[92px] right-[18px]", opp: "left-[18px] top-[92px]" },
+  horizontal: { you: "bottom-6 right-[136px]", opp: "left-[136px] top-6" },
+};
 
 // Spelled out so Tailwind keeps every class.
 const CELL: Record<Orientation, string> = {
@@ -77,6 +100,12 @@ export function GebetaBoard({
   players,
   spectating = false,
   last,
+  hit,
+  flash = [],
+  glow,
+  auto,
+  callout,
+  onSkip,
   className = "",
 }: GebetaBoardProps) {
   const sm = size === "sm";
@@ -87,6 +116,7 @@ export function GebetaBoard({
   const theirName = them?.name ?? (spectating ? `Seat ${opp + 1}` : "Opponent");
   const playable = !!onPick && !spectating;
   const cell = CELL[orientation];
+  const flashes = (s: Seat, pit: number) => flash.some((f) => sameSpot(f, { seat: s, pit }));
 
   const grid =
     orientation === "vertical"
@@ -113,6 +143,8 @@ export function GebetaBoard({
         player={them}
         orientation={orientation}
         sm={sm}
+        land={sameSpot(hit, { seat: opp, store: true })}
+        glow={glow === opp}
         className={cell}
         style={at("1 / 3", 1, 1, "1 / 3")}
       />
@@ -142,6 +174,8 @@ export function GebetaBoard({
           index={j + 7}
           label={`${theirName}'s pit ${j + 1}, ${seeds(n)}`}
           last={last?.seat === opp && last.pit === j}
+          hit={sameSpot(hit, { seat: opp, pit: j })}
+          flash={flashes(opp, j)}
           sm={sm}
           className={cell}
           style={at(2, 7 - j, 7 - j, 1)}
@@ -154,9 +188,12 @@ export function GebetaBoard({
           index={i}
           mine={playable}
           legal={playable && legal.includes(i)}
+          auto={playable && auto === i}
           onPick={() => onPick?.(i)}
           label={`${spectating ? `${myName}'s` : "Your"} pit ${i + 1}, ${seeds(n)}`}
           last={last?.seat === seat && last.pit === i}
+          hit={sameSpot(hit, { seat, pit: i })}
+          flash={flashes(seat, i)}
           sm={sm}
           className={cell}
           style={at(1, i + 2, i + 2, 2)}
@@ -172,9 +209,37 @@ export function GebetaBoard({
         player={me}
         orientation={orientation}
         sm={sm}
+        land={sameSpot(hit, { seat, store: true })}
+        glow={glow === seat}
         className={cell}
         style={at("1 / 3", 8, 8, "1 / 3")}
       />
+
+      {onSkip && (
+        <button
+          type="button"
+          aria-label="Skip the sowing animation"
+          onClick={onSkip}
+          className="absolute inset-0 z-[3] cursor-pointer rounded-[inherit] bg-transparent"
+        />
+      )}
+      {callout && (
+        <div
+          aria-hidden
+          className={`pointer-events-none absolute z-[4] ${
+            callout.at === "center"
+              ? "left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+              : CALLOUT[orientation][callout.at === seat ? "you" : "opp"]
+          }`}
+        >
+          <span
+            key={callout.key}
+            className="block animate-callout whitespace-nowrap rounded-full bg-[#F3B542] px-4 py-2.5 text-[18px] font-bold tracking-[-.02em] text-[#16100A] shadow-[0_10px_24px_rgb(0_0_0/.4)]"
+          >
+            {callout.text}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

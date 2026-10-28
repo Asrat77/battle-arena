@@ -16,6 +16,9 @@ export function Pit({
   index,
   legal = false,
   last = false,
+  hit = false,
+  flash = false,
+  auto = false,
   mine = false,
   sm = false,
   onPick,
@@ -29,6 +32,12 @@ export function Pit({
   legal?: boolean;
   /** Pit the last move was sown from. */
   last?: boolean;
+  /** A sown seed just dropped here. */
+  hit?: boolean;
+  /** Emptied by a capture. */
+  flash?: boolean;
+  /** Plays itself when the turn clock runs out. */
+  auto?: boolean;
   /** On the viewer's side: render as a button. */
   mine?: boolean;
   sm?: boolean;
@@ -47,12 +56,18 @@ export function Pit({
         {n}
       </span>
       {last && <span className="absolute left-2.5 top-[9px] h-[7px] w-[7px] rounded-full bg-[#F3B542]" />}
-      {legal && <span className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-legal" />}
+      {auto ? (
+        <span className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[0_0_0_3px_#F0928D,0_0_24px_rgb(240_146_141/.55)]" />
+      ) : (
+        legal && <span className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-legal" />
+      )}
+      {hit && <span className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[0_0_0_2px_#FFF8EE]" />}
+      {flash && <span className="pointer-events-none absolute inset-0 animate-flash rounded-[inherit]" />}
     </>
   );
   const cls = `relative flex min-h-0 min-w-0 items-center justify-center shadow-pit transition-transform duration-150 ${
     sm ? "rounded-[14px] px-2 py-[3px]" : "rounded-[22px] px-2.5 py-1.5 sm:rounded-[28px] sm:p-2.5"
-  } ${n === 0 ? "opacity-75" : ""} ${className}`;
+  } ${n === 0 ? "opacity-75" : ""} ${hit ? "scale-[1.04]" : ""} ${className}`;
   const bg = { background: HOLLOW, ...style };
 
   if (!mine) {
