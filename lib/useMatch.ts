@@ -91,13 +91,20 @@ export function useMatch<V>(matchId: string) {
     };
   }, [socket, connected, matchId]);
 
-  // A refresh after the end misses match:recorded, so ask the server instead.
+  // A refresh after the end misses match:recorded (and match:committed), so
+  // ask the server instead.
   const waitingForBlock = end !== null && ledger.state !== "recorded";
   useEffect(() => {
     if (!waitingForBlock) return;
     const t = setInterval(() => {
       api.match(matchId).then(
-        (m) => m.status === "recorded" && m.resultIndex !== null && setLedger({ state: "recorded", ledgerIndex: m.resultIndex }),
+        (m) => {
+          if (m.commitIndex !== null) {
+            const commitIndex = m.commitIndex;
+            setCommit((c) => c ?? { commitments: m.commitments, ledgerIndex: commitIndex });
+          }
+          if (m.status === "recorded" && m.resultIndex !== null) setLedger({ state: "recorded", ledgerIndex: m.resultIndex });
+        },
         () => {},
       );
     }, 2000);

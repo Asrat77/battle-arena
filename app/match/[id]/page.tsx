@@ -92,7 +92,7 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
 
         {end && <PlainEnd id={id} end={end} labels={labels} ledgerIndex={ledger.state === "recorded" ? ledger.ledgerIndex : null} />}
 
-        <Commitments start={start} commit={commit} labels={labels} />
+        <Commitments start={start} commit={commit} labels={labels} over={Boolean(end)} />
       </div>
     </MatchFrame>
   );
@@ -176,10 +176,12 @@ function Commitments({
   start,
   commit,
   labels,
+  over,
 }: {
   start: MatchStart;
   commit: { commitments: Record<string, string>; ledgerIndex: number } | null;
   labels: [string, string];
+  over: boolean;
 }) {
   const hashes = commit?.commitments ?? start.commitments;
   if (!Object.keys(hashes).length && start.gameId !== "crack-the-code") return null;
@@ -196,7 +198,9 @@ function Commitments({
           {commit && <li className="text-xs text-ink-3">Published in block #{commit.ledgerIndex} before the first guess.</li>}
         </ul>
       ) : (
-        <p className="mt-2 text-ink-3">Published once both secrets are locked.</p>
+        <p className="mt-2 text-ink-3">
+          {over ? "None. The match ended before both secrets were locked." : "Published once both secrets are locked."}
+        </p>
       )}
     </section>
   );
