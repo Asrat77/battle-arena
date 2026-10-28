@@ -70,6 +70,18 @@ export interface PlayerRewards {
   history?: { matchId: string | null; points: number; reasons: string[] }[];
 }
 
+/** One row of GET /api/leaderboard: rated matches against players only. */
+export interface LeaderboardRow {
+  rank: number;
+  profileId: string;
+  name: string;
+  rating: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  points: number;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -97,6 +109,8 @@ export const api = {
   matches: (player: string) => request<MatchSummary[]>(`/api/matches?player=${encodeURIComponent(player)}`),
   match: (id: string) => request<StoredMatch>(`/api/matches/${id}`),
   rewards: (id: string) => request<PlayerRewards>(`/api/profiles/${id}/rewards`),
+  leaderboard: (game?: string) =>
+    request<{ game: string | null; rows: LeaderboardRow[] }>(`/api/leaderboard${game ? `?game=${encodeURIComponent(game)}` : ""}`),
   ledger: () => request<LedgerResponse>("/api/ledger"),
   room: (code: string) => request<RoomState>(`/api/rooms/${encodeURIComponent(code)}`),
 };
