@@ -5,6 +5,7 @@
 // Your row is always visible: tinted in place, or pinned above the dock while
 // it is scrolled off screen.
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { fmt, Podium } from "@/components/leaderboard/Podium";
 import { Avatar3D } from "@/components/ui/Avatar3D";
@@ -104,10 +105,10 @@ function RankRow({ row, you, pinned }: { row: LeaderboardRow; you?: boolean; pin
       <span className={`font-mono font-semibold tabular-nums ${you ? "text-you" : "text-ink-3"}`}>{row.rank}</span>
       <Avatar3D id={row.profileId} size="sm" />
       <span className="flex min-w-0 flex-col">
-        <b className="truncate font-semibold">
+        <Link href={`/profile/${row.profileId}`} className="truncate font-semibold hover:underline">
           {row.name}
           {you && " · you"}
-        </b>
+        </Link>
         <span className="text-small text-ink-2" aria-label={`${row.wins} won, ${row.losses} lost${row.draws ? `, ${row.draws} drawn` : ""}`}>
           {record(row)}
         </span>

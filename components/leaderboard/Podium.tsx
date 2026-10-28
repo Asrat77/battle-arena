@@ -2,6 +2,7 @@
 // Empty steps keep their height so the podium shape holds with one or two
 // ranked players.
 
+import Link from "next/link";
 import { Avatar3D } from "@/components/ui/Avatar3D";
 import { Icon3D, type Icon3DName } from "@/components/ui/Icon3D";
 import type { LeaderboardRow } from "@/lib/api";
@@ -28,10 +29,10 @@ export function Podium({ rows, you }: { rows: LeaderboardRow[]; you?: string }) 
             {row ? (
               <>
                 <Avatar3D id={row.profileId} size="lg" seat={mine ? "you" : undefined} />
-                <b className="w-full truncate text-small font-semibold">
+                <Link href={`/profile/${row.profileId}`} className="w-full truncate text-small font-semibold hover:underline">
                   {row.name}
                   {mine && <span className="text-you"> · you</span>}
-                </b>
+                </Link>
               </>
             ) : (
               <>

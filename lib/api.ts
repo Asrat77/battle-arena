@@ -65,11 +65,37 @@ export interface RoomState {
   countdownMs: number | null;
 }
 
-/** Subset of GET /api/profiles/:id/rewards the UI reads so far. */
+export interface Tally {
+  rating: number;
+  wins: number;
+  losses: number;
+  draws: number;
+}
+
+/** A badge from GET /api/badges: the rules live in backend/src/rewards.ts. */
+export interface BadgeInfo {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface EarnedBadge extends BadgeInfo {
+  earnedAt: number;
+  /** The match that earned it, or a tournament id for Champion. */
+  source: string;
+  /** The badge block, null while pending. */
+  ledgerIndex: number | null;
+}
+
+/** GET /api/profiles/:id/rewards. */
 export interface PlayerRewards {
   points: number;
   tokens: number;
-  history?: { matchId: string | null; points: number; reasons: string[] }[];
+  overall: Tally;
+  games: Record<string, Tally>;
+  watched: string[];
+  badges: EarnedBadge[];
+  history: { source: string; matchId: string | null; points: number; reasons: string[]; mintIndex: number | null }[];
 }
 
 /** One row of GET /api/leaderboard: rated matches against players only. */
@@ -113,6 +139,7 @@ export const api = {
   rewards: (id: string) => request<PlayerRewards>(`/api/profiles/${id}/rewards`),
   leaderboard: (game?: string) =>
     request<{ game: string | null; rows: LeaderboardRow[] }>(`/api/leaderboard${game ? `?game=${encodeURIComponent(game)}` : ""}`),
+  badges: () => request<BadgeInfo[]>("/api/badges"),
   ledger: () => request<LedgerResponse>("/api/ledger"),
   room: (code: string) => request<RoomState>(`/api/rooms/${encodeURIComponent(code)}`),
 };
