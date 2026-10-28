@@ -7,6 +7,7 @@ import { useState } from "react";
 import { CodeSlots } from "@/components/ctc/CodeSlots";
 import { Keypad } from "@/components/ctc/Keypad";
 import { Meter, meterText } from "@/components/ctc/Meter";
+import { GebetaBoard } from "@/components/gebeta/GebetaBoard";
 import { Avatar3D } from "@/components/ui/Avatar3D";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -255,6 +256,47 @@ export default function KitPage() {
 
       <Spec title="Match header">
         <MatchPrimitives />
+      </Spec>
+
+      <Spec title="Gebeta board">
+        <p className="text-small text-ink-2">
+          Stands up under 640 px, lies flat above. Glowing pits are legal; tap one to fire <span className="mono">onPick</span>.
+        </p>
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <GebetaBoard
+            pits={[
+              [3, 0, 5, 3, 2, 17],
+              [4, 5, 1, 3, 3, 0],
+            ]}
+            stores={[8, 7]}
+            seat={0}
+            legal={[0, 2, 3, 4, 5]}
+            onPick={(pit) => toast.show({ icon: "pebble2", body: `Picked pit ${pit + 1}`, duration: 1500 })}
+            players={[
+              { id: "kit-abebe", name: "Abebe" },
+              { id: "kit-bot", name: "ArenaBot", bot: true },
+            ]}
+            last={{ seat: 1, pit: 2 }}
+          />
+          <div className="flex flex-col gap-2">
+            <span className="eyebrow">size sm · spectating</span>
+            <GebetaBoard
+              size="sm"
+              orientation="vertical"
+              spectating
+              pits={[
+                [1, 6, 0, 2, 9, 4],
+                [0, 2, 7, 1, 1, 3],
+              ]}
+              stores={[5, 7]}
+              seat={0}
+              players={[
+                { id: "kit-hana", name: "Hana" },
+                { id: "kit-yonas", name: "Yonas" },
+              ]}
+            />
+          </div>
+        </div>
       </Spec>
 
       <Spec title={`3D icons · ${ICONS.length}`}>
