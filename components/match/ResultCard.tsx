@@ -3,16 +3,19 @@
 // The card that covers the board once a match is over: a big object for win,
 // loss or draw, the reason in plain words, then the final score (Gebeta) or
 // both secrets (Crack the Code), the ledger record and the way out. Points
-// and badges the match earned pop up as reward toasts once they are applied.
+// and badges the match earned pop up as reward toasts once they are applied;
+// a match past the rematch limit says why it paid nothing.
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Avatar3D } from "@/components/ui/Avatar3D";
 import { ButtonLink } from "@/components/ui/Button";
 import { RecordChip } from "@/components/ui/Chip";
 import { Icon3D, type Icon3DName } from "@/components/ui/Icon3D";
 import { useToast } from "@/components/ui/Toast";
 import type { Seat } from "@/engine/types";
+import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { EndActions } from "./EndActions";
 import type { ResultSummary } from "./result";
 
 export interface ResultSeat {
@@ -30,6 +33,7 @@ export function ResultCard({
   right,
   seats,
   ledgerIndex,
+  spectating = false,
 }: {
   matchId: string;
   result: ResultSummary;
@@ -39,9 +43,11 @@ export function ResultCard({
   seats: [ResultSeat, ResultSeat];
   /** Ledger block of the result once recorded; null while pending. */
   ledgerIndex: number | null;
+  spectating?: boolean;
 }) {
   const won = result.kind === "win";
   useRewardToasts(matchId);
+  const capped = useCapped(matchId, !spectating && !seats[right].bot);
   return (
     <section aria-labelledby="result-title" className="relative mx-auto flex w-full max-w-[520px] flex-col gap-2.5 pb-2" data-testid="match-end">
       <div className="dither h-[300px]" aria-hidden />
@@ -87,6 +93,16 @@ export function ResultCard({
         </div>
       )}
 
+      {capped && (
+        <div className="relative flex items-center gap-3 rounded-card bg-pending-soft px-3.5 py-3" data-testid="rematch-limit">
+          <Icon3D name="hourglass" size={36} />
+          <span className="flex min-w-0 flex-col gap-px">
+            <b className="text-small font-semibold text-pending">No points: rematch limit reached</b>
+            <span className="text-small">You’ve played {seats[right].name} a lot today. The result is still recorded.</span>
+          </span>
+        </div>
+      )}
+
       <div className="card relative flex items-center gap-3 px-3.5 py-3">
         <Icon3D name="blockchain" size={36} />
         <span className="flex min-w-0 flex-1 flex-col">
@@ -101,9 +117,7 @@ export function ResultCard({
       <ButtonLink href={`/replay/${matchId}`} variant="act" icon="verified" block className="relative">
         Replay &amp; verify
       </ButtonLink>
-      <ButtonLink href="/" variant="ghost" block className="relative">
-        Home
-      </ButtonLink>
+      <EndActions matchId={matchId} opponent={spectating ? null : seats[right].name} />
     </section>
   );
 }
@@ -119,7 +133,7 @@ const BADGE_ICONS: Record<string, Icon3DName> = {
 };
 
 type RewardNotify =
-  | { kind: "points"; matchId?: string; points: number }
+  | { kind: "points"; matchId?: string; points: number; reasons?: string[] }
   | {
       kind: "badge";
       badge: { id: string; name: string; description?: string; source: string; ledgerIndex: number | null };
@@ -165,4 +179,31 @@ function useRewardToasts(matchId: string) {
       socket.off("notify", onNotify);
     };
   }, [socket, matchId, toast]);
+}
+
+/**
+ * True when the match was past the same-pair limit and earned no points. Read
+ * from the live notify, or from the reward history after a refresh.
+ */
+function useCapped(matchId: string, enabled: boolean) {
+  const { socket, profile } = useSession();
+  const [capped, setCapped] = useState(false);
+
+  useEffect(() => {
+    if (!enabled || !profile) return;
+    let live = true;
+    api.rewards(profile.id).then(
+      (r) => live && r.history?.some((h) => h.matchId === matchId && h.reasons.includes("farmed")) && setCapped(true),
+      () => {},
+    );
+    const onNotify = (n: RewardNotify) =>
+      n?.kind === "points" && n.matchId === matchId && n.reasons?.includes("farmed") && setCapped(true);
+    socket?.on("notify", onNotify);
+    return () => {
+      live = false;
+      socket?.off("notify", onNotify);
+    };
+  }, [socket, profile, matchId, enabled]);
+
+  return capped;
 }

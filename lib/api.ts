@@ -55,6 +55,7 @@ export interface LedgerResponse {
 export interface PlayerRewards {
   points: number;
   tokens: number;
+  history?: { matchId: string | null; points: number; reasons: string[] }[];
 }
 
 export class ApiError extends Error {
