@@ -9,7 +9,7 @@ import { listGames } from "../../engine/registry";
 import type { AnyGame } from "../../engine/types";
 import { createApp } from "./app";
 import { FakeClock } from "./clock";
-import { BOT_OFFER_MS, BOT_PLAYER, REMATCH_WINDOW_MS } from "./lobby";
+import { BOT_OFFER_MS, BOT_PLAYER, REMATCH_WINDOW_MS, ROOM_COUNTDOWN_MS } from "./lobby";
 import { DISCONNECT_FORFEIT_MS } from "./matches";
 import { MemoryStore } from "./store";
 
@@ -250,9 +250,20 @@ describe("private rooms", () => {
     await settle();
     assert.ok(!has(a, "match:start"), "one ready player does not start the match");
 
-    const started = await send(b, "room:ready", { ready: true });
-    assert.equal(started.room.state, "playing");
-    const matchId = started.room.matchId;
+    // Both ready: a 3-2-1 first, then the match.
+    const counting = await send(b, "room:ready", { ready: true });
+    assert.equal(counting.room.state, "countdown");
+    assert.equal(counting.room.countdownMs, ROOM_COUNTDOWN_MS);
+    assert.equal(counting.room.matchId, null);
+    await waitFor(a, "room:update", (d) => d.state === "countdown");
+    clock.advance(ROOM_COUNTDOWN_MS - 1);
+    await settle();
+    assert.ok(!has(a, "match:start"), "the match waits for the countdown");
+
+    clock.advance(1);
+    const started = await waitFor(a, "room:update", (d) => d.state === "playing");
+    assert.equal(started.countdownMs, null);
+    const matchId = started.matchId;
     await waitFor(a, "match:start", (d) => d.matchId === matchId);
     await waitFor(b, "match:start", (d) => d.matchId === matchId);
     await waitFor(a, "room:update", (d) => d.matchId === matchId);
@@ -265,6 +276,48 @@ describe("private rooms", () => {
     }
     const back = await waitFor(a, "room:update", (d) => d.state === "ready-check" && d.matchId === null);
     assert.ok(back.members.every((x: any) => !x.ready));
+  });
+
+  test("un-ready, leaving, or closing the tab stops the countdown", async () => {
+    const a = await client(alice.token);
+    let b = await client(bob.token);
+    const { room } = await send(a, "room:create", { gameId: G });
+    await send(b, "room:join", { code: room.code });
+
+    // Un-ready halfway through: back to ready-check, and the old timer never fires.
+    await send(a, "room:ready");
+    assert.equal((await send(b, "room:ready")).room.state, "countdown");
+    clock.advance(ROOM_COUNTDOWN_MS / 2);
+    const stopped = await send(b, "room:ready", { ready: false });
+    assert.equal(stopped.room.state, "ready-check");
+    assert.equal(stopped.room.countdownMs, null);
+    clock.advance(ROOM_COUNTDOWN_MS);
+    await settle();
+    assert.ok(!has(a, "match:start"));
+
+    // Readying again restarts the full 3 s, and the refresh payload reports what's left.
+    await send(b, "room:ready");
+    clock.advance(1000);
+    const c = await client(alice.token);
+    const refreshed = await waitFor(c, "room:update", (d) => d.code === room.code);
+    assert.equal(refreshed.state, "countdown");
+    assert.equal(refreshed.countdownMs, ROOM_COUNTDOWN_MS - 1000);
+
+    // Bob closes the tab: he is no longer ready, so it stops.
+    b.socket.disconnect();
+    await waitFor(a, "room:update", (d) => d.state === "ready-check");
+    b = await client(bob.token);
+    await send(b, "room:ready");
+
+    // Leaving mid-countdown stops it too.
+    await waitFor(a, "room:update", (d) => d.state === "countdown");
+    await send(b, "room:leave");
+    const left = await waitFor(a, "room:update", (d) => d.members.length === 1);
+    assert.equal(left.state, "waiting");
+    clock.advance(ROOM_COUNTDOWN_MS);
+    await settle();
+    assert.ok(!has(a, "match:start"));
+    assert.equal(matches.live().length, 0);
   });
 
   test("a third player cannot join and bad codes are rejected", async () => {
@@ -400,7 +453,9 @@ describe("rematch", () => {
     const { room } = await send(a, "room:create", { gameId: G });
     await send(b, "room:join", { code: room.code });
     await send(a, "room:ready");
-    const matchId = (await send(b, "room:ready")).room.matchId;
+    await send(b, "room:ready");
+    clock.advance(ROOM_COUNTDOWN_MS);
+    const { matchId } = await waitFor(a, "room:update", (d) => d.state === "playing");
     finish(matchId);
     await waitFor(a, "room:update", (d) => d.state === "ready-check");
 

@@ -1,9 +1,10 @@
 "use client";
 
 // A private room at /r/<code>: the code is the hero while you wait, then two
-// seats with Ready toggles. The server starts the match the moment both are
-// ready; a short versus moment plays and the match screen takes over. Signed
-// out, the link lands on signup and joins once you have a name.
+// seats with Ready toggles. Once both are ready the server counts 3-2-1 (either
+// player can un-ready to stop it) and starts the match; a short versus moment
+// plays and the match screen takes over. Signed out, the link lands on signup
+// and joins once you have a name.
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -122,6 +123,20 @@ function Room({ code, me }: { code: string; me: string }) {
     );
   }
 
+  if (room.state === "countdown" && you && them) {
+    return (
+      <Frame>
+        <Countdown
+          room={room}
+          you={{ id: me, name: you.name ?? "You" }}
+          them={{ id: them.profileId, name: theirName }}
+          busy={busy}
+          onStop={() => setReady(false)}
+        />
+      </Frame>
+    );
+  }
+
   const quit = () => {
     leave();
     router.push("/");
@@ -218,6 +233,70 @@ function Room({ code, me }: { code: string; me: string }) {
       </Dialog>
     </Frame>
   );
+}
+
+/** Both ready: a big 3-2-1 from the server's countdown, with a way to stop it. */
+function Countdown({
+  room,
+  you,
+  them,
+  busy,
+  onStop,
+}: {
+  room: RoomState;
+  you: { id: string; name: string };
+  them: { id: string; name: string };
+  busy: boolean;
+  onStop: () => void;
+}) {
+  const secs = useSecondsLeft(room.countdownMs);
+  return (
+    <div className="relative flex flex-1 flex-col items-center justify-center gap-[18px] p-6 text-center">
+      <div className="dither" />
+      <span className="eyebrow relative">Private room · {room.gameName}</span>
+      <div className="relative flex items-center gap-4">
+        <CountdownSeat id={you.id} name={you.name} seat="you" />
+        <Icon3D name="vs" size={72} label="Versus" />
+        <CountdownSeat id={them.id} name={them.name} seat="opp" />
+      </div>
+      <span
+        key={secs}
+        role="timer"
+        aria-live="assertive"
+        aria-label={`Starting in ${secs}`}
+        className="mono relative animate-callout text-[150px] font-semibold leading-none tracking-[-.06em] text-accent [text-shadow:0_20px_50px_rgb(243_181_66/.35)] motion-reduce:animate-none"
+      >
+        {secs}
+      </span>
+      <span className="relative text-small text-ink-2">Either player can still un-ready to stop it.</span>
+      <Button variant="sec" className="relative" loading={busy} onClick={onStop}>
+        Not ready
+      </Button>
+    </div>
+  );
+}
+
+function CountdownSeat({ id, name, seat }: { id: string; name: string; seat: "you" | "opp" }) {
+  return (
+    <div className="flex w-[96px] flex-col items-center gap-1.5">
+      <Avatar3D id={id} size="lg" seat={seat} />
+      <b className="max-w-full truncate font-semibold">{name}</b>
+      <Chip tone="rec">Ready</Chip>
+    </div>
+  );
+}
+
+/** Whole seconds left (3, 2, 1), counted down locally from the server's remaining time. */
+function useSecondsLeft(ms: number | null): number {
+  const [left, setLeft] = useState(ms ?? 0);
+  useEffect(() => {
+    if (ms == null) return;
+    const end = Date.now() + ms;
+    setLeft(ms);
+    const t = setInterval(() => setLeft(Math.max(0, end - Date.now())), 100);
+    return () => clearInterval(t);
+  }, [ms]);
+  return Math.max(1, Math.ceil(left / 1000));
 }
 
 function CodeBox({ room }: { room: RoomState }) {

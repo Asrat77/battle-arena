@@ -11,6 +11,7 @@ import type { AnyGame } from "../../engine/types";
 import { createApp } from "./app";
 import { MAX_CHAT_CHARS, RATE_LIMIT, REACTIONS } from "./chat";
 import { FakeClock } from "./clock";
+import { ROOM_COUNTDOWN_MS } from "./lobby";
 import { DISCONNECT_FORFEIT_MS, type Match } from "./matches";
 import { MemoryStore } from "./store";
 
@@ -221,6 +222,7 @@ describe("chat", () => {
 
     await send(a, "room:ready");
     await send(b, "room:ready");
+    clock.advance(ROOM_COUNTDOWN_MS);
     const { matchId } = await waitFor(a, "room:update", (u) => u.state === "playing");
     await send(c, "match:watch", { matchId });
     const res = await send(c, "chat:send", { roomId: matchId, text: "watching!" });
