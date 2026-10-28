@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
+import type { AdapterPlayer } from "@/components/match/adapter";
 import { adapterFor } from "@/components/match/adapters";
 import { MatchFrame, type FrameSeat, type StatusTone } from "@/components/match/MatchFrame";
 import { RecordChip } from "@/components/ui/Chip";
@@ -51,6 +52,10 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
   });
 
   const seatNames: [string, string] = [name(0), name(1)];
+  const players = ([0, 1] as const).map((s) => ({ id: start.players[s], name: name(s), bot: start.bot && start.botSeat === s })) as [
+    AdapterPlayer,
+    AdapterPlayer,
+  ];
   const clock = adapter && !end ? adapter.timer(view.view) : null;
   const { status, tone } =
     adapter && !end
@@ -75,7 +80,7 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
     >
       <div className="flex min-h-0 flex-1 flex-col gap-3">
         {adapter ? (
-          <adapter.Board view={view.view} seat={seat} onMove={move} disabled={Boolean(end)} names={seatNames} />
+          <adapter.Board view={view.view} seat={seat} onMove={move} disabled={Boolean(end)} names={seatNames} players={players} />
         ) : (
           <pre className="card mono overflow-x-auto whitespace-pre-wrap p-4 text-[13px]">{JSON.stringify(view.view, null, 2)}</pre>
         )}
