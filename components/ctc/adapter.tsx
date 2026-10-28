@@ -1,0 +1,221 @@
+"use client";
+
+// Crack the Code inside MatchFrame: the secret setup, the guessing rounds and
+// the round history, plus the status line and clock the frame shows.
+
+import { useState } from "react";
+import type { GameAdapter } from "@/components/match/adapter";
+import { Chip } from "@/components/ui/Chip";
+import { Icon3D } from "@/components/ui/Icon3D";
+import { MAX_ROUNDS, ROUND_MS, SETUP_MS, type CtcMove, type CtcView } from "@/engine/games/crackTheCode";
+import type { Seat, Viewer } from "@/engine/types";
+import { CodeSlots } from "./CodeSlots";
+import { Keypad } from "./Keypad";
+import { RoundHistory } from "./RoundHistory";
+
+type BoardProps = { view: CtcView; seat: Viewer; onMove(m: CtcMove): void; disabled: boolean; names: [string, string] };
+
+const other = (s: Seat): Seat => (s === 0 ? 1 : 0);
+
+function Board({ view, seat, onMove, disabled, names }: BoardProps) {
+  const playing = seat !== "spectator" && view.phase !== "over" && !disabled;
+  const opp = names[seat === "spectator" ? 1 : other(seat)];
+
+  if (playing && view.phase === "setup") {
+    return view.submitted[seat] ? (
+      <Locked opp={opp} oppDone={view.submitted[other(seat)]} />
+    ) : (
+      <SecretEntry onLock={(code) => onMove({ type: "secret", code })} />
+    );
+  }
+
+  const live = view.phase === "rounds" && !disabled;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+      {view.secrets ? (
+        <Secrets secrets={view.secrets} seat={seat} names={names} />
+      ) : (
+        <div className="flex items-center justify-between gap-2">
+          {seat !== "spectator" && view.mySecret ? (
+            <MySecret code={view.mySecret} />
+          ) : (
+            seat === "spectator" && !disabled && <SpectatorSecrets setup={view.phase === "setup"} />
+          )}
+          {view.round > 0 && (
+            <span className="eyebrow">
+              Round {view.round} of {MAX_ROUNDS}
+            </span>
+          )}
+        </div>
+      )}
+      <RoundHistory
+        history={view.history}
+        seat={seat}
+        names={names}
+        current={live ? { round: view.round, mine: view.myPending, submitted: view.submitted } : null}
+      />
+      <div className="flex-1" />
+      {playing && view.phase === "rounds" && (
+        <GuessEntry
+          key={view.round}
+          round={view.round}
+          pending={view.myPending}
+          opp={opp}
+          onGuess={(code) => onMove({ type: "guess", code })}
+        />
+      )}
+    </div>
+  );
+}
+
+function SecretEntry({ onLock }: { onLock(code: string): void }) {
+  const [code, setCode] = useState("");
+  return (
+    <div className="flex flex-1 flex-col gap-4 pb-2">
+      <div className="mt-2 flex items-center gap-3.5">
+        <Icon3D name="vault" size={72} />
+        <div className="flex flex-col gap-0.5">
+          <b className="text-[20px] font-semibold tracking-[-.03em]">Your secret code</b>
+          <span className="text-sm text-ink-3">4 different digits, 1–9. Hidden until the end.</span>
+        </div>
+      </div>
+      <div className="flex-1" />
+      <CodeSlots value={code} label="Your secret" />
+      <div className="flex-1" />
+      <Keypad value={code} onChange={setCode} onSubmit={onLock} submitLabel="Lock in" />
+    </div>
+  );
+}
+
+function Locked({ opp, oppDone }: { opp: string; oppDone: boolean }) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center" data-testid="secret-locked">
+      <div className="plate flex h-[150px] w-[150px] items-center justify-center rounded-full">
+        <Icon3D name="padlock" size={104} />
+      </div>
+      <h2 className="text-[26px] font-semibold tracking-[-.03em]">Secret locked</h2>
+      <div className="w-full max-w-[360px]">
+        <CodeSlots value="" masked label="Your secret" />
+      </div>
+      <Chip spin={!oppDone}>{oppDone ? `${opp} is locked in too` : `${opp} is setting their secret`}</Chip>
+    </div>
+  );
+}
+
+/** The viewer's secret, hidden until tapped. */
+function MySecret({ code }: { code: string }) {
+  const [shown, setShown] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => setShown((s) => !s)}
+      aria-pressed={shown}
+      aria-label={shown ? `Your secret ${code.split("").join(" ")}. Tap to hide` : "Your secret is hidden. Tap to show"}
+      className="chip bg-you-soft text-you"
+    >
+      <Icon3D name={shown ? "openlock" : "padlock"} size={18} />
+      Your secret <span className="mono text-[13px] tracking-[.12em]">{shown ? code : "••••"}</span>
+    </button>
+  );
+}
+
+function SpectatorSecrets({ setup }: { setup: boolean }) {
+  return (
+    <Chip icon="padlock">
+      {setup ? "Players are setting secrets" : "Secrets stay hidden until the end"}
+    </Chip>
+  );
+}
+
+/** Both secrets once the match is over. C3 adds the flip. */
+function Secrets({ secrets, seat, names }: { secrets: [string | null, string | null]; seat: Viewer; names: [string, string] }) {
+  const left: Seat = seat === "spectator" ? 0 : seat;
+  const cards = [left, other(left)].map((s, i) => ({
+    s,
+    label: seat === s ? "Your secret" : `${names[s]}’s secret`,
+    tone: i === 0 ? "text-you shadow-[inset_0_0_0_1.5px_rgb(var(--you))]" : "text-opp shadow-[inset_0_0_0_1.5px_rgb(var(--opp))]",
+  }));
+  return (
+    <div className="grid grid-cols-2 gap-2.5" data-testid="secrets">
+      {cards.map(({ s, label, tone }) => (
+        <div key={s} className={`card px-3.5 py-3 ${tone}`}>
+          <span className="block truncate text-sm text-ink-3">{label}</span>
+          <span className="mono text-[26px] font-semibold tracking-[.12em]">{secrets[s] ?? "none"}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GuessEntry({ round, pending, opp, onGuess }: { round: number; pending: string | null; opp: string; onGuess(code: string): void }) {
+  const [code, setCode] = useState("");
+  if (pending)
+    return (
+      <div className="card flex flex-col items-start gap-2 px-3.5 py-3" data-testid="guess-pending">
+        <span className="text-sm text-ink-3">Your guess · round {round}</span>
+        <span className="mono text-[26px] font-semibold tracking-[.12em] text-you">{pending}</span>
+        <Chip spin className="max-w-full">
+          <span className="truncate">Round closes when {opp} guesses</span>
+        </Chip>
+      </div>
+    );
+  return (
+    <div className="flex flex-col gap-2.5 pb-1">
+      <CodeSlots value={code} size="sm" label="Your guess" />
+      <Keypad value={code} onChange={setCode} onSubmit={onGuess} submitLabel="Guess" size="sm" />
+    </div>
+  );
+}
+
+function status(view: CtcView, seat: Viewer, names: [string, string]): string {
+  if (view.phase === "over") return "Match over";
+  if (seat === "spectator") {
+    if (view.phase === "setup") return "Both players are setting secrets";
+    return `Round ${view.round} · both guessing`;
+  }
+  const opp = names[other(seat)];
+  const mine = view.submitted[seat];
+  const theirs = view.submitted[other(seat)];
+  if (view.phase === "setup") return mine ? `Waiting for ${opp}` : "Set your secret";
+  if (mine) return `Waiting for ${opp}’s guess`;
+  return theirs ? `${opp} guessed · your turn` : `Round ${view.round} · your guess`;
+}
+
+function seatState(view: CtcView, s: Seat): string {
+  if (view.phase === "setup") return view.submitted[s] ? "Locked" : "Setting secret";
+  if (view.phase === "rounds") return view.submitted[s] ? "Guessed" : "Thinking";
+  return "";
+}
+
+/** Plain list of moves up to `step`; the replay task (R2) draws the full board. */
+function ReplayStep({ log, step }: { log: CtcMove[]; step: number }) {
+  return (
+    <ol className="mono flex flex-col gap-1 text-sm">
+      {log.slice(0, step).map((m, i) => (
+        <li key={i}>{m.type === "secret" ? "Secret locked" : `Guess ${m.code}`}</li>
+      ))}
+    </ol>
+  );
+}
+
+export const ctcAdapter: GameAdapter<CtcView, CtcMove> = {
+  id: "crack-the-code",
+  icon: "vault",
+  Board,
+  status,
+  seatState,
+  timer: (view) => ({ total: view.phase === "setup" ? SETUP_MS : ROUND_MS, owner: "both" }),
+  ReplayStep,
+  rules: {
+    title: "Crack the Code",
+    art: "vault",
+    lines: [
+      "Each player sets a secret of 4 different digits from 1 to 9.",
+      "Every round you both guess the other's code at the same time, within 45 seconds.",
+      "Saffron cells are digits in the right spot. Grey cells are digits in the code but in another spot.",
+      "First to put all 4 in the right spot wins. Both in the same round is a draw, and so is reaching round 30.",
+      "A fingerprint of both secrets goes on the ledger before the first guess, so neither can change.",
+    ],
+  },
+  hasHiddenInfo: true,
+};
