@@ -4,6 +4,9 @@
 // in both themes. Not linked from the nav.
 
 import { useState } from "react";
+import { CodeSlots } from "@/components/ctc/CodeSlots";
+import { Keypad } from "@/components/ctc/Keypad";
+import { Meter, meterText } from "@/components/ctc/Meter";
 import { Avatar3D } from "@/components/ui/Avatar3D";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -32,6 +35,8 @@ export default function KitPage() {
   const [sheet, setSheet] = useState(false);
   const [name, setName] = useState("Abebe");
   const [seg, setSeg] = useState("overall");
+  const [code, setCode] = useState("47");
+  const [locked, setLocked] = useState<string | null>(null);
 
   return (
     <div className="relative flex flex-col gap-6">
@@ -195,6 +200,46 @@ export default function KitPage() {
               { value: "gebeta", label: "Gebeta" },
             ]}
           />
+        </Spec>
+
+        <Spec title="Code entry">
+          <CodeSlots value={locked ?? code} masked={!!locked} label="Your secret" />
+          {locked ? (
+            <Button
+              block
+              onClick={() => {
+                setLocked(null);
+                setCode("");
+              }}
+            >
+              Locked {locked} · reset
+            </Button>
+          ) : (
+            <Keypad value={code} onChange={setCode} onSubmit={setLocked} />
+          )}
+          <span className="text-small text-ink-3">76 px slots, 60 px keys. Used digits fade out. Type 1–9, Backspace or Enter while focused.</span>
+        </Spec>
+
+        <Spec title="Feedback meter">
+          {(
+            [
+              [1, 3],
+              [2, 3],
+              [0, 2],
+              [4, 4],
+              [0, 0],
+            ] as const
+          ).map(([exact, present]) => (
+            <div key={`${exact}${present}`} className="flex items-center gap-4">
+              <Meter exact={exact} present={present} />
+              <span aria-hidden className="text-small text-ink-2">
+                {meterText(exact, present)}
+              </span>
+            </div>
+          ))}
+          <div className="border-t border-line pt-3">
+            <CodeSlots value="3852" size="sm" label="Guess" />
+          </div>
         </Spec>
 
         <Spec title="Badges">
