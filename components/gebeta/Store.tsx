@@ -35,6 +35,8 @@ export function Store({
   player,
   orientation,
   sm = false,
+  land = false,
+  glow = false,
   className = "",
   style,
 }: {
@@ -48,6 +50,10 @@ export function Store({
   player?: { id: string; bot?: boolean };
   orientation: Orientation;
   sm?: boolean;
+  /** A sown seed just dropped here. */
+  land?: boolean;
+  /** Saffron ring for a "go again" or a capture. */
+  glow?: boolean;
   className?: string;
   style?: CSSProperties;
 }) {
@@ -79,6 +85,14 @@ export function Store({
       >
         {n}
       </span>
+      {(land || glow) && (
+        <span
+          aria-hidden
+          className={`pointer-events-none absolute inset-0 rounded-[inherit] ${
+            glow ? "shadow-[0_0_0_2.5px_#F3B542,0_0_26px_rgb(243_181_66/.5)]" : "shadow-[0_0_0_2.5px_#FFF8EE]"
+          }`}
+        />
+      )}
     </div>
   );
 }

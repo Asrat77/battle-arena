@@ -77,6 +77,7 @@ const config: Config = {
         bob: { "50%": { transform: "translateY(-6px)" } },
         shimmer: { from: { transform: "translateX(-100%)" }, to: { transform: "translateX(100%)" } },
         pulse: { "50%": { opacity: ".75" } },
+        flash: { "50%": { boxShadow: "0 0 0 4px #F3B542, 0 0 34px rgb(243 181 66 / .8)" } },
       },
       animation: {
         pop: "pop .16s cubic-bezier(.34,1.56,.64,1)",
@@ -89,6 +90,8 @@ const config: Config = {
         bob: "bob 2.4s ease-in-out infinite",
         shimmer: "shimmer 1.4s linear infinite",
         urgent: "pulse 1s ease-in-out infinite",
+        flash: "flash .3s ease-in-out 2",
+        callout: "pop .38s cubic-bezier(.34,1.56,.64,1)",
       },
     },
   },
