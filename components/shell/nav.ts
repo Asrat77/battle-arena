@@ -30,4 +30,4 @@ export function hasDock(pathname: string): boolean {
  * Full-screen flows that draw their own header on mobile (MatchFrame, replay,
  * room, queue). Add a prefix here once its screen ships its own header.
  */
-export const BARE_ON_MOBILE: string[] = ["/match", "/queue"];
+export const BARE_ON_MOBILE: string[] = ["/match", "/queue", "/replay"];
