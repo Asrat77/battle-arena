@@ -13,6 +13,8 @@ import type { Identity } from "./identity";
 import { profileRoom, type Match, type MatchRuntime } from "./matches";
 
 export const BOT_OFFER_MS = 10_000;
+/** Both players ready → 3-2-1, then the match starts. Either can un-ready to stop it. */
+export const ROOM_COUNTDOWN_MS = 3_000;
 export const ROOM_CODE_LENGTH = 5;
 // No 0/O or 1/I/L, so a code read aloud or off a screen is unambiguous.
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -38,6 +40,8 @@ interface Room {
   host: string;
   members: RoomMember[];
   matchId: string | null;
+  /** Set while both are ready and the 3-2-1 runs. */
+  countdown?: { endsAt: number; timer: TimerHandle };
   createdAt: number;
 }
 
@@ -185,6 +189,7 @@ export class Lobby {
       const me = room?.members.find((x) => x.profileId === profileId);
       if (room && me?.ready && !room.matchId) {
         me.ready = false;
+        this.syncCountdown(room);
         this.broadcastRoom(room);
       }
     });
@@ -316,13 +321,7 @@ export class Lobby {
     if (room.matchId) return { ok: false as const, reason: "match already started" };
     if (ready && this.matches.activeFor(profileId).length) return { ok: false as const, reason: "already in a match" };
     room.members.find((x) => x.profileId === profileId)!.ready = ready;
-
-    if (room.members.length === 2 && room.members.every((x) => x.ready)) {
-      const players = room.members.map((x) => x.profileId) as [string, string];
-      // Host sits first in the room list; seats are still drawn at random.
-      if (randomInt(2) === 1) players.reverse();
-      room.matchId = this.start(room.game, players, null, room.code).id;
-    }
+    this.syncCountdown(room);
     this.broadcastRoom(room);
     return { ok: true as const, room: this.roomPayload(room) };
   }
@@ -333,6 +332,8 @@ export class Lobby {
     this.roomOf.delete(profileId);
     room.members = room.members.filter((x) => x.profileId !== profileId);
     this.io.in(profileRoom(profileId)).socketsLeave(roomChannel(room.code));
+    room.countdown?.timer.cancel();
+    room.countdown = undefined;
     if (!room.members.length) {
       this.rooms.delete(room.code);
       return;
@@ -417,6 +418,8 @@ export class Lobby {
     r.state = "matched";
     r.next = m.id;
     if (keepRoom) {
+      room.countdown?.timer.cancel();
+      room.countdown = undefined;
       room.matchId = m.id;
       room.members.forEach((x) => (x.ready = false));
       this.broadcastRoom(room);
@@ -440,6 +443,36 @@ export class Lobby {
   private broadcastRematch(matchId: string, r: Rematch) {
     const payload = this.rematchPayload(matchId, r);
     for (const p of new Set(r.players)) if (p !== BOT_PLAYER) this.emitTo(p, "rematch:update", payload);
+  }
+
+  /** Starts the 3-2-1 when both seats are ready and stops it as soon as they aren't. */
+  private syncCountdown(room: Room) {
+    const allReady = !room.matchId && room.members.length === 2 && room.members.every((x) => x.ready);
+    if (allReady && !room.countdown) {
+      room.countdown = {
+        endsAt: this.clock.now() + ROOM_COUNTDOWN_MS,
+        timer: this.clock.setTimeout(() => this.startRoomMatch(room), ROOM_COUNTDOWN_MS),
+      };
+    } else if (!allReady && room.countdown) {
+      room.countdown.timer.cancel();
+      room.countdown = undefined;
+    }
+  }
+
+  private startRoomMatch(room: Room) {
+    room.countdown = undefined;
+    if (this.rooms.get(room.code) !== room) return;
+    const players = room.members.map((x) => x.profileId) as [string, string];
+    // Someone who got into another match meanwhile is no longer ready.
+    const busy = players.filter((p) => this.matches.activeFor(p).length);
+    if (busy.length) {
+      room.members.forEach((x) => busy.includes(x.profileId) && (x.ready = false));
+    } else {
+      // Host sits first in the room list; seats are still drawn at random.
+      if (randomInt(2) === 1) players.reverse();
+      room.matchId = this.start(room.game, players, null, room.code).id;
+    }
+    this.broadcastRoom(room);
   }
 
   /** A match ended: rematches open for a while, and its room goes back to waiting. */
@@ -480,8 +513,10 @@ export class Lobby {
         ready: x.ready,
         online: this.isOnline(x.profileId),
       })),
-      state: room.matchId ? "playing" : room.members.length < 2 ? "waiting" : "ready-check",
+      state: room.matchId ? "playing" : room.countdown ? "countdown" : room.members.length < 2 ? "waiting" : "ready-check",
       matchId: room.matchId,
+      // Time left rather than a timestamp, so client clock skew doesn't matter.
+      countdownMs: room.countdown ? Math.max(0, room.countdown.endsAt - this.clock.now()) : null,
     };
   }
 

@@ -59,8 +59,10 @@ export interface RoomState {
   gameName: string;
   host: string;
   members: { profileId: string; name: string | null; ready: boolean; online: boolean }[];
-  state: "waiting" | "ready-check" | "playing";
+  state: "waiting" | "ready-check" | "countdown" | "playing";
   matchId: string | null;
+  /** Milliseconds left in the 3-2-1 when the payload was sent; null outside it. */
+  countdownMs: number | null;
 }
 
 /** Subset of GET /api/profiles/:id/rewards the UI reads so far. */
