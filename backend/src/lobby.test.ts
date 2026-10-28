@@ -9,7 +9,7 @@ import { listGames } from "../../engine/registry";
 import type { AnyGame } from "../../engine/types";
 import { createApp } from "./app";
 import { FakeClock } from "./clock";
-import { BOT_OFFER_MS, BOT_PLAYER } from "./lobby";
+import { BOT_OFFER_MS, BOT_PLAYER, REMATCH_WINDOW_MS } from "./lobby";
 import { DISCONNECT_FORFEIT_MS } from "./matches";
 import { MemoryStore } from "./store";
 
@@ -79,6 +79,16 @@ function send(c: Client, event: string, msg?: unknown): Promise<any> {
 
 const settle = () => new Promise((r) => setTimeout(r, 50));
 const has = (c: Client, name: string) => c.events.some((e) => e.name === name);
+
+/** Plays a first-to-three match to the end, seat to move scoring each turn. */
+function finish(matchId: string) {
+  const m = matches.get(matchId)!;
+  while (!m.cur.outcome) {
+    const seat = (m.cur.state as { turn: 0 | 1 }).turn;
+    if (m.players[seat] === BOT_PLAYER) clock.advance(10_000);
+    else assert.equal(matches.move(m.players[seat], m.id, { type: "point" }), null);
+  }
+}
 
 async function getJson(path: string) {
   const res = await fetch(url + path);
@@ -303,5 +313,102 @@ describe("private rooms", () => {
     await send(a, "queue:join", { gameId: G });
     const left = await waitFor(b, "room:update", (d) => d.members.length === 1);
     assert.equal(left.members[0].profileId, bob.profile.id);
+  });
+});
+
+describe("rematch", () => {
+  async function paired() {
+    const a = await client(alice.token);
+    const b = await client(bob.token);
+    await send(a, "queue:join", { gameId: G });
+    const { matchId } = await send(b, "queue:join", { gameId: G });
+    return { a, b, matchId, players: [...matches.get(matchId)!.players] };
+  }
+
+  test("both players asking starts a new match with the seats swapped", async () => {
+    const { a, b, matchId, players } = await paired();
+    assert.deepEqual(await send(a, "rematch:request", { matchId }), { ok: false, reason: "match is still live" });
+    finish(matchId);
+
+    const status = await send(b, "rematch:status", { matchId });
+    assert.deepEqual(status, { ok: true, available: true, matchId, state: "open", bot: false, wants: [], next: null });
+    assert.deepEqual(await send(a, "rematch:request", { matchId }), { ok: true, state: "offered" });
+    const offer = await waitFor(b, "rematch:update", (d) => d.state === "offered");
+    assert.deepEqual(offer.wants, [alice.profile.id]);
+    await settle();
+    assert.equal(matches.live().length, 0, "one ask does not start a match");
+
+    const res = await send(b, "rematch:request", { matchId });
+    assert.equal(res.state, "matched");
+    const next = matches.get(res.matchId)!;
+    assert.deepEqual(next.players, [players[1], players[0]]);
+    await waitFor(a, "rematch:update", (d) => d.state === "matched" && d.next === res.matchId);
+    await waitFor(a, "match:start", (d) => d.matchId === res.matchId);
+
+    // Asking again on the old card just points at the new match.
+    assert.deepEqual(await send(a, "rematch:request", { matchId }), { ok: true, state: "matched", matchId: res.matchId });
+    finish(res.matchId);
+  });
+
+  test("taking back an offer reopens it; turning one down closes it", async () => {
+    const { a, b, matchId } = await paired();
+    finish(matchId);
+    await send(a, "rematch:request", { matchId });
+    assert.deepEqual(await send(a, "rematch:cancel", { matchId }), { ok: true, state: "open" });
+    await send(a, "rematch:request", { matchId });
+    assert.deepEqual(await send(b, "rematch:cancel", { matchId }), { ok: true, state: "declined" });
+    await waitFor(a, "rematch:update", (d) => d.state === "declined");
+    assert.deepEqual(await send(a, "rematch:request", { matchId }), { ok: false, reason: "rematch declined" });
+  });
+
+  test("play again against the bot starts at once", async () => {
+    const a = await client(alice.token);
+    await send(a, "queue:join", { gameId: G });
+    clock.advance(BOT_OFFER_MS);
+    await waitFor(a, "queue:botOffer");
+    const { matchId } = await send(a, "queue:acceptBot");
+    const first = matches.get(matchId)!;
+    finish(matchId);
+
+    assert.equal((await send(a, "rematch:status", { matchId })).bot, true);
+    const res = await send(a, "rematch:request", { matchId });
+    assert.equal(res.state, "matched");
+    const next = matches.get(res.matchId)!;
+    assert.equal(next.botSeat, first.botSeat === 0 ? 1 : 0);
+    assert.equal(next.players[next.botSeat!], BOT_PLAYER);
+    await waitFor(a, "match:start", (d) => d.matchId === res.matchId && d.bot === true);
+    finish(res.matchId);
+  });
+
+  test("spectators and late cards get no rematch", async () => {
+    const { matchId } = await paired();
+    const c = await client(carol.token);
+    finish(matchId);
+    assert.deepEqual(await send(c, "rematch:status", { matchId }), { ok: true, available: false });
+    assert.deepEqual(await send(c, "rematch:request", { matchId }), { ok: false, reason: "no rematch for this match" });
+
+    const a = clients[0];
+    await send(a, "rematch:request", { matchId });
+    clock.advance(REMATCH_WINDOW_MS);
+    await waitFor(a, "rematch:update", (d) => d.state === "closed");
+    assert.deepEqual(await send(a, "rematch:status", { matchId }), { ok: true, available: false });
+  });
+
+  test("a room rematch keeps the room in step", async () => {
+    const a = await client(alice.token);
+    const b = await client(bob.token);
+    const { room } = await send(a, "room:create", { gameId: G });
+    await send(b, "room:join", { code: room.code });
+    await send(a, "room:ready");
+    const matchId = (await send(b, "room:ready")).room.matchId;
+    finish(matchId);
+    await waitFor(a, "room:update", (d) => d.state === "ready-check");
+
+    await send(a, "rematch:request", { matchId });
+    const res = await send(b, "rematch:request", { matchId });
+    const back = await waitFor(a, "room:update", (d) => d.matchId === res.matchId);
+    assert.equal(back.state, "playing");
+    finish(res.matchId);
+    await waitFor(a, "room:update", (d) => d.state === "ready-check" && d.matchId === null);
   });
 });

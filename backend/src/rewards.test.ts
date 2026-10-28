@@ -193,6 +193,19 @@ describe("anti-farming", () => {
     assert.equal(rewards.player("a").overall.draws, 4);
   });
 
+  test("a capped match tells both players it paid nothing", () => {
+    const { rewards, notes } = setup();
+    for (let i = 0; i < 3; i++) rewards.matchRecorded(stored({ players: ["a", "b"], outcome: draw, endedAt: T0 + i }));
+    notes.length = 0;
+    const s = stored({ players: ["a", "b"], outcome: win(0), endedAt: T0 + 3 });
+    rewards.matchRecorded(s);
+    const points = notes.filter((x) => x.payload.kind === "points");
+    assert.deepEqual(
+      points.map((x) => [x.to, x.payload]),
+      ["a", "b"].map((to) => [to, { kind: "points", matchId: s.record.matchId, points: 0, reasons: ["farmed"] }]),
+    );
+  });
+
   test("farmed wins grant no badges", () => {
     const { rewards } = setup();
     for (let i = 0; i < 3; i++) rewards.matchRecorded(stored({ players: ["a", "b"], outcome: win(1), endedAt: T0 + i }));

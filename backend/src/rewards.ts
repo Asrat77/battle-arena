@@ -207,6 +207,7 @@ export class Rewards {
     const vsPlayer = !record.bot && humans.length === 2 && record.players[0] !== record.players[1];
     const pair = pairKey(record.players[0], record.players[1]);
     const mints: { profileId: string; points: number }[] = [];
+    const capped: string[] = [];
     const badges: { profileId: string; badge: EarnedBadge }[] = [];
 
     this.change((s) => {
@@ -240,6 +241,7 @@ export class Rewards {
         p.history.unshift(entry);
         if (farmed) {
           entry.reasons.push("farmed");
+          capped.push(id);
           continue;
         }
 
@@ -270,6 +272,8 @@ export class Rewards {
       }
     });
 
+    // The result card says why a capped match paid nothing.
+    for (const profileId of capped) this.notify(profileId, { kind: "points", matchId: record.matchId, points: 0, reasons: ["farmed"] });
     for (const { profileId, points } of mints) {
       this.notify(profileId, { kind: "points", matchId: record.matchId, points });
       this.mint(profileId, points, record.matchId, record.endedAt);
