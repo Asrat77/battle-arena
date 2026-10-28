@@ -2,13 +2,17 @@
 
 // The card that covers the board once a match is over: a big object for win,
 // loss or draw, the reason in plain words, then the final score (Gebeta) or
-// both secrets (Crack the Code), the ledger record and the way out.
+// both secrets (Crack the Code), the ledger record and the way out. Points
+// and badges the match earned pop up as reward toasts once they are applied.
 
+import { useEffect } from "react";
 import { Avatar3D } from "@/components/ui/Avatar3D";
 import { ButtonLink } from "@/components/ui/Button";
 import { RecordChip } from "@/components/ui/Chip";
-import { Icon3D } from "@/components/ui/Icon3D";
+import { Icon3D, type Icon3DName } from "@/components/ui/Icon3D";
+import { useToast } from "@/components/ui/Toast";
 import type { Seat } from "@/engine/types";
+import { useSession } from "@/lib/session";
 import type { ResultSummary } from "./result";
 
 export interface ResultSeat {
@@ -37,6 +41,7 @@ export function ResultCard({
   ledgerIndex: number | null;
 }) {
   const won = result.kind === "win";
+  useRewardToasts(matchId);
   return (
     <section aria-labelledby="result-title" className="relative mx-auto flex w-full max-w-[520px] flex-col gap-2.5 pb-2" data-testid="match-end">
       <div className="dither h-[300px]" aria-hidden />
@@ -88,7 +93,9 @@ export function ResultCard({
           <b className="text-small font-semibold">Ledger record</b>
           <span className="text-small text-ink-2">Gameplay never waits for this</span>
         </span>
-        <RecordChip state={ledgerIndex === null ? "pending" : "recorded"} block={ledgerIndex} />
+        <span aria-live="polite" className="flex-none" data-testid="record-chip">
+          <RecordChip state={ledgerIndex === null ? "pending" : "recorded"} block={ledgerIndex} long />
+        </span>
       </div>
 
       <ButtonLink href={`/replay/${matchId}`} variant="act" icon="verified" block className="relative">
@@ -99,4 +106,63 @@ export function ResultCard({
       </ButtonLink>
     </section>
   );
+}
+
+const BADGE_ICONS: Record<string, Icon3DName> = {
+  firstBlood: "boxing",
+  codebreaker: "lockpick",
+  seedMaster: "sprout",
+  onARoll: "flame",
+  explorer: "compass",
+  champion: "trophy",
+  watcher: "binoculars",
+};
+
+type RewardNotify =
+  | { kind: "points"; matchId?: string; points: number }
+  | {
+      kind: "badge";
+      badge: { id: string; name: string; description?: string; source: string; ledgerIndex: number | null };
+    };
+
+/** Toasts for the `notify` points and badge events that belong to this match. */
+function useRewardToasts(matchId: string) {
+  const { socket } = useSession();
+  const toast = useToast();
+
+  useEffect(() => {
+    if (!socket) return;
+    const onNotify = (n: RewardNotify) => {
+      if (n?.kind === "points" && n.matchId === matchId && n.points > 0)
+        toast.show({
+          icon: "token",
+          tone: "reward",
+          href: "/profile",
+          body: (
+            <>
+              <b>+{n.points} {n.points === 1 ? "point" : "points"}</b>
+              <div className="text-small text-ink-2">Minting on the ledger</div>
+            </>
+          ),
+        });
+      if (n?.kind === "badge" && n.badge?.source === matchId)
+        toast.show({
+          icon: BADGE_ICONS[n.badge.id] ?? "medalgold",
+          tone: "reward",
+          href: n.badge.ledgerIndex === null ? "/profile" : `/ledger#block-${n.badge.ledgerIndex}`,
+          body: (
+            <>
+              <b>Badge: {n.badge.name}</b>
+              <div className="text-small text-ink-2">
+                {n.badge.ledgerIndex === null ? n.badge.description : `Recorded in block #${n.badge.ledgerIndex}`}
+              </div>
+            </>
+          ),
+        });
+    };
+    socket.on("notify", onNotify);
+    return () => {
+      socket.off("notify", onNotify);
+    };
+  }, [socket, matchId, toast]);
 }
