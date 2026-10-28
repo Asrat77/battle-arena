@@ -8,6 +8,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { AdapterPlayer } from "@/components/match/adapter";
 import { adapterFor } from "@/components/match/adapters";
 import { Scrubber, type Speed } from "@/components/replay/Scrubber";
 import { Avatar3D } from "@/components/ui/Avatar3D";
@@ -17,7 +18,7 @@ import { Icon3D } from "@/components/ui/Icon3D";
 import { VerifyPanel } from "@/components/verify/VerifyPanel";
 import { getGame } from "@/engine/registry";
 import { replay } from "@/engine/replay";
-import type { LogEntry, MatchRecord } from "@/engine/types";
+import type { LogEntry, MatchRecord, Seat } from "@/engine/types";
 import type { VerifyReport } from "@/engine/verify";
 import { ApiError, api, BOT_PLAYER, type StoredMatch } from "@/lib/api";
 import { shortId, usePlayerNames } from "@/lib/usePlayerNames";
@@ -140,7 +141,13 @@ function Replay({ match }: { match: StoredMatch }) {
         <div className="flex min-w-0 flex-col gap-3.5">
           <Summary match={match} labels={labels} />
           {adapter ? (
-            <adapter.ReplayStep log={record.log} step={pos} seed={record.seed} names={labels} />
+            <adapter.ReplayStep
+              log={record.log}
+              step={pos}
+              seed={record.seed}
+              names={labels}
+              players={[player(record, labels, 0), player(record, labels, 1)]}
+            />
           ) : (
             <p className="card text-small text-ink-3">This game has no replay view yet. Verify still checks it.</p>
           )}
@@ -294,6 +301,10 @@ function entryText(entry: LogEntry, labels: [string, string], describe?: (move: 
 }
 
 /** The round number at `pos` for games whose state counts rounds (Crack the Code). */
+function player(record: MatchRecord, labels: [string, string], s: Seat): AdapterPlayer {
+  return { id: record.players[s], name: labels[s], bot: record.players[s] === BOT_PLAYER };
+}
+
 function roundAt(record: MatchRecord, pos: number): number | null {
   const game = getGame(record.gameId);
   if (!game) return null;

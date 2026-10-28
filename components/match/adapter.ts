@@ -42,6 +42,8 @@ export interface ReplayStepProps {
   step: number;
   seed: string;
   names: [string, string];
+  /** Ids and bot flags by seat, for avatars. */
+  players?: [AdapterPlayer, AdapterPlayer];
 }
 
 export interface GameAdapter<View, Move> {
