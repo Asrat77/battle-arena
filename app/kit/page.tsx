@@ -18,6 +18,7 @@ import { Dialog, Sheet } from "@/components/ui/Overlay";
 import { Segmented } from "@/components/ui/Segmented";
 import { useToast } from "@/components/ui/Toast";
 import { useTheme } from "@/lib/theme";
+import { MatchPrimitives } from "./MatchPrimitives";
 
 function Spec({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -251,6 +252,10 @@ export default function KitPage() {
           </div>
         </Spec>
       </div>
+
+      <Spec title="Match header">
+        <MatchPrimitives />
+      </Spec>
 
       <Spec title={`3D icons · ${ICONS.length}`}>
         <div className="grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-3">
