@@ -40,6 +40,8 @@ interface Room {
   host: string;
   members: RoomMember[];
   matchId: string | null;
+  /** The room's previous match, so its spectators keep the room chat after it ends. */
+  lastMatchId: string | null;
   /** Set while both are ready and the 3-2-1 runs. */
   countdown?: { endsAt: number; timer: TimerHandle };
   createdAt: number;
@@ -126,15 +128,29 @@ export class Lobby {
       }));
   }
 
-  /** Room code and members for chat, by code. */
-  roomInfo(code: string): { code: string; members: string[]; matchId: string | null } | undefined {
+  /**
+   * Room code and members for chat, by code. `watchMatchId` is the live match,
+   * or the last one once it ends: its spectators still belong to the room.
+   */
+  roomInfo(
+    code: string,
+  ): { code: string; members: string[]; matchId: string | null; watchMatchId: string | null } | undefined {
     const room = this.rooms.get(code.trim().toUpperCase());
-    return room && { code: room.code, members: room.members.map((x) => x.profileId), matchId: room.matchId };
+    return (
+      room && {
+        code: room.code,
+        members: room.members.map((x) => x.profileId),
+        matchId: room.matchId,
+        watchMatchId: room.matchId ?? room.lastMatchId,
+      }
+    );
   }
 
-  /** The room a live match was started from, if any. */
+  /** The room a match was started from, if any (live, or the room's last match). */
   roomOfMatch(matchId: string) {
-    for (const room of this.rooms.values()) if (room.matchId === matchId) return this.roomInfo(room.code);
+    for (const room of this.rooms.values()) {
+      if (room.matchId === matchId || (!room.matchId && room.lastMatchId === matchId)) return this.roomInfo(room.code);
+    }
     return undefined;
   }
 
@@ -294,6 +310,7 @@ export class Lobby {
       host: profileId,
       members: [{ profileId, ready: false }],
       matchId: null,
+      lastMatchId: null,
       createdAt: this.clock.now(),
     };
     this.rooms.set(code, room);
@@ -491,6 +508,7 @@ export class Lobby {
     for (const room of this.rooms.values()) {
       if (room.matchId !== m.id) continue;
       room.matchId = null;
+      room.lastMatchId = m.id;
       room.members.forEach((x) => (x.ready = false));
       this.broadcastRoom(room);
     }

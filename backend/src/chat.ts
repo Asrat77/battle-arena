@@ -1,7 +1,8 @@
 // Chat: one conversation per room, shared by players and spectators. A
 // private room chats under its code; a quick match (no room) chats under its
 // match ID. Spectators address a room's match by match ID and land in the
-// room's chat, so everyone watching sees the same messages.
+// room's chat, so everyone watching sees the same messages; they keep it after
+// the match ends, while the pair waits for a rematch.
 
 import type { Server, Socket } from "socket.io";
 import { systemClock, type Clock } from "./clock";
@@ -120,10 +121,10 @@ export class Chat {
     const room = match ? this.lobby.roomOfMatch(match.id) : this.lobby.roomInfo(roomId);
     if (room) {
       const member = room.members.includes(profileId);
-      const watching = room.matchId !== null && this.matches.isWatching(socket, room.matchId);
+      const watching = room.watchMatchId !== null && this.matches.isWatching(socket, room.watchMatchId);
       if (!member && !watching) return "you are not in this room";
       const channels = [roomChannel(room.code)];
-      if (room.matchId) channels.push(specRoom(room.matchId));
+      if (room.watchMatchId) channels.push(specRoom(room.watchMatchId));
       return { roomId: room.code, channels, member };
     }
 

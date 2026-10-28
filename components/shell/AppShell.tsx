@@ -9,6 +9,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Avatar3D } from "@/components/ui/Avatar3D";
 import { CountDot } from "@/components/ui/Button";
+import { useInviteToasts } from "@/components/room/useInviteToasts";
 import { Icon3D } from "@/components/ui/Icon3D";
 import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
@@ -18,6 +19,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "/";
   const { profile } = useSession();
   const { points, online } = useShellCounts();
+  useInviteToasts();
   const dock = Boolean(profile) && hasDock(pathname);
   const bareMobile = BARE_ON_MOBILE.some((p) => pathname.startsWith(p));
   const current = activeTab(pathname);

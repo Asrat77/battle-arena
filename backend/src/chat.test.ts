@@ -233,6 +233,19 @@ describe("chat", () => {
     assert.deepEqual(chats(c).map((x) => x.text), ["watching!"]);
     assert.equal((await send(c, "chat:history", { roomId: matchId })).messages.length, 2);
 
+    // The match ends: the spectator stays in the room chat while the pair waits for a rematch.
+    const m = matches.get(matchId)!;
+    while (!m.cur.outcome) {
+      const seat = (m.cur.state as { turn: 0 | 1 }).turn;
+      assert.equal(matches.move(m.players[seat], m.id, { type: "point" }), null);
+    }
+    await waitFor(a, "room:update", (u) => u.state === "ready-check");
+    assert.equal((await send(a, "chat:send", { roomId: room.code, text: "GG, again?" })).ok, true);
+    assert.equal((await send(c, "chat:send", { roomId: room.code, text: "one more!" })).message.spectator, true);
+    await settle();
+    assert.deepEqual(chats(c).map((x) => x.text), ["watching!", "GG, again?", "one more!"]);
+    assert.equal((await send(c, "chat:history", { roomId: matchId })).roomId, room.code);
+
     await send(a, "room:leave");
     await send(b, "room:leave");
   });
