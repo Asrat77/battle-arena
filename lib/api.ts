@@ -51,6 +51,18 @@ export interface LedgerResponse {
   blocks: Block[];
 }
 
+/** A private room, as GET /api/rooms/:code and the room:update event send it. */
+export interface RoomState {
+  code: string;
+  link: string;
+  gameId: string;
+  gameName: string;
+  host: string;
+  members: { profileId: string; name: string | null; ready: boolean; online: boolean }[];
+  state: "waiting" | "ready-check" | "playing";
+  matchId: string | null;
+}
+
 /** Subset of GET /api/profiles/:id/rewards the UI reads so far. */
 export interface PlayerRewards {
   points: number;
@@ -85,4 +97,5 @@ export const api = {
   match: (id: string) => request<StoredMatch>(`/api/matches/${id}`),
   rewards: (id: string) => request<PlayerRewards>(`/api/profiles/${id}/rewards`),
   ledger: () => request<LedgerResponse>("/api/ledger"),
+  room: (code: string) => request<RoomState>(`/api/rooms/${encodeURIComponent(code)}`),
 };
