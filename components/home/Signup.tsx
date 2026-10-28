@@ -2,11 +2,13 @@
 
 // First visit: a 3D hero and one name field. Signing up creates the profile ID
 // on the server (no wallet) and Home takes over once the session has a profile.
+// Below it, a self-playing Gebeta round shows what you're signing up for.
 
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Icon3D, type Icon3DName } from "@/components/ui/Icon3D";
+import { GebetaPreview } from "./GebetaPreview";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api";
 import { useSession } from "@/lib/session";
@@ -125,6 +127,7 @@ export function Signup() {
           </div>
         </form>
       </div>
+      {!offline && <GebetaPreview />}
     </div>
   );
 }
