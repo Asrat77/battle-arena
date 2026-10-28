@@ -67,6 +67,12 @@ export function useMatch<V>(matchId: string) {
       mine(msg) && setCommit({ commitments: msg.commitments, ledgerIndex: msg.ledgerIndex });
     const onRecorded = (msg: { matchId: string; ledgerIndex: number }) =>
       mine(msg) && setLedger({ state: "recorded", ledgerIndex: msg.ledgerIndex });
+    // Players also hear about the result block as a `notify`; the poll below
+    // covers a missed event.
+    const onNotify = (msg: { kind?: string; matchId?: string; ledgerIndex?: number }) => {
+      if (msg?.kind === "matchRecorded" && mine(msg) && typeof msg.ledgerIndex === "number")
+        setLedger({ state: "recorded", ledgerIndex: msg.ledgerIndex });
+    };
     const onError = (msg: { matchId?: string; reason: string }) => {
       if (!mine(msg)) return;
       if (msg.reason === "no such match") setMissing(true);
@@ -79,6 +85,7 @@ export function useMatch<V>(matchId: string) {
     socket.on("match:committed", onCommitted);
     socket.on("match:recorded", onRecorded);
     socket.on("match:error", onError);
+    socket.on("notify", onNotify);
     // Seated players get their seat back; anyone else watches as a spectator.
     socket.emit("match:watch", { matchId });
 
@@ -89,6 +96,7 @@ export function useMatch<V>(matchId: string) {
       socket.off("match:committed", onCommitted);
       socket.off("match:recorded", onRecorded);
       socket.off("match:error", onError);
+      socket.off("notify", onNotify);
     };
   }, [socket, connected, matchId]);
 
