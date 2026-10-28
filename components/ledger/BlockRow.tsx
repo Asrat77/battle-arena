@@ -1,6 +1,7 @@
 // One ledger block as a list row: the kind's 3D object, a one-line summary a
 // judge can read, the index with a short hash and time, and a kind tag. The
-// row keeps the #block-N anchor that RecordChip and badges link to.
+// row keeps the #block-N anchor that RecordChip and badges link to, and
+// opens the block sheet when tapped.
 
 import type { Block, BlockKind } from "@/engine/ledger";
 import { getGame } from "@/engine/registry";
@@ -106,23 +107,40 @@ function when(ts: number) {
   return d.toDateString() === new Date().toDateString() ? time : `${d.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
 }
 
-export function BlockRow({ block, summary, highlight }: { block: Block; summary: string; highlight?: boolean }) {
+export function BlockRow({
+  block,
+  summary,
+  highlight,
+  dimmed,
+  onOpen,
+}: {
+  block: Block;
+  summary: string;
+  highlight?: boolean;
+  /** After a chain break: still readable, but can't be verified. */
+  dimmed?: boolean;
+  onOpen: (index: number) => void;
+}) {
   const look = LOOK[block.kind];
   return (
-    <li
-      id={`block-${block.index}`}
-      className={`row -mx-2 scroll-mt-24 px-2 transition-colors duration-700 ${highlight ? "rounded-2xl border-transparent bg-accent/20" : ""}`}
-    >
-      <Icon3D name={look?.icon ?? "blockchain"} size={34} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-small font-semibold">{summary}</p>
-        <p className="mono text-[11px] text-ink-3">
-          #{block.index} · {shortHash(block.hash)} · <time dateTime={new Date(block.ts).toISOString()}>{when(block.ts)}</time>
-        </p>
-      </div>
-      <Chip tone={look?.tone} className="!h-[22px] !text-[11px]">
-        {look?.label ?? block.kind}
-      </Chip>
+    <li id={`block-${block.index}`} className={`border-t border-line first:border-t-0 scroll-mt-24 ${dimmed ? "opacity-45" : ""}`}>
+      <button
+        type="button"
+        onClick={() => onOpen(block.index)}
+        aria-label={`Block ${block.index}: ${summary}`}
+        className={`-mx-2 flex w-[calc(100%+16px)] items-center gap-3 rounded-2xl px-2 py-3 text-left transition-colors duration-700 hover:bg-sf-2 focus-visible:bg-sf-2 ${highlight ? "bg-accent/20" : ""}`}
+      >
+        <Icon3D name={look?.icon ?? "blockchain"} size={34} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-small font-semibold">{summary}</p>
+          <p className="mono text-[11px] text-ink-3">
+            #{block.index} · {shortHash(block.hash)} · <time dateTime={new Date(block.ts).toISOString()}>{when(block.ts)}</time>
+          </p>
+        </div>
+        <Chip tone={look?.tone} className="!h-[22px] !text-[11px]">
+          {look?.label ?? block.kind}
+        </Chip>
+      </button>
     </li>
   );
 }
