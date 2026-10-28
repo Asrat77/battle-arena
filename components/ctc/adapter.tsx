@@ -4,12 +4,14 @@
 // the round history, plus the status line and clock the frame shows. The
 // moments (commit notice, illegal-move shake, end reveal) are in moments.tsx.
 
-import { useState } from "react";
-import type { GameAdapter, MatchCommit, MoveError } from "@/components/match/adapter";
+import { useMemo, useState } from "react";
+import type { GameAdapter, MatchCommit, MoveError, ReplayStepProps } from "@/components/match/adapter";
 import { Chip } from "@/components/ui/Chip";
 import { Icon3D } from "@/components/ui/Icon3D";
-import { MAX_ROUNDS, ROUND_MS, SETUP_MS, type CtcMove, type CtcView } from "@/engine/games/crackTheCode";
-import type { Seat, Viewer } from "@/engine/types";
+import { MAX_ROUNDS, ROUND_MS, SETUP_MS, type CtcMove, type CtcState, type CtcView } from "@/engine/games/crackTheCode";
+import { getGame } from "@/engine/registry";
+import { initial, step } from "@/engine/replay";
+import type { GameDef, Seat, Viewer } from "@/engine/types";
 import { CodeSlots } from "./CodeSlots";
 import { Keypad } from "./Keypad";
 import { COMMIT_MS, CommitMoment, IllegalReason, Shake, useHeld, useIllegal } from "./moments";
@@ -232,14 +234,60 @@ function seatState(view: CtcView, s: Seat): string {
   return "";
 }
 
-/** Plain list of moves up to `step`; the replay task (R2) draws the full board. */
-function ReplayStep({ log, step }: { log: CtcMove[]; step: number }) {
+/** The match as it stood after `step` log entries, replayed with the game's own rules. */
+function ReplayStep({ log, step: at, seed, names }: ReplayStepProps) {
+  const cur = useMemo(() => {
+    const game = getGame("crack-the-code") as GameDef<CtcState, unknown, unknown>;
+    let m = initial(game, seed);
+    try {
+      for (let i = 0; i < at; i++) m = step(game, seed, m, log[i], i);
+      return { ...m, error: null };
+    } catch (err) {
+      return { ...m, error: (err as Error).message };
+    }
+  }, [log, at, seed]);
+
+  const s = cur.state;
+  const phase =
+    s.phase === "setup" ? "Setting secrets" : s.phase === "rounds" ? `Round ${s.round}` : "Match over";
   return (
-    <ol className="mono flex flex-col gap-1 text-sm">
-      {log.slice(0, step).map((m, i) => (
-        <li key={i}>{m.type === "secret" ? "Secret locked" : `Guess ${m.code}`}</li>
-      ))}
-    </ol>
+    <div className="flex flex-col gap-2.5" data-testid="replay-step">
+      <div className="flex items-center gap-2">
+        <ReplaySecret code={s.secrets[0]} name={names[0]} tone="you" />
+        <span className="eyebrow min-w-0 flex-1 truncate text-center">{phase}</span>
+        <ReplaySecret code={s.secrets[1]} name={names[1]} tone="opp" />
+      </div>
+      {s.history.length > 0 || s.pending.some(Boolean) ? (
+        <RoundHistory
+          history={s.history}
+          seat="spectator"
+          names={names}
+          follow={false}
+          current={s.phase === "rounds" && s.pending.some(Boolean) ? { round: s.round, mine: null, submitted: [!!s.pending[0], !!s.pending[1]] } : null}
+        />
+      ) : (
+        <div className="card flex items-center gap-3 text-small text-ink-3">
+          <Icon3D name="padlock" size={32} />
+          {at === 0 ? "Match starts. Both players pick a secret." : "Secrets are fixed and committed to the ledger before round 1."}
+        </div>
+      )}
+      {cur.error && (
+        <p className="text-small text-mismatch" role="alert">
+          The log stops replaying here: {cur.error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** A revealed secret in a replay. Codes are public once the match is over. */
+function ReplaySecret({ code, name, tone }: { code: string | null; name: string; tone: "you" | "opp" }) {
+  return (
+    <span className={`chip max-w-[45%] ${tone === "you" ? "bg-you-soft text-you" : "bg-opp-soft text-opp"}`}>
+      <Icon3D name={code ? "openlock" : "padlock"} size={18} />
+      <span className="truncate">{name}</span>
+      <span className="mono text-[13px] tracking-[.12em]">{code ?? "····"}</span>
+    </span>
   );
 }
 
@@ -251,6 +299,7 @@ export const ctcAdapter: GameAdapter<CtcView, CtcMove> = {
   seatState,
   timer: (view) => ({ total: view.phase === "setup" ? SETUP_MS : ROUND_MS, owner: "both" }),
   ReplayStep,
+  describeMove: (m) => (m.type === "secret" ? "locks a secret" : `guesses ${m.code}`),
   rules: {
     title: "Crack the Code",
     art: "vault",

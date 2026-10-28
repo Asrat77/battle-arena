@@ -2,7 +2,7 @@
 // page picks `adapters[view.game]` and renders it inside the frame.
 
 import type { FC } from "react";
-import type { Seat, Viewer } from "@/engine/types";
+import type { LogEntry, Seat, Viewer } from "@/engine/types";
 import type { Icon3DName } from "@/components/ui/Icon3D";
 
 export type GameId = "crack-the-code" | "gebeta";
@@ -35,6 +35,15 @@ export interface MoveError {
   n: number;
 }
 
+/** What a replay renderer gets: the whole log, how many entries are applied
+ *  so far, and the seed to replay them with the game's own rules. */
+export interface ReplayStepProps {
+  log: LogEntry[];
+  step: number;
+  seed: string;
+  names: [string, string];
+}
+
 export interface GameAdapter<View, Move> {
   id: GameId;
   icon: Icon3DName;
@@ -55,7 +64,9 @@ export interface GameAdapter<View, Move> {
   /** Optional short seat label under a player's name, e.g. "Locked". */
   seatState?(view: View, seat: Seat): string;
   timer(view: View): TurnClock;
-  ReplayStep: FC<{ log: Move[]; step: number }>;
+  ReplayStep: FC<ReplayStepProps>;
+  /** One line for a player's move in the replay timeline, e.g. "guesses 1234". */
+  describeMove?(move: Move): string;
   rules: { title: string; lines: string[]; art: Icon3DName };
   /** False for Gebeta, so there is no commit notice. */
   hasHiddenInfo: boolean;

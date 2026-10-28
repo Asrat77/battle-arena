@@ -17,12 +17,15 @@ export function RoundHistory({
   seat,
   names,
   current,
+  follow = true,
 }: {
   history: Round[];
   seat: Viewer;
   names: [string, string];
   /** The round in play: its number, the viewer's unresolved guess, and who has guessed. */
   current?: { round: number; mine: string | null; submitted: [boolean, boolean] } | null;
+  /** Scroll the newest row into view as rows arrive. Off in replays, where it would move the page. */
+  follow?: boolean;
 }) {
   const left: Seat = seat === "spectator" ? 0 : seat;
   const right: Seat = left === 0 ? 1 : 0;
@@ -34,8 +37,8 @@ export function RoundHistory({
   const end = useRef<HTMLDivElement>(null);
   const rows = history.length + (current ? 1 : 0);
   useEffect(() => {
-    end.current?.scrollIntoView?.({ block: "nearest" });
-  }, [rows]);
+    if (follow) end.current?.scrollIntoView?.({ block: "nearest" });
+  }, [rows, follow]);
 
   if (!rows) return null;
   return (
