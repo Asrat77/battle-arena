@@ -6,7 +6,7 @@
 import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
 import { RoundHistory } from "@/components/ctc/RoundHistory";
-import { VerifyPanel } from "@/components/VerifyPanel";
+import { VerifyPanel } from "@/components/verify/VerifyPanel";
 import type { CtcState } from "@/engine/games/crackTheCode";
 import { getGame } from "@/engine/registry";
 import { initial, step, type MatchState } from "@/engine/replay";
@@ -132,7 +132,7 @@ export default function ReplayPage({ params }: { params: Promise<{ id: string }>
         )}
       </section>
 
-      <VerifyPanel match={match} />
+      <VerifyPanel match={match} names={labels} />
     </div>
   );
 }
