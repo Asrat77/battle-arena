@@ -13,6 +13,7 @@ import { useInviteToasts } from "@/components/room/useInviteToasts";
 import { Icon3D } from "@/components/ui/Icon3D";
 import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { ConnectionBanner } from "./ConnectionBanner";
 import { activeTab, BARE_ON_MOBILE, hasDock, TABS } from "./nav";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -26,6 +27,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      <ConnectionBanner />
       <header
         className={`sticky top-0 z-30 border-b border-white/[.07] bg-bg/80 backdrop-blur-[18px] [.light_&]:border-black/[.08] ${
           bareMobile ? "hidden md:block" : ""

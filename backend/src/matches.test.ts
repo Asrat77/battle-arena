@@ -219,6 +219,21 @@ describe("match runtime over sockets", () => {
     await viewAt(a2, m.id, 3);
   });
 
+  test("the opponent hears when a player drops off and when they come back", async () => {
+    const a = await client(alice.token);
+    const b = await client(bob.token);
+    const m = matches.create({ game: noTimer, players: [alice.profile.id, bob.profile.id] });
+    await viewAt(a, m.id, 0);
+
+    const gone = waitFor(a, "match:presence", (d) => d.matchId === m.id && d.away[1] !== null);
+    await disconnect(b);
+    assert.deepEqual((await gone).away, [null, clock.now() + DISCONNECT_FORFEIT_MS]);
+
+    const back = waitFor(a, "match:presence", (d) => d.matchId === m.id && d.away[1] === null);
+    await client(bob.token);
+    assert.deepEqual((await back).away, [null, null]);
+  });
+
   test("a player gone for 30 s forfeits", async () => {
     const a = await client(alice.token);
     const b = await client(bob.token);

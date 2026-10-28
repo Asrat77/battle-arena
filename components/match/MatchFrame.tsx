@@ -15,7 +15,7 @@ import { Dialog, Sheet } from "@/components/ui/Overlay";
 import { useSession } from "@/lib/session";
 import { PlayerSeat } from "./PlayerSeat";
 import { ReactionBar } from "./ReactionBar";
-import { TurnBar, TurnTimer } from "./TurnTimer";
+import { TurnBar, TurnTimer, useTimeLeft } from "./TurnTimer";
 
 export interface FrameSeat {
   id: string;
@@ -46,6 +46,7 @@ export function MatchFrame({
   tone = "wait",
   spectating,
   over,
+  away,
   rules,
   result,
   onForfeit,
@@ -65,6 +66,8 @@ export function MatchFrame({
   spectating: boolean;
   /** Hides Forfeit and stops the clock once the match has ended. */
   over: boolean;
+  /** A player who dropped off: their forfeit lands at `until` (epoch ms). */
+  away?: { name: string; until: number } | null;
   rules?: { title: string; lines: string[]; art: Icon3DName };
   /** The result card, shown over the board once the match has ended. */
   result?: React.ReactNode;
@@ -99,6 +102,7 @@ export function MatchFrame({
           <PlayerSeat {...opp} side="opp" align="right" />
         </div>
         <TurnBar deadline={clock} total={total} />
+        {away && !over && <AwayNotice name={away.name} until={away.until} />}
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 px-3.5 md:px-0">
@@ -195,6 +199,17 @@ export function MatchFrame({
         </Sheet>
       )}
     </div>
+  );
+}
+
+/** Shown while a player is disconnected: they forfeit when the countdown ends. */
+function AwayNotice({ name, until }: { name: string; until: number }) {
+  const secs = Math.ceil((useTimeLeft(until) ?? 0) / 1000);
+  return (
+    <p role="status" className="flex min-h-9 items-center justify-center gap-2 rounded-[12px] bg-pending-soft px-3 text-center text-[13px] font-semibold text-pending">
+      <Icon3D name="hourglass" size={20} />
+      {name} lost connection. Forfeit in {secs} s unless they come back.
+    </p>
   );
 }
 

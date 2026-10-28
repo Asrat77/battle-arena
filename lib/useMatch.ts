@@ -48,6 +48,8 @@ export function useMatch<V>(matchId: string) {
   const [ledger, setLedger] = useState<LedgerStatus>({ state: "none" });
   const [error, setError] = useState<MoveError | null>(null);
   const [missing, setMissing] = useState(false);
+  /** Per seat: when the forfeit lands for a player who dropped off, else null. */
+  const [away, setAway] = useState<[number | null, number | null]>([null, null]);
 
   useEffect(() => {
     if (!socket || !connected) return;
@@ -61,6 +63,7 @@ export function useMatch<V>(matchId: string) {
     const onEnd = (msg: MatchEnd) => {
       if (!mine(msg)) return;
       setEnd(msg);
+      setAway([null, null]);
       setLedger((l) => (l.state === "recorded" ? l : { state: "pending" }));
     };
     const onCommitted = (msg: { matchId: string; commitments: Record<string, string>; ledgerIndex: number }) =>
@@ -73,6 +76,7 @@ export function useMatch<V>(matchId: string) {
       if (msg?.kind === "matchRecorded" && mine(msg) && typeof msg.ledgerIndex === "number")
         setLedger({ state: "recorded", ledgerIndex: msg.ledgerIndex });
     };
+    const onPresence = (msg: { matchId?: string; away: [number | null, number | null] }) => mine(msg) && setAway(msg.away);
     const onError = (msg: { matchId?: string; reason: string }) => {
       if (!mine(msg)) return;
       if (msg.reason === "no such match") setMissing(true);
@@ -85,6 +89,7 @@ export function useMatch<V>(matchId: string) {
     socket.on("match:committed", onCommitted);
     socket.on("match:recorded", onRecorded);
     socket.on("match:error", onError);
+    socket.on("match:presence", onPresence);
     socket.on("notify", onNotify);
     // Seated players get their seat back; anyone else watches as a spectator.
     socket.emit("match:watch", { matchId });
@@ -96,6 +101,7 @@ export function useMatch<V>(matchId: string) {
       socket.off("match:committed", onCommitted);
       socket.off("match:recorded", onRecorded);
       socket.off("match:error", onError);
+      socket.off("match:presence", onPresence);
       socket.off("notify", onNotify);
     };
   }, [socket, connected, matchId]);
@@ -130,5 +136,5 @@ export function useMatch<V>(matchId: string) {
 
   const leave = useCallback(() => socket?.emit("match:leave", { matchId }), [socket, matchId]);
 
-  return { start, view, end, commit, ledger, error, missing, move, leave };
+  return { start, view, end, commit, ledger, error, missing, away, move, leave };
 }
