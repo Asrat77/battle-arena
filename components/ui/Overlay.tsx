@@ -81,11 +81,14 @@ export function Sheet({
   open,
   onClose,
   title,
+  hero,
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
+  /** Full-bleed art above the title (e.g. a rules sheet's game object). */
+  hero?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const ref = useModal(open, onClose);
@@ -102,6 +105,7 @@ export function Sheet({
         className="fixed inset-x-2 bottom-2 z-50 mx-auto flex max-h-[85vh] max-w-[560px] animate-slide flex-col gap-3.5 overflow-y-auto rounded-sheet bg-sf px-[18px] pb-5 pt-2.5 shadow-float"
       >
         <span className="h-[5px] w-10 self-center rounded bg-sf-3" aria-hidden />
+        {hero && <div className="-mx-[18px]">{hero}</div>}
         <h2 id={titleId} className="text-h2">
           {title}
         </h2>
