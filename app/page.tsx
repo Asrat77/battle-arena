@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { GameCards } from "@/components/home/GameCards";
 import { SideColumn } from "@/components/home/SideColumn";
 import { Signup } from "@/components/home/Signup";
+import { Icon3D } from "@/components/ui/Icon3D";
 import { useSession } from "@/lib/session";
 
 export default function Home() {
@@ -22,6 +24,10 @@ export default function Home() {
             <p className="hidden text-[17px] text-ink-2 md:block">
               Quick match finds someone in seconds. Nobody around? A bot is offered after 10.
             </p>
+            <Link href="/r" className="chip mt-1 w-fit hover:text-ink">
+              <Icon3D name="key" size={18} />
+              Have a room code? Join
+            </Link>
           </header>
           <GameCards />
         </div>
