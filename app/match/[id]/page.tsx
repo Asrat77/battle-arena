@@ -96,6 +96,7 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
             right={right}
             seats={players.map((p, s) => ({ ...p, label: s === seat ? "You" : p.name })) as [ResultSeat, ResultSeat]}
             ledgerIndex={ledger.state === "recorded" ? ledger.ledgerIndex : null}
+            spectating={spectating}
           />
         )
       }

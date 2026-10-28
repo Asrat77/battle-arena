@@ -1,6 +1,7 @@
 // Lobby: per-game quick-match queues with a bot offer, and private rooms
 // joined by a 5-character code. Both end in matches.create(); the runtime
-// takes over from there.
+// takes over from there. A match the lobby started can be replayed from its
+// result card: straight away against the bot, or once both players ask.
 
 import { randomInt } from "node:crypto";
 import { Router } from "express";
@@ -16,6 +17,8 @@ export const ROOM_CODE_LENGTH = 5;
 // No 0/O or 1/I/L, so a code read aloud or off a screen is unambiguous.
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 export const BOT_PLAYER = "bot";
+/** How long after a match ends its result card can still start a rematch. */
+export const REMATCH_WINDOW_MS = 5 * 60_000;
 
 interface QueueEntry {
   profileId: string;
@@ -38,6 +41,24 @@ interface Room {
   createdAt: number;
 }
 
+type RematchState = "open" | "offered" | "matched" | "declined" | "closed";
+
+/** What it takes to play a lobby match again, kept per match id. */
+interface Rematch {
+  game: AnyGame;
+  players: [string, string];
+  botSeat: Seat | null;
+  /** The room it was started from, so a rematch keeps the room in step. */
+  room: string | null;
+  ended: boolean;
+  state: RematchState;
+  /** Profiles that asked for a rematch, in order. */
+  wants: string[];
+  /** The match the rematch started. */
+  next: string | null;
+  timer?: TimerHandle;
+}
+
 export interface LobbyOptions {
   clock?: Clock;
   /** Game lookup, so tests can use a test game. Defaults to the engine registry. */
@@ -53,6 +74,7 @@ export class Lobby {
   private rooms = new Map<string, Room>();
   /** Which room each profile is in (one at a time). */
   private roomOf = new Map<string, string>();
+  private rematches = new Map<string, Rematch>();
   private readonly clock: Clock;
   private readonly games: NonNullable<LobbyOptions["games"]>;
 
@@ -136,6 +158,12 @@ export class Lobby {
       reply(ack, this.acceptBot(profileId));
     });
 
+    socket.on("rematch:status", (msg: { matchId?: unknown }, ack?: Ack) => {
+      if (typeof ack === "function") ack(this.rematchStatus(profileId, msg?.matchId));
+    });
+    socket.on("rematch:request", (msg: { matchId?: unknown }, ack?: Ack) => reply(ack, this.requestRematch(profileId, msg?.matchId)));
+    socket.on("rematch:cancel", (msg: { matchId?: unknown }, ack?: Ack) => reply(ack, this.cancelRematch(profileId, msg?.matchId)));
+
     socket.on("room:create", (msg: { gameId?: unknown }, ack?: Ack) => reply(ack, this.createRoom(profileId, msg?.gameId)));
     socket.on("room:join", (msg: { code?: unknown }, ack?: Ack) => reply(ack, this.joinRoom(profileId, msg?.code)));
     socket.on("room:ready", (msg: { ready?: unknown } | Ack | undefined, ack?: Ack) => {
@@ -184,7 +212,7 @@ export class Lobby {
       // Seat order is random so neither side always moves first.
       const players: [string, string] =
         randomInt(2) === 0 ? [opponent.profileId, profileId] : [profileId, opponent.profileId];
-      const m = this.matches.create({ game, players });
+      const m = this.start(game, players, null, null);
       for (const p of players) this.emitTo(p, "queue:status", { gameId: game.id, state: "matched", matchId: m.id });
       return { ok: true as const, state: "matched", matchId: m.id };
     }
@@ -219,7 +247,7 @@ export class Lobby {
       const game = this.games.get(gameId)!;
       const botSeat: Seat = randomInt(2) === 0 ? 0 : 1;
       const players: [string, string] = botSeat === 0 ? [BOT_PLAYER, profileId] : [profileId, BOT_PLAYER];
-      const m = this.matches.create({ game, players, botSeat });
+      const m = this.start(game, players, botSeat, null);
       this.emitTo(profileId, "queue:status", { gameId, state: "matched", matchId: m.id, bot: true });
       return { ok: true as const, state: "matched", matchId: m.id };
     }
@@ -293,7 +321,7 @@ export class Lobby {
       const players = room.members.map((x) => x.profileId) as [string, string];
       // Host sits first in the room list; seats are still drawn at random.
       if (randomInt(2) === 1) players.reverse();
-      room.matchId = this.matches.create({ game: room.game, players }).id;
+      room.matchId = this.start(room.game, players, null, room.code).id;
     }
     this.broadcastRoom(room);
     return { ok: true as const, room: this.roomPayload(room) };
@@ -330,8 +358,103 @@ export class Lobby {
     this.broadcastRoom(room);
   }
 
-  /** A room's match ended: the room goes back to waiting so the pair can rematch. */
+  // ---- rematch ----
+
+  private start(game: AnyGame, players: [string, string], botSeat: Seat | null, room: string | null) {
+    const m = this.matches.create({ game, players, botSeat });
+    this.rematches.set(m.id, { game, players, botSeat, room, ended: false, state: "open", wants: [], next: null });
+    return m;
+  }
+
+  /** The rematch for a match the profile played, if the lobby started it. */
+  private rematchFor(profileId: string, matchId: unknown) {
+    const r = typeof matchId === "string" ? this.rematches.get(matchId) : undefined;
+    return r && r.players.includes(profileId) ? r : undefined;
+  }
+
+  private rematchPayload(matchId: string, r: Rematch) {
+    return { matchId, state: r.state, bot: r.botSeat !== null, wants: r.wants, next: r.next };
+  }
+
+  /** Whether the result card can offer a rematch, and where it stands. */
+  rematchStatus(profileId: string, matchId: unknown) {
+    const r = this.rematchFor(profileId, matchId);
+    if (!r) return { ok: true as const, available: false };
+    return { ok: true as const, available: true, ...this.rematchPayload(matchId as string, r) };
+  }
+
+  /**
+   * Against the bot the next match starts at once. Against a player it is an
+   * offer, and the match starts when the other player asks too. Seats swap
+   * each time so the other side moves first.
+   */
+  requestRematch(profileId: string, matchId: unknown) {
+    const r = this.rematchFor(profileId, matchId);
+    if (!r) return { ok: false as const, reason: "no rematch for this match" };
+    const id = matchId as string;
+    if (r.state === "matched") return { ok: true as const, state: r.state, matchId: r.next };
+    if (!r.ended) return { ok: false as const, reason: "match is still live" };
+    if (r.state !== "open" && r.state !== "offered") return { ok: false as const, reason: `rematch ${r.state}` };
+    if (!r.wants.includes(profileId)) r.wants.push(profileId);
+
+    const humans = r.players.filter((_, seat) => seat !== r.botSeat);
+    if (!humans.every((p) => r.wants.includes(p))) {
+      r.state = "offered";
+      this.broadcastRematch(id, r);
+      return { ok: true as const, state: r.state };
+    }
+    if (humans.some((p) => this.matches.activeFor(p).length)) {
+      r.wants = r.wants.filter((p) => p !== profileId);
+      return { ok: false as const, reason: "already in a match" };
+    }
+
+    humans.forEach((p) => this.leaveQueues(p));
+    const players: [string, string] = [r.players[1], r.players[0]];
+    const botSeat: Seat | null = r.botSeat === null ? null : r.botSeat === 0 ? 1 : 0;
+    const room = r.room ? this.rooms.get(r.room) : undefined;
+    const keepRoom = room && !room.matchId && humans.every((p) => room.members.some((x) => x.profileId === p));
+    const m = this.start(r.game, players, botSeat, keepRoom ? room.code : null);
+    r.state = "matched";
+    r.next = m.id;
+    if (keepRoom) {
+      room.matchId = m.id;
+      room.members.forEach((x) => (x.ready = false));
+      this.broadcastRoom(room);
+    }
+    this.broadcastRematch(id, r);
+    return { ok: true as const, state: r.state, matchId: m.id };
+  }
+
+  /** Take back your own offer, or turn down the other player's. */
+  cancelRematch(profileId: string, matchId: unknown) {
+    const r = this.rematchFor(profileId, matchId);
+    if (!r) return { ok: false as const, reason: "no rematch for this match" };
+    if (r.state !== "offered") return { ok: true as const, state: r.state };
+    const mine = r.wants.includes(profileId);
+    r.wants = r.wants.filter((p) => p !== profileId);
+    r.state = mine ? "open" : "declined";
+    this.broadcastRematch(matchId as string, r);
+    return { ok: true as const, state: r.state };
+  }
+
+  private broadcastRematch(matchId: string, r: Rematch) {
+    const payload = this.rematchPayload(matchId, r);
+    for (const p of new Set(r.players)) if (p !== BOT_PLAYER) this.emitTo(p, "rematch:update", payload);
+  }
+
+  /** A match ended: rematches open for a while, and its room goes back to waiting. */
   private matchEnded(m: Match) {
+    const r = this.rematches.get(m.id);
+    if (r) {
+      r.ended = true;
+      r.timer = this.clock.setTimeout(() => {
+        this.rematches.delete(m.id);
+        if (r.state === "open" || r.state === "offered") {
+          r.state = "closed";
+          this.broadcastRematch(m.id, r);
+        }
+      }, REMATCH_WINDOW_MS);
+    }
     for (const room of this.rooms.values()) {
       if (room.matchId !== m.id) continue;
       room.matchId = null;
