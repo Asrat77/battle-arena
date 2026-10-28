@@ -17,11 +17,24 @@ export interface TurnClock {
   owner: Seat | "both";
 }
 
+export interface AdapterPlayer {
+  id: string;
+  name: string;
+  bot?: boolean;
+}
+
 export interface GameAdapter<View, Move> {
   id: GameId;
   icon: Icon3DName;
-  /** `names` are the players' display names by seat. */
-  Board: FC<{ view: View; seat: Viewer; onMove(m: Move): void; disabled: boolean; names: [string, string] }>;
+  /** `names` are the players' display names by seat; `players` adds ids and bot flags. */
+  Board: FC<{
+    view: View;
+    seat: Viewer;
+    onMove(m: Move): void;
+    disabled: boolean;
+    names: [string, string];
+    players?: [AdapterPlayer, AdapterPlayer];
+  }>;
   /** One plain sentence for the aria-live status line, e.g. "Your turn". */
   status(view: View, seat: Viewer, names: [string, string]): string;
   /** Optional short seat label under a player's name, e.g. "Locked". */
