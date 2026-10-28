@@ -1,7 +1,7 @@
 "use client";
 
-import { MatchHistory } from "@/components/MatchHistory";
 import { GameCards } from "@/components/home/GameCards";
+import { SideColumn } from "@/components/home/SideColumn";
 import { Signup } from "@/components/home/Signup";
 import { useSession } from "@/lib/session";
 
@@ -24,8 +24,8 @@ export default function Home() {
             </p>
           </header>
           <GameCards />
-          <MatchHistory profileId={profile.id} />
         </div>
+        <SideColumn profile={profile} />
       </div>
     </div>
   );
