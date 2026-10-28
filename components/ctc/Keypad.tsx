@@ -3,7 +3,8 @@
 // Full-width 3×4 keypad for entering a code: digits 1–9, Clear, ⌫ and the
 // saffron submit key. Digits already in the code are disabled, since codes
 // are 4 distinct digits. While focus is inside, the physical keyboard works
-// too: 1–9, Backspace, Escape (clear) and Enter (submit).
+// too: 1–9, Backspace, Escape (clear) and Enter (submit). With `onInvalid`,
+// submitting a short code reports why instead of the key staying disabled.
 
 import { CODE_LENGTH, isCode } from "@/engine/games/crackTheCode";
 
@@ -16,6 +17,7 @@ export function Keypad({
   value,
   onChange,
   onSubmit,
+  onInvalid,
   submitLabel = "Lock in",
   disabled = false,
   size = "md",
@@ -23,6 +25,8 @@ export function Keypad({
   value: string;
   onChange(value: string): void;
   onSubmit(code: string): void;
+  /** Called with the reason when submit is pressed on an incomplete code. */
+  onInvalid?(reason: string): void;
   submitLabel?: string;
   disabled?: boolean;
   size?: "md" | "sm";
@@ -36,7 +40,11 @@ export function Keypad({
   };
   const back = () => !disabled && onChange(value.slice(0, -1));
   const clear = () => !disabled && onChange("");
-  const submit = () => !disabled && ready && onSubmit(value);
+  const submit = () => {
+    if (disabled) return;
+    if (ready) onSubmit(value);
+    else onInvalid?.(`Pick ${CODE_LENGTH} different digits first.`);
+  };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -77,7 +85,7 @@ export function Keypad({
       <button
         type="button"
         className={`${KEY} ${h} !bg-accent text-[17px] font-semibold !text-accent-ink`}
-        disabled={disabled || !ready}
+        disabled={disabled || (onInvalid ? !value : !ready)}
         onClick={submit}
       >
         {submitLabel}
