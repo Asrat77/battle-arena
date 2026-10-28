@@ -18,7 +18,7 @@ const GAME_ICONS = { "crack-the-code": "vault", gebeta: "mancala" } as const;
 export default function MatchPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { profile, ready } = useSession();
-  const { start, view, end, commit, ledger, error, missing, move, leave } = useMatch<unknown>(id);
+  const { start, view, end, commit, ledger, error, missing, away, move, leave } = useMatch<unknown>(id);
   const names = usePlayerNames(start?.players);
   const fallbackTotal = useTurnLength(view?.deadline ?? null);
 
@@ -50,6 +50,7 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
     name: name(s),
     bot: start.bot && start.botSeat === s,
     state: end ? endState(s, end) : (adapter?.seatState?.(view.view, s) ?? seatState(s, view)),
+    offline: !end && away[s] !== null,
   });
 
   const seatNames: [string, string] = [name(0), name(1)];
@@ -77,6 +78,7 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
       tone={tone}
       spectating={spectating}
       over={Boolean(end)}
+      away={end ? null : awayOf(away, seat, name)}
       rules={adapter?.rules}
       result={
         end && (
@@ -127,6 +129,12 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
       </div>
     </MatchFrame>
   );
+}
+
+/** The player whose forfeit is counting down, for the header. Players only hear about their opponent. */
+function awayOf(away: [number | null, number | null], seat: Seat | "spectator", name: (s: Seat) => string) {
+  for (const s of [0, 1] as const) if (away[s] !== null && s !== seat) return { name: name(s), until: away[s] as number };
+  return null;
 }
 
 /** Length of the current turn, measured from when its deadline first arrived. */

@@ -35,6 +35,8 @@ export interface Match {
   endedAt: number | null;
   timers: { deadline?: TimerHandle; bot: [TimerHandle?, TimerHandle?]; disconnect: [TimerHandle?, TimerHandle?] };
   active: Seat[];
+  /** Per seat: when the forfeit lands for a player who has dropped off, else null. */
+  away: [number | null, number | null];
 }
 
 export interface CreateMatchInput {
@@ -106,6 +108,7 @@ export class MatchRuntime extends EventEmitter {
       endedAt: null,
       timers: { bot: [], disconnect: [] },
       active: [],
+      away: [null, null],
     };
     this.matches.set(id, m);
 
@@ -132,6 +135,10 @@ export class MatchRuntime extends EventEmitter {
       if (seat === null) continue;
       m.timers.disconnect[seat]?.cancel();
       m.timers.disconnect[seat] = undefined;
+      if (m.away[seat] !== null) {
+        m.away[seat] = null;
+        this.io.to(this.allRooms(m)).emit("match:presence", this.presencePayload(m));
+      }
       this.sendSeat(socket, m, seat);
     }
 
@@ -154,6 +161,7 @@ export class MatchRuntime extends EventEmitter {
         socket.join(specRoom(m.id));
         socket.emit("match:start", this.startPayload(m, "spectator"));
         socket.emit("match:view", this.viewPayload(m, "spectator"));
+        this.sendPresence(socket, m);
         if (m.cur.outcome) socket.emit("match:end", this.endPayload(m));
         else this.sendSpectatorCount(m);
       }
@@ -297,8 +305,11 @@ export class MatchRuntime extends EventEmitter {
 
   private startDisconnectTimer(m: Match, seat: Seat) {
     if (m.timers.disconnect[seat] || m.cur.outcome) return;
+    m.away[seat] = this.clock.now() + DISCONNECT_FORFEIT_MS;
+    this.io.to(this.allRooms(m)).emit("match:presence", this.presencePayload(m));
     m.timers.disconnect[seat] = this.clock.setTimeout(() => {
       m.timers.disconnect[seat] = undefined;
+      m.away[seat] = null;
       if (!this.isOnline(m.players[seat])) {
         this.append(m, { t: this.clock.now(), seat: "system", move: { type: "forfeit", seat } });
       }
@@ -312,6 +323,7 @@ export class MatchRuntime extends EventEmitter {
     m.timers.bot.forEach((t) => t?.cancel());
     m.timers.disconnect.forEach((t) => t?.cancel());
     m.timers = { bot: [], disconnect: [] };
+    m.away = [null, null];
 
     this.pushViews(m);
     this.io.to(this.allRooms(m)).emit("match:end", this.endPayload(m));
@@ -370,7 +382,17 @@ export class MatchRuntime extends EventEmitter {
     socket.join(seatRoom(m.id, seat));
     socket.emit("match:start", this.startPayload(m, seat));
     socket.emit("match:view", this.viewPayload(m, seat));
+    this.sendPresence(socket, m);
     if (m.cur.outcome) socket.emit("match:end", this.endPayload(m));
+  }
+
+  private presencePayload(m: Match) {
+    return { matchId: m.id, away: m.away };
+  }
+
+  /** Tells a socket that joins late who is currently away; silent when everyone is here. */
+  private sendPresence(socket: Socket, m: Match) {
+    if (m.away.some((t) => t !== null)) socket.emit("match:presence", this.presencePayload(m));
   }
 
   private startPayload(m: Match, viewer: Viewer) {
