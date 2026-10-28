@@ -6,11 +6,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BlockRow, blockMatchId, blockPlayers, commitIndex, KINDS, summarize } from "@/components/ledger/BlockRow";
+import { BlockSheet } from "@/components/ledger/BlockSheet";
+import { ChainCheck } from "@/components/ledger/ChainCheck";
 import { Button, ButtonLink, IconButton } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon3D } from "@/components/ui/Icon3D";
-import { type BlockKind, type ChainCheck, verifyChain } from "@/engine/ledger";
+import type { BlockKind, ChainCheck as Check } from "@/engine/ledger";
 import { api, type LedgerResponse } from "@/lib/api";
 import { shortId, usePlayerNames } from "@/lib/usePlayerNames";
 
@@ -28,7 +30,10 @@ export default function LedgerPage() {
   const [kind, setKind] = useState<BlockKind | "all">("all");
   const [query, setQuery] = useState("");
   const [flash, setFlash] = useState<number | null>(null);
-  const [check, setCheck] = useState<ChainCheck | null>(null);
+  const [check, setCheck] = useState<Check | null>(null);
+  const [open, setOpen] = useState<number | null>(null);
+
+  const closeSheet = useCallback(() => setOpen(null), []);
 
   const load = useCallback(
     () =>
@@ -137,22 +142,7 @@ export default function LedgerPage() {
         </p>
       )}
 
-      {/* Interim chain check; L2 replaces it with the walking ChainCheck. */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" icon="verified" onClick={() => setCheck(verifyChain(blocks, ledger.publicKey))}>
-          Check chain
-        </Button>
-        {check &&
-          (check.ok ? (
-            <Chip tone="rec" icon="check">
-              Chain intact · {blocks.length} blocks
-            </Chip>
-          ) : (
-            <Chip tone="bad" icon="unverified">
-              Broken at #{check.index}: {check.reason}
-            </Chip>
-          ))}
-      </div>
+      <ChainCheck blocks={blocks} publicKey={ledger.publicKey} onResult={setCheck} onOpen={setOpen} />
 
       {blocks.length === 0 ? (
         <EmptyState
@@ -219,12 +209,27 @@ export default function LedgerPage() {
           ) : (
             <ul className="card !py-1">
               {shown.map((b) => (
-                <BlockRow key={b.index} block={b} summary={summarize(b, commits, names)} highlight={b.index === flash} />
+                <BlockRow
+                  key={b.index}
+                  block={b}
+                  summary={summarize(b, commits, names)}
+                  highlight={b.index === flash}
+                  dimmed={check !== null && !check.ok && b.index > check.index}
+                  onOpen={setOpen}
+                />
               ))}
             </ul>
           )}
         </>
       )}
+
+      <BlockSheet
+        block={open === null ? null : (blocks[open] ?? null)}
+        summary={open === null || !blocks[open] ? "" : summarize(blocks[open], commits, names)}
+        publicKey={ledger.publicKey}
+        onClose={closeSheet}
+        onOpen={setOpen}
+      />
     </div>
   );
 }
