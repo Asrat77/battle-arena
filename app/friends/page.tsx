@@ -14,6 +14,7 @@ import { Icon3D } from "@/components/ui/Icon3D";
 import { Dialog } from "@/components/ui/Overlay";
 import { useToast } from "@/components/ui/Toast";
 import { useSession } from "@/lib/session";
+import { shortId } from "@/lib/usePlayerNames";
 import { useFriendsList, type Friend } from "@/lib/useFriends";
 
 const ORDER = { online: 0, "in-match": 1, offline: 2 };
@@ -91,7 +92,7 @@ export default function FriendsPage() {
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-4">
-      <h1 className="text-h1">Friends</h1>
+      <h1 className="text-h2">Friends</h1>
 
       <form onSubmit={submit} className="flex flex-col gap-3 rounded-card bg-sf p-4" noValidate>
         <Field
@@ -108,15 +109,18 @@ export default function FriendsPage() {
           spellCheck={false}
           hint={
             <>
-              Your ID is <span className="mono">{profile.id}</span>
+              Your ID is{" "}
+              <span className="mono" title={profile.id}>
+                {shortId(profile.id)}
+              </span>
             </>
           }
         />
         <div className="flex gap-2">
-          <Button type="submit" variant="act" icon="plus" loading={adding}>
+          <Button type="submit" variant="act" icon="plus" loading={adding} className="min-w-0 flex-1">
             Send request
           </Button>
-          <Button onClick={copyId} icon="link">
+          <Button onClick={copyId} icon="link" className="min-w-0 flex-1">
             Copy my ID
           </Button>
         </div>

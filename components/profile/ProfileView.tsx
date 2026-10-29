@@ -102,7 +102,7 @@ export function ProfileView({ id, own }: { id: string; own: boolean }) {
     .map(([g, t]) => `${GAME_SHORT[g] ?? getGame(g)?.name ?? g} ${fmt(t.rating)}`);
 
   return (
-    <div className="flex flex-col gap-3.5">
+    <div className="flex flex-col gap-6">
       <header className="flex items-center gap-4">
         <Avatar3D id={profile.id} size="lg" />
         <div className="flex min-w-0 flex-col gap-1">
@@ -117,8 +117,8 @@ export function ProfileView({ id, own }: { id: string; own: boolean }) {
 
       <div className="grid grid-cols-3 gap-2">
         <Stat icon="podium" big={rank ? `#${rank.rank}` : "–"} label={rank ? `${fmt(rank.rating)} rating` : "Unranked"} href="/leaderboard" />
-        <Stat icon="target" big={`${tally.Won}·${tally.Lost}·${tally.Draw}`} label="W · L · D" small />
-        <Stat icon="token" big={fmt(rewards.points)} label="points" />
+        <Stat icon="target" big={`${tally.Won}·${tally.Lost}·${tally.Draw}`} label="Wins · losses · draws" small />
+        <Stat icon="token" big={fmt(rewards.points)} label="Points" />
       </div>
 
       <div className="card flex items-center gap-3 !px-3.5 !py-3">
@@ -235,7 +235,7 @@ function History({ profileId, matches, rewards, own }: { profileId: string; matc
             {own ? "Your first finished match puts points, a rank and your first badge here." : "Finished matches will show up here."}
           </span>
           {own && (
-            <ButtonLink href="/" variant="act" icon="lightning" block>
+            <ButtonLink href="/" variant="sec" icon="lightning" block>
               Play a match
             </ButtonLink>
           )}
