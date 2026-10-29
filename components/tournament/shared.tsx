@@ -1,8 +1,7 @@
 import { BotTag, Chip, type ChipTone } from "@/components/ui/Chip";
-import type { Icon3DName } from "@/components/ui/Icon3D";
 import type { TournamentState } from "@/lib/api";
 
-export const GAME_ICONS: Record<string, Icon3DName> = { "crack-the-code": "vault", gebeta: "mancala" };
+export { GAME_ICONS } from "@/lib/gameCatalog";
 
 const STATE: Record<TournamentState["state"], { label: string; tone: ChipTone }> = {
   open: { label: "Open", tone: "rec" },

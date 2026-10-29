@@ -16,13 +16,11 @@ import { Segmented } from "@/components/ui/Segmented";
 import { api, type TournamentState } from "@/lib/api";
 import { useSession } from "@/lib/session";
 
-type Filter = "all" | "crack-the-code" | "gebeta";
+import { GAME_OPTIONS, type GameId } from "@/lib/gameCatalog";
 
-const FILTERS: { value: Filter; label: string; icon?: "vault" | "mancala" }[] = [
-  { value: "all", label: "All" },
-  { value: "crack-the-code", label: "Code", icon: "vault" },
-  { value: "gebeta", label: "Gebeta", icon: "mancala" },
-];
+type Filter = "all" | GameId;
+
+const FILTERS = [{ value: "all" as const, label: "All" }, ...GAME_OPTIONS];
 
 const REFRESH_MS = 5000;
 
@@ -98,7 +96,7 @@ export default function TournamentsPage() {
           ))}
         </ul>
       )}
-      <CreateTournament open={creating} onClose={() => setCreating(false)} defaultGame={filter === "all" ? undefined : filter} />
+      <CreateTournament key={filter} open={creating} onClose={() => setCreating(false)} defaultGame={filter === "all" ? undefined : filter} />
     </div>
   );
 }

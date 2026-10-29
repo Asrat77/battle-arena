@@ -8,10 +8,14 @@ import { Icon3D } from "@/components/ui/Icon3D";
 import { Sheet } from "@/components/ui/Overlay";
 import type { GameAdapter, GameId } from "@/components/match/adapter";
 import { rulesText as gebetaRules } from "@/engine/games/gebeta";
+import { rules as ticTacToeRules } from "@/engine/games/ticTacToe";
 
 export type Rules = GameAdapter<unknown, unknown>["rules"] & { subtitle: string };
 
 export const RULES: Record<GameId, Rules> = {
+  "tic-tac-toe": {
+    title: "How to play Tic-Tac-Toe", subtitle: "3×3 grid · up to three boards · 30 seconds a turn", art: "keypad", lines: ticTacToeRules,
+  },
   "crack-the-code": {
     title: "How to play Crack the Code",
     subtitle: "4-digit codes · both guess at once · 30 rounds",

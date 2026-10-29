@@ -17,13 +17,14 @@ import { Chip, RecordChip } from "@/components/ui/Chip";
 import { Icon3D } from "@/components/ui/Icon3D";
 import { VerifyPanel } from "@/components/verify/VerifyPanel";
 import { getGame } from "@/engine/registry";
+import { emptyCells, openingSeat, ticTacToe, type TicTacToeState } from "@/engine/games/ticTacToe";
 import { replay } from "@/engine/replay";
 import type { LogEntry, MatchRecord, Seat } from "@/engine/types";
 import type { VerifyReport } from "@/engine/verify";
 import { ApiError, api, BOT_PLAYER, type StoredMatch } from "@/lib/api";
 import { shortId, usePlayerNames } from "@/lib/usePlayerNames";
 
-const GAME_ICONS = { "crack-the-code": "vault", gebeta: "mancala" } as const;
+import { GAME_ICONS } from "@/lib/gameCatalog";
 
 const REASONS: Record<string, string> = {
   cracked: "cracked the code",
@@ -69,7 +70,7 @@ export default function ReplayPage({ params }: { params: Promise<{ id: string }>
               <p className="text-small text-ink-3">Replays open when it ends.</p>
             </div>
           </div>
-          <ButtonLink href={`/watch/${id}`} icon="binoculars" block>
+          <ButtonLink href={`/match/${id}`} icon="binoculars" block>
             Watch it live
           </ButtonLink>
         </div>
@@ -133,7 +134,7 @@ function Replay({ match }: { match: StoredMatch }) {
 
   const recordState = mismatch ? "mismatch" : match.status === "recorded" ? "recorded" : "pending";
   const round = useMemo(() => roundAt(record, pos), [record, pos]);
-  const label = `Step ${pos} of ${last}${round ? ` · Round ${round}` : ""}`;
+  const label = `Step ${pos} of ${last}${round ? ` · ${record.gameId === "tic-tac-toe" ? "Board" : "Round"} ${round}` : ""}`;
 
   return (
     <Shell chip={<RecordChip state={recordState} block={match.resultIndex} long={false} />}>
@@ -252,7 +253,7 @@ function Timeline({
 
   const rows: { step: number; text: React.ReactNode; tone?: "you" | "opp"; system?: boolean }[] = [
     { step: 0, text: commitIndex !== null ? `Match starts · commitments in block #${commitIndex}` : "Match starts" },
-    ...record.log.map((e, i) => ({ step: i + 1, ...entryText(e, labels, describe) })),
+    ...record.log.map((e, i) => ({ step: i + 1, ...entryText(e, labels, describe, ticTimeoutText(record, i, labels)) })),
   ];
   return (
     <section aria-label="Timeline" className="card px-2 py-1.5">
@@ -290,14 +291,26 @@ function Timeline({
   );
 }
 
-function entryText(entry: LogEntry, labels: [string, string], describe?: (move: never) => string): { text: React.ReactNode; system?: boolean } {
+function entryText(entry: LogEntry, labels: [string, string], describe?: (move: never) => string, timeoutText?: string): { text: React.ReactNode; system?: boolean } {
   if (entry.seat === "system") {
     if (entry.move.type === "forfeit") return { text: `${labels[entry.move.seat]} forfeits`, system: true };
-    return { text: "Timer ran out", system: true };
+    return { text: timeoutText ?? "Timer ran out", system: true };
   }
   const who = <b className={`font-semibold ${entry.seat === 0 ? "text-you" : "text-opp"}`}>{labels[entry.seat]}</b>;
   const what = describe ? describe(entry.move as never) : `plays ${JSON.stringify(entry.move)}`;
   return { text: <>{who} {what}</> };
+}
+
+/** Name the two kinds of series timeout without changing the shared log format. */
+function ticTimeoutText(record: MatchRecord, index: number, labels: [string, string]): string | undefined {
+  const entry = record.log[index];
+  if (record.gameId !== ticTacToe.id || entry.seat !== "system" || entry.move.type !== "timeout") return;
+  try {
+    const state = replay(ticTacToe, record.seed, record.log.slice(0, index)).state as TicTacToeState;
+    if (state.phase === "pause") return `Board ${state.round + 1} starts · ${labels[openingSeat(state.round + 1)]} opens with X`;
+    const cell = emptyCells(state.board)[0];
+    return `${labels[state.turn]} auto-plays row ${Math.floor(cell / 3) + 1}, column ${cell % 3 + 1}`;
+  } catch { return "Timer ran out"; }
 }
 
 /** The round number at `pos` for games whose state counts rounds (Crack the Code). */

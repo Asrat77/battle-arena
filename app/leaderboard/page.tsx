@@ -15,13 +15,11 @@ import { Segmented } from "@/components/ui/Segmented";
 import { api, type LeaderboardRow } from "@/lib/api";
 import { useSession } from "@/lib/session";
 
-type Board = "overall" | "crack-the-code" | "gebeta";
+import { GAME_OPTIONS, type GameId } from "@/lib/gameCatalog";
 
-const BOARDS: { value: Board; label: string; icon?: "vault" | "mancala" }[] = [
-  { value: "overall", label: "Overall" },
-  { value: "crack-the-code", label: "Code", icon: "vault" },
-  { value: "gebeta", label: "Gebeta", icon: "mancala" },
-];
+type Board = "overall" | GameId;
+
+const BOARDS = [{ value: "overall" as const, label: "Overall" }, ...GAME_OPTIONS];
 
 const PODIUM = 3;
 
