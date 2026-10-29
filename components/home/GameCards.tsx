@@ -4,7 +4,7 @@
 // opens a private room, and Rules opens the How to play sheet. Queue and live
 // counts poll /api/games; the cards render straight away and the counts fill in.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Icon3D } from "@/components/ui/Icon3D";
 import { GAME_CATALOG, type GameId } from "@/lib/gameCatalog";
@@ -19,6 +19,8 @@ export function GameCards() {
   const [counts, setCounts] = useState<Record<string, GameSummary> | null>(null);
   const [failed, setFailed] = useState(false);
   const [rules, setRules] = useState<GameId | null>(null);
+  const strip = useRef<HTMLDivElement>(null);
+  const nudge = (dir: 1 | -1) => strip.current?.scrollBy({ left: dir * 360, behavior: "smooth" });
   const closeRules = useCallback(() => setRules(null), []);
 
   const load = useCallback(
@@ -40,8 +42,24 @@ export function GameCards() {
   }, [load]);
 
   return (
-    <>
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] gap-3.5 md:gap-4">
+    <div className="flex flex-col gap-3.5 md:gap-[22px] lg:min-h-0 lg:flex-1">
+      <div className="hidden items-center gap-2.5 px-0.5 lg:flex">
+        <h2 className="text-h2">Games</h2>
+        <span className="chip font-mono tabular-nums">{GAMES.length}</span>
+        <span className="flex-1" />
+        <Button size="sm" aria-label="Previous games" onClick={() => nudge(-1)}>
+          ‹
+        </Button>
+        <Button size="sm" aria-label="More games" onClick={() => nudge(1)}>
+          ›
+        </Button>
+      </div>
+      <div
+        ref={strip}
+        tabIndex={0}
+        aria-label="Games"
+        className="grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] gap-3.5 md:gap-4 lg:flex lg:min-h-0 lg:flex-1 lg:snap-x lg:snap-mandatory lg:items-start lg:overflow-x-auto lg:overscroll-x-contain lg:pb-3 lg:[scrollbar-width:thin]"
+      >
         {GAMES.map((g) => (
           <GameCard key={g.id} game={g} count={counts?.[g.id]} onRules={() => setRules(g.id)} />
         ))}
@@ -59,7 +77,7 @@ export function GameCards() {
         </div>
       )}
       <RulesSheet game={rules} onClose={closeRules} />
-    </>
+    </div>
   );
 }
 
@@ -76,7 +94,7 @@ function GameCard({
   return (
     <section
       aria-labelledby={`game-${game.id}`}
-      className="relative flex flex-col gap-3 overflow-hidden rounded-game bg-sf p-4 md:min-h-[300px] md:gap-3.5 md:rounded-[32px] md:p-[22px] [.light_&]:shadow-[0_0_0_1px_rgb(var(--ln))]"
+      className="relative flex flex-col gap-3 overflow-hidden rounded-game bg-sf p-4 md:min-h-[300px] md:gap-3.5 lg:h-full lg:max-h-[560px] lg:w-[400px] lg:flex-none lg:snap-start lg:min-h-[380px] md:rounded-[32px] md:p-[22px] [.light_&]:shadow-[0_0_0_1px_rgb(var(--ln))]"
     >
       <Icon3D
         name={game.art}

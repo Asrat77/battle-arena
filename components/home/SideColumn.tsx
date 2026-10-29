@@ -7,6 +7,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { LiveNow } from "./LiveNow";
 import { Avatar3D } from "@/components/ui/Avatar3D";
 import { Button } from "@/components/ui/Button";
 import { RecordChip } from "@/components/ui/Chip";
@@ -43,8 +44,9 @@ export function SideColumn({ profile }: { profile: Profile }) {
   }, [profile.id]);
 
   return (
-    <aside aria-label="Your profile and recent matches" className="flex min-w-0 flex-[1_1_300px] flex-col gap-3.5 md:max-w-[400px] md:gap-[22px] md:pt-1.5">
+    <aside aria-label="Your profile and recent matches" className="flex min-w-0 flex-[1_1_300px] flex-col gap-3.5 md:max-w-[400px] md:gap-[22px] md:pt-1.5 lg:h-full lg:w-[380px] lg:flex-none lg:overflow-y-auto lg:overscroll-contain lg:pb-1 lg:pr-1">
       <ProfileCard profile={profile} matches={matches} points={points} />
+      <LiveNow className="max-lg:hidden" />
       <Recent profileId={profile.id} matches={matches} />
     </aside>
   );
