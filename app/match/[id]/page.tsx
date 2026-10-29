@@ -1,10 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import type { AdapterPlayer, MatchCommit } from "@/components/match/adapter";
 import { adapterFor } from "@/components/match/adapters";
 import { MatchFrame, type FrameSeat, type StatusTone } from "@/components/match/MatchFrame";
+import { ButtonLink } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ResultCard, type ResultSeat } from "@/components/match/ResultCard";
 import { resultSummary } from "@/components/match/result";
 import { getGame } from "@/engine/registry";
@@ -24,17 +25,30 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
 
   if (ready && !profile)
     return (
-      <p className="text-sm">
-        Sign up on the <Link href="/" className="underline">home page</Link> first.
-      </p>
+      <EmptyState icon="idcard" title="Pick a name first" action={<ButtonLink href="/" variant="act">Sign up</ButtonLink>}>
+        You need a profile to play or watch.
+      </EmptyState>
     );
   if (missing)
     return (
-      <p className="text-sm">
-        This match is not live. <Link href={`/replay/${id}`} className="underline">Open its replay</Link>.
-      </p>
+      <EmptyState
+        icon="magnifier"
+        title="This match isn’t live"
+        action={
+          <ButtonLink href={`/replay/${id}`} variant="act" icon="verified">
+            Open its replay
+          </ButtonLink>
+        }
+      >
+        It has ended, or the link is wrong.
+      </EmptyState>
     );
-  if (!start || !view) return <p className="text-sm text-ink-3">Connecting to match…</p>;
+  if (!start || !view)
+    return (
+      <div className="flex flex-1 items-center justify-center py-24" role="status">
+        <span className="spin h-6 w-6 text-ink-2" aria-label="Connecting to the match" />
+      </div>
+    );
 
   const adapter = adapterFor(start.gameId);
   const seat = start.seat;
