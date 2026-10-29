@@ -1,6 +1,7 @@
-// Friends, presence and notifications. Friendship is one-way and light: adding
-// someone by profile ID lets you see when they are online or in a match and
-// invite them to your room. Toasts go out as `notify {kind, ...}`.
+// Friends, presence and notifications. Friendship is mutual and starts with a
+// request: send one by profile ID or username, the other side accepts or
+// declines, and once friends you see when each other is online or in a match
+// and can invite each other to a room. Toasts go out as `notify {kind, ...}`.
 
 import { Router } from "express";
 import type { Server, Socket } from "socket.io";
@@ -12,7 +13,24 @@ import type { Recorder, StoredMatch } from "./recorder";
 import type { Store } from "./store";
 
 const FRIENDS = "friends";
+const REQUESTS = "friendRequests";
 export const FRIENDS_MAX = 100;
+export const REQUESTS_MAX = 50;
+
+interface FriendRequest {
+  from: string;
+  to: string;
+}
+
+export interface Requester {
+  profileId: string;
+  name: string | null;
+}
+
+export interface Requests {
+  incoming: Requester[];
+  outgoing: Requester[];
+}
 
 export type Status = "offline" | "online" | "in-match";
 
@@ -52,6 +70,7 @@ export class Social {
     };
 
     socket.emit("friends", { friends: this.friends(profileId) });
+    socket.emit("friendRequests", this.requests(profileId));
     // First socket for this profile: tell whoever follows them.
     if (this.socketCount(profileId) === 1) {
       this.pushPresence(profileId);
@@ -59,13 +78,23 @@ export class Social {
       for (const f of this.followers(profileId)) this.notify(f, { kind: "friendOnline", profileId, name });
     }
 
-    socket.on("friend:add", (msg: { profileId?: unknown }, ack?: Ack) => reply(ack, this.add(profileId, msg?.profileId)));
+    // `friend:add` is the older name for `friend:request`.
+    for (const event of ["friend:request", "friend:add"]) {
+      socket.on(event, (msg: { profileId?: unknown; username?: unknown }, ack?: Ack) =>
+        reply(ack, this.request(profileId, msg?.profileId ?? msg?.username)),
+      );
+    }
+    socket.on("friend:accept", (msg: { profileId?: unknown }, ack?: Ack) => reply(ack, this.accept(profileId, msg?.profileId)));
+    socket.on("friend:decline", (msg: { profileId?: unknown }, ack?: Ack) =>
+      reply(ack, this.decline(profileId, msg?.profileId)),
+    );
+    socket.on("friend:cancel", (msg: { profileId?: unknown }, ack?: Ack) => reply(ack, this.cancel(profileId, msg?.profileId)));
     socket.on("friend:remove", (msg: { profileId?: unknown }, ack?: Ack) =>
       reply(ack, this.remove(profileId, msg?.profileId)),
     );
     socket.on("friend:list", (_msg: unknown, ack?: Ack) => {
       if (typeof _msg === "function") ack = _msg as Ack;
-      reply(ack, { ok: true, friends: this.friends(profileId) });
+      reply(ack, { ok: true, friends: this.friends(profileId), ...this.requests(profileId) });
     });
     socket.on("friend:invite", (msg: { profileId?: unknown; code?: unknown }, ack?: Ack) =>
       reply(ack, this.invite(profileId, msg?.profileId, msg?.code)),
@@ -76,27 +105,90 @@ export class Social {
     });
   }
 
-  add(profileId: string, rawId: unknown) {
-    const id = typeof rawId === "string" ? rawId.trim().toLowerCase() : "";
-    if (!this.identity.get(id)) return { ok: false as const, reason: "no profile with that ID" };
-    if (id === profileId) return { ok: false as const, reason: "cannot add yourself" };
-    const list = this.list(profileId);
-    if (!list.includes(id)) {
-      if (list.length >= FRIENDS_MAX) return { ok: false as const, reason: "friend list is full" };
-      this.save(profileId, [...list, id]);
-      this.pushFriends(profileId);
-    }
-    return { ok: true as const, friend: this.presence(id) };
+  /** Resolve a profile ID or username to a profile ID, or null. */
+  private resolve(raw: unknown): string | null {
+    const q = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+    if (!q) return null;
+    return this.identity.get(q)?.id ?? this.identity.byUsername(q)?.id ?? null;
   }
 
+  /** Ask someone to be your friend, by profile ID or username. If they already asked you, you become friends. */
+  request(profileId: string, raw: unknown) {
+    const id = this.resolve(raw);
+    if (!id) return { ok: false as const, reason: "no profile with that ID" };
+    if (id === profileId) return { ok: false as const, reason: "cannot add yourself" };
+    if (this.list(profileId).includes(id)) return { ok: false as const, reason: "already friends" };
+    const pending = this.pending();
+    if (pending.some((r) => r.from === id && r.to === profileId)) return this.accept(profileId, id);
+    if (pending.some((r) => r.from === profileId && r.to === id)) return { ok: true as const, status: "sent" as const, to: this.who(id) };
+    if (this.list(profileId).length >= FRIENDS_MAX) return { ok: false as const, reason: "friend list is full" };
+    if (pending.filter((r) => r.from === profileId).length >= REQUESTS_MAX) {
+      return { ok: false as const, reason: "too many pending requests" };
+    }
+    this.savePending([...pending, { from: profileId, to: id }]);
+    this.pushRequests(profileId, id);
+    this.notify(id, { kind: "friendRequest", from: this.who(profileId) });
+    return { ok: true as const, status: "sent" as const, to: this.who(id) };
+  }
+
+  accept(profileId: string, rawId: unknown) {
+    const id = typeof rawId === "string" ? rawId.trim().toLowerCase() : "";
+    if (!this.pending().some((r) => r.from === id && r.to === profileId)) {
+      return { ok: false as const, reason: "no request from that player" };
+    }
+    if (this.list(profileId).length >= FRIENDS_MAX) return { ok: false as const, reason: "friend list is full" };
+    this.link(profileId, id);
+    this.notify(id, { kind: "friendAccepted", ...this.who(profileId) });
+    return { ok: true as const, status: "accepted" as const, friend: this.presence(id) };
+  }
+
+  decline(profileId: string, rawId: unknown) {
+    const id = typeof rawId === "string" ? rawId.trim().toLowerCase() : "";
+    this.dropPending(id, profileId);
+    return { ok: true as const };
+  }
+
+  /** Withdraw a request you sent. */
+  cancel(profileId: string, rawId: unknown) {
+    const id = typeof rawId === "string" ? rawId.trim().toLowerCase() : "";
+    this.dropPending(profileId, id);
+    return { ok: true as const };
+  }
+
+  /** Make two profiles friends and clear any requests between them. */
+  link(a: string, b: string) {
+    for (const [x, y] of [[a, b], [b, a]]) {
+      const list = this.list(x);
+      if (!list.includes(y)) this.save(x, [...list, y]);
+    }
+    this.savePending(this.pending().filter((r) => !((r.from === a && r.to === b) || (r.from === b && r.to === a))));
+    for (const id of [a, b]) {
+      this.pushFriends(id);
+      this.pushRequests(id);
+    }
+  }
+
+  /** Unfriend, for both of you. Also clears any request between you. */
   remove(profileId: string, rawId: unknown) {
     const id = typeof rawId === "string" ? rawId.trim().toLowerCase() : "";
-    const list = this.list(profileId);
-    if (list.includes(id)) {
-      this.save(profileId, list.filter((x) => x !== id));
-      this.pushFriends(profileId);
+    for (const [x, y] of [[profileId, id], [id, profileId]]) {
+      const list = this.list(x);
+      if (list.includes(y)) {
+        this.save(x, list.filter((z) => z !== y));
+        this.pushFriends(x);
+      }
     }
+    this.dropPending(profileId, id);
+    this.dropPending(id, profileId);
     return { ok: true as const };
+  }
+
+  requests(profileId: string): Requests {
+    const pending = this.pending();
+    return {
+      incoming: pending.filter((r) => r.to === profileId).map((r) => this.who(r.from)),
+      outgoing: pending.filter((r) => r.from === profileId).map((r) => this.who(r.to)),
+    };
   }
 
   /** Invite a friend to the room you are in. They get a toast with a Join link. */
@@ -165,6 +257,30 @@ export class Social {
     if (followers.length) this.io.to(followers.map(profileRoom)).emit("presence", this.presence(profileId));
   }
 
+  private who(profileId: string): Requester {
+    return { profileId, name: this.identity.get(profileId)?.name ?? null };
+  }
+
+  private pending(): FriendRequest[] {
+    return this.store.read<FriendRequest[]>(REQUESTS, []);
+  }
+
+  private savePending(list: FriendRequest[]) {
+    this.store.write(REQUESTS, list);
+  }
+
+  private dropPending(from: string, to: string) {
+    const pending = this.pending();
+    const rest = pending.filter((r) => !(r.from === from && r.to === to));
+    if (rest.length === pending.length) return;
+    this.savePending(rest);
+    this.pushRequests(from, to);
+  }
+
+  private pushRequests(...ids: string[]) {
+    for (const id of ids) this.io.to(profileRoom(id)).emit("friendRequests", this.requests(id));
+  }
+
   private pushFriends(profileId: string) {
     this.io.to(profileRoom(profileId)).emit("friends", { friends: this.friends(profileId) });
   }
@@ -201,7 +317,7 @@ export function socialRoutes(social: Social, identity: Identity): Router {
       res.status(401).json({ error: "invalid or missing session token" });
       return;
     }
-    res.json({ friends: social.friends(me.id) });
+    res.json({ friends: social.friends(me.id), ...social.requests(me.id) });
   });
 
   router.get("/api/profiles/:id/presence", (req, res) => {

@@ -100,6 +100,13 @@ export class Identity {
     return Object.values(this.profiles()).find((p) => p.username === username);
   }
 
+  /** A profile by its sign-in username (case-insensitive), or null. */
+  byUsername(rawUsername: unknown): Profile | null {
+    const username = typeof rawUsername === "string" ? rawUsername.trim().toLowerCase() : "";
+    const stored = username ? this.findByUsername(username) : undefined;
+    return stored ? toProfile(stored) : null;
+  }
+
   signup(rawName: unknown, credentials?: { username?: unknown; password?: unknown }): { profile: Profile; token: string } {
     const name = typeof rawName === "string" ? rawName.trim() : "";
     if (!name || name.length > NAME_MAX) {
