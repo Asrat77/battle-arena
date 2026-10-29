@@ -55,9 +55,11 @@ export default function TournamentsPage() {
     <div className="mx-auto flex max-w-xl flex-col gap-3">
       <header className="flex items-center justify-between gap-3">
         <h1 className="text-h2">Tournaments</h1>
-        <Button variant="act" size="sm" icon="plus" onClick={() => setCreating(true)}>
-          Create
-        </Button>
+        {list?.length !== 0 && (
+          <Button variant="act" size="sm" icon="plus" onClick={() => setCreating(true)}>
+            New tournament
+          </Button>
+        )}
       </header>
       <Segmented<Filter> label="Game" value={filter} onChange={setFilter} options={FILTERS} />
 
@@ -81,7 +83,7 @@ export default function TournamentsPage() {
           title="No tournaments yet"
           action={
             <Button variant="act" icon="plus" onClick={() => setCreating(true)}>
-              Create one
+              New tournament
             </Button>
           }
         >

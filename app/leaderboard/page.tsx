@@ -193,8 +193,8 @@ function Empty({ board }: { board: Board }) {
       </div>
       <h2 className="relative text-[24px] font-semibold tracking-[-.04em]">Be the first</h2>
       <p className="relative text-ink-2">No ranked matches yet. Play someone to get on the board.</p>
-      <ButtonLink href={board === "overall" ? "/" : `/queue/${board}`} variant="act" icon="lightning" block>
-        Quick match
+      <ButtonLink href={board === "overall" ? "/" : `/queue/${board}`} variant="act" icon={board === "overall" ? "controller" : "lightning"} block>
+        {board === "overall" ? "Play a match" : "Quick match"}
       </ButtonLink>
       <span className="relative text-small text-ink-2">Bot matches never change rank.</span>
     </div>
