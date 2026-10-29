@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { GameCards } from "@/components/home/GameCards";
+import { LiveNow } from "@/components/home/LiveNow";
 import { SideColumn } from "@/components/home/SideColumn";
 import { Signup } from "@/components/home/Signup";
 import { Icon3D } from "@/components/ui/Icon3D";
@@ -30,6 +31,7 @@ export default function Home() {
             </Link>
           </header>
           <GameCards />
+          <LiveNow />
         </div>
         <SideColumn profile={profile} />
       </div>
