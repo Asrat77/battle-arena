@@ -9,7 +9,7 @@ import { Keypad } from "@/components/ctc/Keypad";
 import { Meter, meterText } from "@/components/ctc/Meter";
 import { GebetaBoard } from "@/components/gebeta/GebetaBoard";
 import { TicTacToeBoard } from "@/components/tictactoe/TicTacToeBoard";
-import { DotsBoard } from "@/components/dots/adapter";
+import { DotsBoard } from "@/components/dots/DotsBoard";
 import { dotsAndBoxes } from "@/engine/games/dotsAndBoxes";
 import { ticTacToe } from "@/engine/games/ticTacToe";
 import { GAME_OPTIONS } from "@/lib/gameCatalog";

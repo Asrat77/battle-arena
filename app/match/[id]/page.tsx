@@ -80,7 +80,6 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
       : plainStatus(view, end, seat, name);
 
   return (
-    <div className={start.gameId === "dots-and-boxes" ? "dots-palette" : undefined}>
     <MatchFrame
       game={gameName}
       icon={adapter?.icon ?? GAME_ICONS[start.gameId as keyof typeof GAME_ICONS] ?? "controller"}
@@ -144,7 +143,6 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
         <Commitments start={start} commit={commit} labels={labels} over={Boolean(end)} />
       </div>
     </MatchFrame>
-    </div>
   );
 }
 

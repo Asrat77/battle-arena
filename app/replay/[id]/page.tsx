@@ -137,7 +137,6 @@ function Replay({ match }: { match: StoredMatch }) {
   const label = `Step ${pos} of ${last}${round ? ` · ${record.gameId === "tic-tac-toe" ? "Board" : "Round"} ${round}` : ""}`;
 
   return (
-    <div className={record.gameId === "dots-and-boxes" ? "dots-palette" : undefined}>
     <Shell chip={<RecordChip state={recordState} block={match.resultIndex} long={false} />}>
       <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_380px] md:items-start lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-7">
         <div className="flex min-w-0 flex-col gap-3.5">
@@ -172,7 +171,6 @@ function Replay({ match }: { match: StoredMatch }) {
         </aside>
       </div>
     </Shell>
-    </div>
   );
 }
 
