@@ -41,6 +41,10 @@ export function createApp(options: AppOptions = {}) {
   const httpServer = createServer(app);
   const io = new Server(httpServer, {
     cors: { origin, methods: ["GET", "POST"], credentials: true },
+    // A phone that locks or loses signal leaves no close frame. Ping often so a
+    // dead socket leaves the queue in ~15 s instead of ~45 s and isn't paired.
+    pingInterval: 10_000,
+    pingTimeout: 5_000,
   });
 
   // Sockets authenticate with the session token from signup: io(url, { auth: { token } }).

@@ -216,7 +216,12 @@ export class Lobby {
   joinQueue(profileId: string, gameId: unknown) {
     const game = typeof gameId === "string" ? this.games.get(gameId) : undefined;
     if (!game) return { ok: false as const, reason: "unknown game" };
-    if (this.matches.activeFor(profileId).length) return { ok: false as const, reason: "already in a match" };
+    // Joining again once paired (a reconnect, or React mounting the queue
+    // screen twice) lands on that match rather than an error.
+    const live = this.matches.activeFor(profileId);
+    const current = live.find((m) => m.game.id === game.id);
+    if (current) return this.resume(profileId, current);
+    if (live.length) return { ok: false as const, reason: "already in a match" };
 
     const queue = this.queue(game.id);
     const mine = queue.find((e) => e.profileId === profileId);
@@ -272,7 +277,16 @@ export class Lobby {
       this.emitTo(profileId, "queue:status", { gameId, state: "matched", matchId: m.id, bot: true });
       return { ok: true as const, state: "matched", matchId: m.id };
     }
+    // A player joined just before the bot was accepted: go to that match.
+    const current = this.matches.activeFor(profileId)[0];
+    if (current) return this.resume(profileId, current);
     return { ok: false as const, reason: "not in a queue" };
+  }
+
+  private resume(profileId: string, m: Match) {
+    const bot = m.bots.length > 0;
+    this.emitTo(profileId, "queue:status", { gameId: m.game.id, state: "matched", matchId: m.id, bot });
+    return { ok: true as const, state: "matched", matchId: m.id };
   }
 
   private queue(gameId: string) {
