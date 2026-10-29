@@ -1,6 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
+import type { AdapterPlayer } from "@/components/match/adapter";
+import { Avatar3D, avatarFor } from "@/components/ui/Avatar3D";
+import { Icon3D } from "@/components/ui/Icon3D";
+import { usePickedAvatar } from "@/lib/avatars";
 import type { Seat, Viewer } from "@/engine/types";
 import { available, type DotsView } from "@/engine/games/dotsAndBoxes";
 import { KEY_HINT_CLASS, useHotkeys } from "@/lib/useHotkeys";
@@ -9,10 +13,27 @@ import { playerInitials } from "./initials";
 
 const ARROWS: Record<string, Dir> = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down" };
 
-export function DotsBoard({ view, seat, names, disabled = false, onMove }: {
+/** A claimed box shows the owner's picture (the robot for a bot), or initials without player ids. */
+function BoxMark({ player, initials, index, tone }: { player?: AdapterPlayer; initials: string; index: number; tone: string }) {
+  const picked = usePickedAvatar(player?.id ?? "", !player || Boolean(player.bot));
+  const { animal } = avatarFor(player?.id ?? "", player?.bot, picked);
+  const loading = player && !player.bot && picked === undefined;
+  return (
+    <span
+      aria-hidden
+      className={`pointer-events-none absolute flex items-center justify-center animate-pop ${tone}`}
+      style={{ left: `${(index % 5) * 20 + 2}%`, top: `${Math.floor(index / 5) * 20 + 2}%`, width: "16%", height: "16%" }}
+    >
+      {!player ? <b className="mono text-[clamp(10px,3.2vw,18px)]">{initials}</b> : !loading && <Icon3D name={animal} size={64} className="h-[84%] w-[84%]" />}
+    </span>
+  );
+}
+
+export function DotsBoard({ view, seat, names, players, disabled = false, onMove }: {
   view: DotsView;
   seat: Viewer;
   names: [string, string];
+  players?: [AdapterPlayer, AdapterPlayer];
   disabled?: boolean;
   onMove?(edge: number): void;
 }) {
@@ -64,7 +85,9 @@ export function DotsBoard({ view, seat, names, disabled = false, onMove }: {
       <div className="card flex items-center gap-2 !px-3.5 !py-3">
         {([left, right] as const).map((s, i) => (
           <div key={s} className={`flex min-w-0 flex-1 items-center gap-2 ${i ? "flex-row-reverse text-right" : ""}`}>
-            <span className={`mono grid h-7 w-7 flex-none place-items-center rounded-full text-[11px] font-semibold ${s === left ? "bg-you-soft" : "bg-opp-soft"} ${tone(s)}`} aria-hidden>{initials[s]}</span>
+            {players
+              ? <Avatar3D id={players[s].id} bot={players[s].bot} size="sm" seat={s === left ? "you" : "opp"} className="!h-8 !w-8 !rounded-[10px]" />
+              : <span className={`mono grid h-7 w-7 flex-none place-items-center rounded-full text-[11px] font-semibold ${s === left ? "bg-you-soft" : "bg-opp-soft"} ${tone(s)}`} aria-hidden>{initials[s]}</span>}
             <span className="min-w-0">
               <b className="block truncate text-small font-semibold">{label(s)}</b>
               <span className="eyebrow">{!over && view.turn === s ? "To move" : "Boxes"}</span>
@@ -82,8 +105,7 @@ export function DotsBoard({ view, seat, names, disabled = false, onMove }: {
               const fresh = view.last?.captured.includes(i);
               return (
                 <g key={i}>
-                  <rect x={x + 2} y={y + 2} width="16" height="16" rx="3" fill={fill(owner)} stroke={fresh ? "rgb(var(--acc))" : "none"} strokeWidth=".8" />
-                  <text x={x + 10} y={y + 10} dy=".35em" textAnchor="middle" fill={stroke(owner)} fontSize={initials[owner].length > 2 ? 5.5 : 8} fontWeight="bold">{initials[owner]}</text>
+                  <rect x={x + 2} y={y + 2} width="16" height="16" rx="3" fill={fill(owner)} stroke={fresh ? "rgb(var(--acc))" : stroke(owner)} strokeOpacity={fresh ? 1 : 0.35} strokeWidth=".8" />
                 </g>
               );
             })}
@@ -101,6 +123,7 @@ export function DotsBoard({ view, seat, names, disabled = false, onMove }: {
             })}
             {Array.from({ length: 36 }, (_, i) => <circle key={i} cx={(i % 6) * 20} cy={Math.floor(i / 6) * 20} r="2" fill="rgb(var(--ink2))" />)}
           </svg>
+          {view.boxes.map((owner, i) => owner === null ? null : <BoxMark key={i} index={i} player={players?.[owner]} initials={initials[owner]} tone={tone(owner)} />)}
           {onMove && seat !== "spectator" && view.edges.map((owner, i) => {
             const mid = edgeMid(i), h = isHorizontal(i);
             return (
