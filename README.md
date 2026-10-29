@@ -1,19 +1,84 @@
 # Battle Arena
 
-Live 1v1 games in the browser where the server is the referee and every finished match is written to a signed, hash-chained ledger that anyone can verify by replaying it.
+Live 1v1 games in the browser where the server is the referee and every finished match is written to a signed, hash-chained ledger that anyone can check by replaying it.
+
+**The idea:** a game is just a rules file plus a board. Matchmaking, rooms, sync, spectating, replay, chat, rewards and the ledger are shared, so adding a game never touches them. Two games that look nothing alike run on it today.
+
+## Try it in five minutes (one person, one device)
+
+1. Open the app and enter a name. A profile ID (an EVM-style address) is created for you. No wallet, no gas.
+2. Quick match **Crack the Code**. Nobody else is queued, so accept the bot after 10 seconds.
+3. Play to the end. Both secret codes are revealed, and the match shows as *pending*, then *recorded*.
+4. Open the replay, step through it, and press **Verify**. The result hash, the committed secrets and the whole ledger chain are re-checked in your browser.
+5. Open your profile for the new points, the match history and any badges. The leaderboard is unchanged, because bot matches earn no rank.
+6. Play **Gebeta** the same way. With a second device or browser you can play a human, create a private room and share its link, or spectate with live chat.
+7. Open **Ledger** to see every block, its signature and the chain check.
+
+## Approach and decisions
+
+### Why a platform, not one game
+
+Spectating, replay, the result hash, rewards and the leaderboard all come from one thing: a match's ordered move log. So a game only has to define its rules (`engine/types.ts`): how to set up, which moves are legal, what a move does, when the match ends, and what each seat and a spectator may see. A new game is one file in `engine/games/` and one line in `engine/registry.ts`. The two launch games prove the point:
+
+| Game | Proves | Hidden information | Commitment |
+| --- | --- | --- | --- |
+| Crack the Code | simultaneous rounds, hidden secrets | each player's secret code | hash of secret + salt, revealed at the end |
+| Gebeta (mancala) | turn-based play, extra turns, captures | none | none |
+
+### Why a rewrite
+
+This started as a Crack the Code prototype that trusted the browser: both secret codes reached both clients and clients declared their own wins. Recording that on a chain would only have made forged results permanent. So the rebuild follows one rule: **the server is the referee**. Clients send moves, never state. The server validates every move, computes every result, and sends each seat only its own view. Spectators see no hidden information until the match ends, and bots only ever see their own view.
+
+### What the ledger does and does not do
+
+Each match produces two kinds of ledger blocks:
+
+- a **commit** block before play, holding the hash of each hidden secret plus a salt;
+- a **result** block after play, holding the match ID, winner, timestamp and `resultHash`, which is the sha256 of the match's canonical JSON (players, seed, full move log, outcome).
+
+Badges and token mints get their own blocks, so every reward traces to a recorded match. Blocks are signed with secp256k1 by the server and linked by hash, so editing any past block breaks every later one. The chain is simulated on the server (a testnet was not worth the risk for the demo), and sealing happens in the background so gameplay never waits on it.
+
+**Verify** (`engine/verify.ts`) runs in the browser and does not trust the server's say-so. It replays the log from the seed, recomputes the outcome and hash, compares them with the result block, opens the commitments against the revealed secrets, and walks the chain checking every hash, link and signature.
+
+We claim exactly this: results are **tamper-evident and checkable**. We do not claim trustless play. The server runs the matches, so it is trusted to referee, and the ledger proves only that a recorded result was never changed and matches its replay.
+
+### Where cryptography earns its place
+
+In Crack the Code the server answers every guess, so a dishonest server could cheat by changing a secret after the fact. Publishing `hash(secret + salt)` before round one prevents that: at the end both secrets are revealed and Verify checks every feedback ever given against them. Determinism does the rest. All randomness comes from a seeded RNG recorded in the match, so a replay is exact.
+
+### Rewards
+
+Points are awarded only when a match is recorded: win 10, draw 5, loss 2, any bot result 1, tournament win 30 bonus, first match of the day 3 bonus. Badges (First Blood, Codebreaker, Seed Master, On a Roll, Explorer, Champion, Watcher) and a token balance are derived from the same records. Bot matches earn reduced points and no rank. The same two players earn at most 3 rated matches against each other in 24 hours.
+
+### Prior art
+
+We looked at boardgame.io and Colyseus. Both are good, but both bring their own state-sync model, and we needed three things they don't give us for free: per-seat views that hide information from spectators and network traffic, a move log that is the source of truth for replay and hashing, and engine code that runs unchanged in the browser to verify results. A thin layer of our own (`engine/`, about a thousand lines) fit better.
+
+### Known limits
+
+- **Custodial profile IDs.** The server holds each profile's key so players need no wallet. There is no cross-device recovery and no self-custody yet.
+- **Multi-account farming.** The per-pair limit stops casual farming, but one person with several accounts could still farm slowly.
+- **Simulated ledger.** It is tamper-evident but run by one operator; a public testnet would remove that single point.
+- **Server-trusted play,** as above.
+- **Storage** is a JSON file (`DATA_FILE`), which is fine for a demo but not for scale.
+
+### Direction
+
+Grid games are close to configurations of a single rules file, which is the first step toward a no-code game creator. Next steps are Liar's Dice with committed seeds, wallet connect, and larger tournaments.
 
 ## What's in it
 
-- **Games**: Crack the Code (guess the hidden number) and Gebeta (mancala), each with a bot so you can play alone.
-- **Play**: quick match with bot fallback, private rooms, spectating with room chat, and 4-player single-elimination tournaments.
-- **Profiles**: wallet-free signup with a local keypair, points, badges, a leaderboard and token rewards, plus friends and presence.
-- **Verify**: every match record holds its moves and seed, so the replay page re-runs the game and checks the result and ledger signature.
+- **Games**: Crack the Code and Gebeta, each with a bot so you can play alone.
+- **Play**: quick match with bot fallback, private rooms with invite links, spectating with room chat and reactions, rematches.
+- **Profiles**: wallet-free signup, points, badges, a leaderboard and token rewards, plus friends and presence.
+- **Tournaments**: 4-player single elimination, created by the server with bots filling empty seats.
+- **Verify**: replay any finished match and check it against the ledger.
 
 ## Layout
 
-- `engine/` shared game engine, rules, bots, replay and verification (used by both server and browser)
-- `backend/src/` Express + socket.io server: identity, lobby, matches, ledger, rewards, social, tournaments
-- `app/`, `components/`, `lib/` Next.js frontend
+- `engine/` shared game engine, rules, bots, replay, hashing, ledger blocks and verification. Used by both server and browser.
+- `backend/src/` Express + socket.io server: identity, lobby, matches, recorder, ledger, rewards, social, tournaments.
+- `app/`, `components/`, `lib/` Next.js frontend.
 
 ## Run locally
 
@@ -24,17 +89,21 @@ npm run dev      # web app on :3000
 npm test         # node:test suite
 ```
 
+Open http://localhost:3000. With no configuration the server generates a ledger key on first run and keeps it in the data file.
+
 ## Configuration
 
 | Variable | Where | Purpose |
 | --- | --- | --- |
-| `LEDGER_PRIVATE_KEY` | server | Key that signs ledger entries (set this in production) |
+| `LEDGER_PRIVATE_KEY` | server | Hex secp256k1 key that signs ledger blocks. Set it in production so the key survives a lost data file. |
 | `FRONTEND_URL` | server | Allowed CORS origin, default `http://localhost:3000` |
 | `PORT` | server | Server port, default `3001` |
-| `DATA_FILE` | server | Where profiles and the ledger are stored |
+| `DATA_FILE` | server | Where profiles and the ledger are stored, default `data/db.json` |
 | `NEXT_PUBLIC_API_URL` | web | Server URL, default `http://localhost:3001` |
 | `NEXT_PUBLIC_SOCKET_URL` | web | Older name for `NEXT_PUBLIC_API_URL`, still read as a fallback |
 
 ## Deploy
 
-Server (e.g. Render): build `npm ci`, start `npm run server`, set `LEDGER_PRIVATE_KEY` and `FRONTEND_URL`. Frontend (e.g. Vercel): set `NEXT_PUBLIC_API_URL` to the server URL.
+- **Server** (e.g. Render web service): build `npm ci`, start `npm run server`. Set `LEDGER_PRIVATE_KEY` and `FRONTEND_URL` (the frontend's origin). Mount a persistent disk and point `DATA_FILE` at it, otherwise profiles and the ledger reset on every deploy.
+- **Frontend** (e.g. Vercel): set `NEXT_PUBLIC_API_URL` to the server's URL and deploy.
+- Health check: `GET /health`.
