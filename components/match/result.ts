@@ -6,6 +6,7 @@ import type { CtcView } from "@/engine/games/crackTheCode";
 import type { GebetaView } from "@/engine/games/gebeta";
 import type { TicTacToeView } from "@/engine/games/ticTacToe";
 import type { DotsView } from "@/engine/games/dotsAndBoxes";
+import type { BingoView } from "@/engine/games/bingo";
 import type { Outcome, Seat, Viewer } from "@/engine/types";
 
 export type ResultKind = "win" | "loss" | "draw" | "watched";
@@ -79,11 +80,18 @@ export function resultSummary(r: ResultInput): ResultSummary {
       detail: `${v.history.length} boards played · ${v.scores[0]}–${v.scores[1]} in board wins` };
   }
 
+  if (r.gameId === "bingo") {
+    const called = `${(r.view as BingoView).called.length} numbers called`;
+    return outcome.draw ? { ...base, headline: "Dead even", detail: `BINGO for both on the same call · ${called}` }
+      : { ...base, headline: `${who(winner!)} ${winner === seat ? "call" : "calls"} BINGO`, detail: called };
+  }
+
   if (outcome.draw) return { ...base, headline: "Dead even", detail: outcome.reason };
   return { ...base, headline: `${who(winner!)} ${winner === seat ? "win" : "wins"}`, detail: outcome.reason };
 }
 
 function gameFacts(r: ResultInput): Pick<ResultSummary, "score" | "secrets"> {
+  if (r.gameId === "bingo") return { score: (r.view as BingoView).lines.map((n) => Math.min(n, 5)) as [number, number] };
   if (r.gameId === "dots-and-boxes") return { score: [...(r.view as DotsView).scores] };
   if (r.gameId === "tic-tac-toe") return { score: [...(r.view as TicTacToeView).scores] };
   if (r.gameId === "gebeta") {

@@ -5,6 +5,7 @@ import { ctcAdapter } from "@/components/ctc/adapter";
 import { GebetaAdapter } from "@/components/gebeta/adapter";
 import { ticTacToeAdapter } from "@/components/tictactoe/adapter";
 import { dotsAdapter } from "@/components/dots/adapter";
+import { bingoAdapter } from "@/components/bingo/adapter";
 import type { GameAdapter, GameId } from "./adapter";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -13,6 +14,7 @@ export const adapters: Partial<Record<GameId, GameAdapter<any, any>>> = {
   gebeta: GebetaAdapter,
   "tic-tac-toe": ticTacToeAdapter,
   "dots-and-boxes": dotsAdapter,
+  bingo: bingoAdapter,
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
