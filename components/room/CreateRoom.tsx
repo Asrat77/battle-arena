@@ -84,6 +84,9 @@ function Creating({ gameId, gameName }: { gameId: string; gameName: string }) {
 function PickGame() {
   return (
     <div className="mx-auto flex max-w-[480px] flex-col gap-4 py-6">
+      <ButtonLink href="/" variant="ghost" size="sm" className="self-start md:hidden">
+        ← Back
+      </ButtonLink>
       <header className="flex flex-col gap-1.5">
         <span className="eyebrow">Private room</span>
         <h1 className="text-h2">Which game?</h1>
