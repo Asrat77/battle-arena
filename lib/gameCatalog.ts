@@ -5,6 +5,7 @@ export const GAME_CATALOG = [
   { id: "crack-the-code", name: "Crack the Code", short: "Code", abbreviation: "CtC", kicker: "Logic · 1v1", blurb: "Guess their 4-digit code before they guess yours.", art: "vault" },
   { id: "gebeta", name: "Gebeta", short: "Gebeta", abbreviation: "Geb", kicker: "Ethiopian mancala", blurb: "Sow, capture, out-seed them.", art: "mancala" },
   { id: "tic-tac-toe", name: "Tic-Tac-Toe", short: "Tic-Tac-Toe", abbreviation: "TTT", kicker: "Three in a row · 1v1", blurb: "Claim a line. Win the best of three.", art: "tic tac toe" },
+  { id: "dots-and-boxes", name: "Dots and Boxes", short: "Dots & Boxes", abbreviation: "D&B", kicker: "Claim the squares · 1v1", blurb: "Connect the dots. Claim the most boxes.", art: "connect_the_dots" },
 ] as const satisfies readonly { id: string; name: string; short: string; abbreviation: string; kicker: string; blurb: string; art: Icon3DName }[];
 
 export type GameId = (typeof GAME_CATALOG)[number]["id"];

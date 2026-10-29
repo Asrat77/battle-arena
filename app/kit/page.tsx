@@ -9,6 +9,8 @@ import { Keypad } from "@/components/ctc/Keypad";
 import { Meter, meterText } from "@/components/ctc/Meter";
 import { GebetaBoard } from "@/components/gebeta/GebetaBoard";
 import { TicTacToeBoard } from "@/components/tictactoe/TicTacToeBoard";
+import { DotsBoard } from "@/components/dots/DotsBoard";
+import { dotsAndBoxes } from "@/engine/games/dotsAndBoxes";
 import { ticTacToe } from "@/engine/games/ticTacToe";
 import { GAME_OPTIONS } from "@/lib/gameCatalog";
 import { Avatar3D } from "@/components/ui/Avatar3D";
@@ -274,6 +276,9 @@ export default function KitPage() {
         </Button>}
       </Spec>
 
+      <Spec title="Dots and Boxes board">
+        <DotsBoard view={dotsAndBoxes.setup({ seed: "kit" })} seat="spectator" names={["Abebe", "Hana"]} disabled />
+      </Spec>
       <Spec title="Gebeta board">
         <p className="text-small text-ink-2">
           Stands up under 640 px, lies flat above. Glowing pits are legal; tap one to fire <span className="mono">onPick</span>.

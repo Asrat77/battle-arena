@@ -118,7 +118,7 @@ export function Signup() {
                 Play in a minute.
               </h1>
               <p className="m-0 text-base text-ink-2">
-                Crack the Code and Gebeta, head to head. Every result is recorded so anyone can check it.
+                Crack the Code, Gebeta, Tic-Tac-Toe and Dots and Boxes, head to head. Every result is recorded so anyone can check it.
               </p>
             </div>
           )}
