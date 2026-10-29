@@ -10,6 +10,8 @@ import { Meter, meterText } from "@/components/ctc/Meter";
 import { GebetaBoard } from "@/components/gebeta/GebetaBoard";
 import { TicTacToeBoard } from "@/components/tictactoe/TicTacToeBoard";
 import { DotsBoard } from "@/components/dots/DotsBoard";
+import { BingoBoard } from "@/components/bingo/BingoBoard";
+import { bingo } from "@/engine/games/bingo";
 import { dotsAndBoxes } from "@/engine/games/dotsAndBoxes";
 import { ticTacToe } from "@/engine/games/ticTacToe";
 import { GAME_OPTIONS } from "@/lib/gameCatalog";
@@ -46,6 +48,7 @@ export default function KitPage() {
   const [code, setCode] = useState("47");
   const [locked, setLocked] = useState<string | null>(null);
   const [ticBoard, setTicBoard] = useState(() => ticTacToe.setup({ seed: "kit" }));
+  const [bingoBoard, setBingoBoard] = useState(() => bingo.setup({ seed: "kit" }));
 
   return (
     <div className="relative flex flex-col gap-6">
@@ -278,6 +281,11 @@ export default function KitPage() {
 
       <Spec title="Dots and Boxes board">
         <DotsBoard view={dotsAndBoxes.setup({ seed: "kit" })} seat="spectator" names={["Abebe", "Hana"]} disabled />
+      </Spec>
+      <Spec title="BINGO board">
+        <p className="text-small text-ink-2">Play either seat to preview. Crosses take the caller’s colour; completed lines are struck through.</p>
+        <BingoBoard view={bingo.view(bingoBoard, bingoBoard.turn)} seat={bingoBoard.turn} names={["Abebe", "Hana"]} disabled={bingo.outcome(bingoBoard) !== null}
+          onMove={(number) => setBingoBoard((s) => bingo.apply(s, s.turn, { number }))} />
       </Spec>
       <Spec title="Gebeta board">
         <p className="text-small text-ink-2">

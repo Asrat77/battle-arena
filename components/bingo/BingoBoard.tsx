@@ -1,256 +1,161 @@
 "use client";
 
-// BingoBoard: renders the authentic paper BINGO table.
-// Structured as a continuous ruled table with B-I-N-G-O column headers directly
-// above the 5 columns, 1px table gridlines, pen-stroke crosses on numbers,
-// and SVG strike lines across completed rows, columns, and diagonals.
+import { Fragment, useRef, useState } from "react";
+import type { AdapterPlayer } from "@/components/match/adapter";
+import { playerInitials } from "@/components/dots/initials";
+import { Avatar3D } from "@/components/ui/Avatar3D";
+import type { Seat, Viewer } from "@/engine/types";
+import { callerOf, completedLines, LETTERS, LINES, type BingoView } from "@/engine/games/bingo";
+import { KEY_HINT_CLASS, useHotkeys } from "@/lib/useHotkeys";
 
-import { BINGO_LETTERS, GRID_SIZE, LINES } from "@/engine/games/bingo";
-import { BingoCell } from "./BingoCell";
+const STEP: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -5, ArrowDown: 5 };
+const CALL_ORDER = Array.from({ length: 25 }, (_, i) => i + 1);
 
-interface BingoBoardProps {
-  /** 25 numbers in row-major order. Null when the grid is hidden (spectator/opponent view). */
-  grid: number[] | null;
-  crossed: number[];
-  completedLines: number[];
-  lettersEarned: number;
-  /** Numbers the player may legally call right now. Empty when not your turn. */
-  callable: number[];
-  onCall?: (n: number) => void;
-  /** The number most recently called (to highlight). */
-  freshNumber?: number | null;
-  tone?: "you" | "opp" | "neutral";
-  label?: string;
-  className?: string;
+/** Where a completed line is struck through, in the grid's 0–100 box. */
+function strike(line: number) {
+  const [a, b] = [LINES[line][0], LINES[line][4]];
+  const at = (cell: number) => ({ x: (cell % 5) * 20 + 10, y: Math.floor(cell / 5) * 20 + 10 });
+  const [p, q] = [at(a), at(b)];
+  // Run a little past the end cells so the stroke reads as a line, not a link.
+  const dx = Math.sign(q.x - p.x) * 7, dy = Math.sign(q.y - p.y) * 7;
+  return { x1: p.x - dx, y1: p.y - dy, x2: q.x + dx, y2: q.y + dy };
 }
 
-/** Return the set of number-values that sit in at least one completed line. */
-function lineCellNumbers(completedLines: number[], grid: number[]): Set<number> {
-  const s = new Set<number>();
-  for (const li of completedLines) {
-    if (LINES[li]) {
-      for (const idx of LINES[li]) s.add(grid[idx]);
+/** `view.grid` belongs to `sheet` (the viewer by default); without a grid the board shows the shared calls 1–25. */
+export function BingoBoard({ view, seat, names, players, sheet, disabled = false, onMove }: {
+  view: BingoView;
+  seat: Viewer;
+  names: [string, string];
+  players?: [AdapterPlayer, AdapterPlayer];
+  sheet?: Seat;
+  disabled?: boolean;
+  onMove?(number: number): void;
+}) {
+  const left: Seat = seat === "spectator" ? 0 : seat;
+  const right: Seat = left === 0 ? 1 : 0;
+  const owner = sheet ?? left;
+  const over = view.lines.some((n) => n >= 5);
+  const interactive = !disabled && !over && seat !== "spectator" && seat === view.turn && Boolean(onMove) && view.grid !== null;
+  const initials = playerInitials(names);
+  const tone = (s: Seat) => (s === left ? "text-you" : "text-opp");
+  const stroke = (s: Seat) => (s === left ? "rgb(var(--you))" : "rgb(var(--opp))");
+  const label = (s: Seat) => (s === seat ? "You" : names[s]);
+
+  const cells = view.grid ?? CALL_ORDER;
+  const callIndex = new Map(view.called.map((n, i) => [n, i]));
+  const latest = view.called[view.called.length - 1];
+  const struck = view.grid ? completedLines(view.grid, view.called) : [];
+
+  // Desktop keyboard play: arrows move an aim ring over the sheet, Enter or Space calls it.
+  const [aim, setAim] = useState(12);
+  const [keys, setKeys] = useState(false);
+  const [hover, setHover] = useState<number | null>(null);
+  const buttons = useRef<(HTMLButtonElement | null)[]>([]);
+  const preview = interactive ? (hover ?? (keys ? aim : null)) : null;
+
+  useHotkeys((e) => {
+    const step = STEP[e.key];
+    if (step) {
+      const col = aim % 5;
+      const next = !keys ? aim : (step === -1 && col === 0) || (step === 1 && col === 4) ? aim : Math.min(24, Math.max(0, aim + step));
+      setAim(next); setKeys(true);
+      if (document.activeElement && buttons.current.includes(document.activeElement as HTMLButtonElement)) buttons.current[next]?.focus();
+      return true;
     }
-  }
-  return s;
-}
+    if ((e.key === "Enter" || e.key === " ") && keys && !callIndex.has(cells[aim])) { onMove?.(cells[aim]); setKeys(false); return true; }
+    if (e.key === "Escape" && keys) { setKeys(false); return true; }
+    return false;
+  }, interactive);
 
-export function BingoBoard({
-  grid,
-  crossed,
-  completedLines,
-  lettersEarned,
-  callable,
-  onCall,
-  freshNumber,
-  tone = "you",
-  label,
-  className = "",
-}: BingoBoardProps) {
-  const crossedSet = new Set(crossed);
-  const lineNumbers = grid ? lineCellNumbers(completedLines, grid) : new Set<number>();
+  const status = over
+    ? view.lines[0] >= 5 && view.lines[1] >= 5 ? "BINGO for both on the same call" : `${label(view.lines[0] >= 5 ? 0 : 1)} called BINGO`
+    : interactive ? "Pick an open number to call"
+    : disabled ? "Sheet at this replay step"
+    : latest !== undefined ? `${label(callerOf(view.called.length - 1))} called ${latest}`
+    : `${names[view.turn]} calls first`;
 
   return (
-    <div
-      className={`w-full max-w-[390px] mx-auto rounded-2xl overflow-hidden border-2 border-line bg-sf shadow-float select-none ${className}`}
-      role="table"
-      aria-label={label ?? "BINGO Paper Table"}
-    >
-      {/* Table Header Row: B - I - N - G - O atop the 5 columns */}
-      <div
-        className="grid grid-cols-5 bg-line gap-[1px] border-b-2 border-line"
-        role="row"
-      >
-        {BINGO_LETTERS.map((letter, i) => {
-          const earned = i < lettersEarned;
-          return (
-            <div
-              key={letter}
-              role="columnheader"
-              className={[
-                "relative aspect-[1.3] sm:aspect-[1.4] flex items-center justify-center bg-sf-3",
-                "font-mono font-black text-lg sm:text-xl tracking-tight transition-colors duration-200",
-                earned ? "text-accent" : "text-ink-3/60",
-              ].join(" ")}
-              aria-label={`Letter ${letter}${earned ? ", crossed off" : ""}`}
-            >
-              <span className={earned ? "scale-105 transition-transform" : undefined}>
-                {letter}
+    <section className="mx-auto flex w-full max-w-[460px] flex-col gap-3" aria-label="BINGO board">
+      <div className="card flex items-center gap-2 !px-3.5 !py-3">
+        {([left, right] as const).map((s, i) => (
+          <Fragment key={s}>
+            {i === 1 && <span aria-hidden className="mono text-ink-3">–</span>}
+            <div className={`flex min-w-0 flex-1 items-center gap-2 ${i ? "flex-row-reverse text-right" : ""}`}>
+              {players
+                ? <Avatar3D id={players[s].id} bot={players[s].bot} size="sm" seat={s === left ? "you" : "opp"} className="!h-8 !w-8 !rounded-[10px]" />
+                : <span className={`mono grid h-7 w-7 flex-none place-items-center rounded-full text-[11px] font-semibold ${s === left ? "bg-you-soft" : "bg-opp-soft"} ${tone(s)}`} aria-hidden>{initials[s]}</span>}
+              <span className="min-w-0">
+                <b className="block truncate text-small font-semibold">{label(s)}</b>
+                <span className="eyebrow whitespace-nowrap">{!over && view.turn === s ? "To call" : "Lines"}</span>
               </span>
-
-              {/* Authentic pen slash through earned letter */}
-              {earned && (
-                <svg
-                  className="pointer-events-none absolute inset-0 w-full h-full p-2 animate-pop"
-                  viewBox="0 0 40 40"
-                  fill="none"
-                  aria-hidden
-                >
-                  <line
-                    x1="8"
-                    y1="32"
-                    x2="32"
-                    y2="8"
-                    stroke="rgb(var(--acc))"
-                    strokeWidth="3.6"
-                    strokeLinecap="round"
-                    className="drop-shadow-[0_0_6px_rgba(243,181,66,0.8)]"
-                  />
-                </svg>
-              )}
+              <span className={`mono flex text-[15px] font-semibold sm:text-[20px] ${i ? "mr-auto" : "ml-auto"}`} aria-label={`${Math.min(view.lines[s], 5)} of 5 letters`}>
+                {LETTERS.map((l, k) => <span key={l} className={k < view.lines[s] ? tone(s) : "text-ink-3/35"}>{l}</span>)}
+              </span>
             </div>
-          );
-        })}
+          </Fragment>
+        ))}
       </div>
 
-      {/* 5×5 Table Body: Contiguous cells divided by 1px crisp gridlines */}
-      <div className="relative grid grid-cols-5 bg-line gap-[1px]" role="rowgroup">
-        {grid ? (
-          grid.map((num, idx) => {
-            const isCrossed = crossedSet.has(num);
-            const isInLine = lineNumbers.has(num);
-            const isClickable = callable.includes(num);
-            const isFresh = freshNumber === num;
-
-            return (
-              <div
-                key={idx}
-                role="cell"
-                aria-rowindex={Math.floor(idx / GRID_SIZE) + 1}
-                aria-colindex={(idx % GRID_SIZE) + 1}
-              >
-                <BingoCell
-                  number={num}
-                  crossed={isCrossed}
-                  inLine={isInLine}
-                  clickable={isClickable}
-                  onClick={() => onCall?.(num)}
-                  fresh={isFresh}
-                />
-              </div>
-            );
-          })
-        ) : (
-          /* Spectator / Opponent view when numbers are secret */
-          Array.from({ length: GRID_SIZE * GRID_SIZE }).map((_, idx) => {
-            const isCrossed = idx < crossed.length;
-            return (
-              <div
-                key={idx}
-                className={[
-                  "relative aspect-square flex items-center justify-center bg-sf-2/70",
-                  isCrossed ? "text-accent" : "text-ink-3/40",
-                ].join(" ")}
-                aria-hidden
-              >
-                {isCrossed ? (
-                  <svg className="w-1/2 h-1/2 p-1" viewBox="0 0 24 24" fill="none">
-                    <line
-                      x1="4"
-                      y1="4"
-                      x2="20"
-                      y2="20"
-                      stroke={tone === "opp" ? "rgb(var(--opp))" : "rgb(var(--you))"}
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                    />
-                    <line
-                      x1="20"
-                      y1="4"
-                      x2="4"
-                      y2="20"
-                      stroke={tone === "opp" ? "rgb(var(--opp))" : "rgb(var(--you))"}
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                    />
+      <div className="rounded-board bg-sf p-2.5 shadow-edge sm:p-3.5">
+        {view.grid
+          ? <div className="mb-1.5 grid grid-cols-5 gap-1.5 sm:gap-2" aria-hidden>
+              {LETTERS.map((l, k) => (
+                <span key={l} className={`relative grid h-8 place-items-center mono text-[18px] font-semibold ${k < view.lines[owner] ? tone(owner) : "text-ink-3"}`}>
+                  {l}
+                  {k < view.lines[owner] && <svg viewBox="0 0 20 20" className="absolute h-6 w-6 animate-pop"><path d="M4 16 16 4" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /></svg>}
+                </span>
+              ))}
+            </div>
+          : <p className="eyebrow mb-2 text-center">Called so far · sheets stay private until the end</p>}
+        <div className="relative grid grid-cols-5 gap-1.5 sm:gap-2" role="group" aria-label={view.grid ? `${seat === owner ? "Your" : `${names[owner]}’s`} sheet, read left to right` : "Numbers called"}>
+          {cells.map((n, i) => {
+            const at = callIndex.get(n);
+            const called = at !== undefined;
+            const by = called ? callerOf(at) : null;
+            const last = n === latest;
+            const aimed = preview === i && !called;
+            const description = `${n}, ${called ? `called by ${names[by!]}` : "open"}${last ? ", latest call" : ""}`;
+            const cellClass = `relative flex aspect-square items-center justify-center rounded-[14px] transition-colors ${
+              called ? (by === left ? "bg-you-soft" : "bg-opp-soft") : "bg-sf-2"
+            } ${last ? "ring-2 ring-accent" : aimed ? "ring-2 ring-ink-3/60" : ""} ${!called && interactive ? "hover:bg-sf-3 active:scale-[.97]" : ""}`;
+            const content = (
+              <>
+                {called && (
+                  <svg viewBox="0 0 24 24" aria-hidden className={`pointer-events-none absolute inset-0 m-auto h-[70%] w-[70%] ${last ? "animate-pop" : ""}`}>
+                    <path d="M5 5 19 19M19 5 5 19" stroke={stroke(by!)} strokeOpacity=".45" strokeWidth="2" strokeLinecap="round" />
                   </svg>
-                ) : (
-                  <span className="font-mono text-[11px] opacity-40">·</span>
                 )}
-              </div>
+                <span className={`relative mono text-[17px] font-semibold sm:text-[19px] ${called ? "text-ink-2" : "text-ink"}`}>{n}</span>
+              </>
             );
-          })
-        )}
-
-        {/* SVG Strike Lines: Drawn across completed rows, columns, and diagonals */}
-        <svg
-          className="pointer-events-none absolute inset-0 w-full h-full z-10"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          aria-hidden
-        >
-          {completedLines.map((li) => {
-            if (li < 5) {
-              // Row line (0..4)
-              const y = (li + 0.5) * 20;
-              return (
-                <line
-                  key={`row-${li}`}
-                  x1="2"
-                  y1={y}
-                  x2="98"
-                  y2={y}
-                  stroke="rgb(var(--acc))"
-                  strokeWidth="3.2"
-                  strokeLinecap="round"
-                  className="drop-shadow-[0_0_8px_rgba(243,181,66,0.85)] animate-pop"
-                />
-              );
-            }
-            if (li < 10) {
-              // Column line (0..4)
-              const c = li - 5;
-              const x = (c + 0.5) * 20;
-              return (
-                <line
-                  key={`col-${c}`}
-                  x1={x}
-                  y1="2"
-                  x2={x}
-                  y2="98"
-                  stroke="rgb(var(--acc))"
-                  strokeWidth="3.2"
-                  strokeLinecap="round"
-                  className="drop-shadow-[0_0_8px_rgba(243,181,66,0.85)] animate-pop"
-                />
-              );
-            }
-            if (li === 10) {
-              // Main diagonal (top-left to bottom-right)
-              return (
-                <line
-                  key="diag-0"
-                  x1="2"
-                  y1="2"
-                  x2="98"
-                  y2="98"
-                  stroke="rgb(var(--acc))"
-                  strokeWidth="3.2"
-                  strokeLinecap="round"
-                  className="drop-shadow-[0_0_8px_rgba(243,181,66,0.85)] animate-pop"
-                />
-              );
-            }
-            if (li === 11) {
-              // Anti-diagonal (top-right to bottom-left)
-              return (
-                <line
-                  key="diag-1"
-                  x1="98"
-                  y1="2"
-                  x2="2"
-                  y2="98"
-                  stroke="rgb(var(--acc))"
-                  strokeWidth="3.2"
-                  strokeLinecap="round"
-                  className="drop-shadow-[0_0_8px_rgba(243,181,66,0.85)] animate-pop"
-                />
-              );
-            }
-            return null;
+            return onMove && view.grid && seat !== "spectator" ? (
+              <button
+                key={n}
+                ref={(el) => { buttons.current[i] = el; }}
+                type="button"
+                className={cellClass}
+                aria-label={description}
+                disabled={!interactive || called}
+                onClick={() => { setAim(i); setKeys(false); onMove(n); }}
+                onPointerEnter={(e) => e.pointerType === "mouse" && setHover(i)}
+                onPointerLeave={() => setHover(null)}
+                onFocus={() => setAim(i)}
+              >{content}</button>
+            ) : <div key={n} className={cellClass} role="img" aria-label={description}>{content}</div>;
           })}
-        </svg>
+          {struck.length > 0 && (
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
+              {struck.map((line) => <line key={line} {...strike(line)} stroke="rgb(var(--acc))" strokeWidth="4" strokeOpacity=".85" strokeLinecap="round" vectorEffect="non-scaling-stroke" />)}
+            </svg>
+          )}
+        </div>
       </div>
-    </div>
+
+      <p className="min-h-6 text-center text-small font-semibold text-ink-2" aria-live="polite">{status}</p>
+      <p className="text-center text-small text-ink-3">
+        <span className="mono">{view.called.length}/25</span> called
+        {interactive && <span className={`${KEY_HINT_CLASS} ml-2`}>· arrows aim, Enter calls</span>}
+      </p>
+    </section>
   );
 }
