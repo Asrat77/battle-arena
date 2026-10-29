@@ -24,6 +24,19 @@ export interface GameSummary {
   live: number;
 }
 
+/** One row of GET /api/live. */
+export interface LiveMatch {
+  matchId: string;
+  gameId: string;
+  gameName: string;
+  players: { profileId: string; name: string }[];
+  bot: boolean;
+  startedAt: number;
+  spectators: number;
+  room: string | null;
+  link: string;
+}
+
 export interface MatchSummary {
   matchId: string;
   gameId: string;
@@ -167,6 +180,7 @@ export const api = {
   me: (token: string) => request<Profile>("/api/me", { headers: { Authorization: `Bearer ${token}` } }),
   profile: (id: string) => request<Profile>(`/api/profiles/${id}`),
   games: () => request<GameSummary[]>("/api/games"),
+  live: () => request<LiveMatch[]>("/api/live"),
   matches: (player: string) => request<MatchSummary[]>(`/api/matches?player=${encodeURIComponent(player)}`),
   match: (id: string) => request<StoredMatch>(`/api/matches/${id}`),
   rewards: (id: string) => request<PlayerRewards>(`/api/profiles/${id}/rewards`),
