@@ -1,0 +1,7 @@
+{$WEB_HOST} {
+	reverse_proxy web:3000
+}
+
+{$API_HOST} {
+	reverse_proxy api:3001
+}

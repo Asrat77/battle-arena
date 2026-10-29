@@ -1,0 +1,34 @@
+# Single-host deploy (AWS EC2): Caddy terminates HTTPS, Next.js serves the UI,
+# the Node server handles REST + socket.io. Config comes from .env (see deploy/.env.example).
+services:
+  web:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_API_URL: https://${API_HOST}
+    command: npm run start -- -p 3000
+    restart: unless-stopped
+  api:
+    build: .
+    command: npm run server
+    restart: unless-stopped
+    environment:
+      PORT: 3001
+      FRONTEND_URL: https://${WEB_HOST}
+      LEDGER_PRIVATE_KEY: ${LEDGER_PRIVATE_KEY}
+      DATA_FILE: /data/db.json
+    volumes:
+      - arena-data:/data
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      WEB_HOST: ${WEB_HOST}
+      API_HOST: ${API_HOST}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+volumes:
+  arena-data:
+  caddy-data:
