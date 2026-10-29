@@ -41,6 +41,11 @@ export function useQueue(gameId: string) {
     setPhase((p) => (p.kind === "matched" ? p : { kind: "matched", matchId }));
   }, []);
 
+  // A late failure (a slow ack, a second join) never undoes a match already made.
+  const failed = useCallback((reason: string) => {
+    setPhase((p) => (p.kind === "matched" ? p : { kind: "error", reason }));
+  }, []);
+
   useEffect(() => {
     if (!socket || !connected) return;
     settled.current = false;
@@ -58,8 +63,8 @@ export function useQueue(gameId: string) {
 
     setStartedAt((t) => t ?? Date.now());
     socket.timeout(JOIN_TIMEOUT_MS).emit("queue:join", { gameId }, (err: Error | null, res: Ack) => {
-      if (err) return setPhase({ kind: "error", reason: "timeout" });
-      if (!res.ok) return setPhase({ kind: "error", reason: res.reason });
+      if (err) return failed("timeout");
+      if (!res.ok) return failed(res.reason);
       if (res.matchId) matched(res.matchId);
       else setPhase((p) => (p.kind === "matched" ? p : { kind: "waiting" }));
     });
@@ -70,22 +75,22 @@ export function useQueue(gameId: string) {
       socket.off("match:start", onStart);
       if (!settled.current && socket.connected) socket.emit("queue:leave");
     };
-  }, [socket, connected, gameId, attempt, matched]);
+  }, [socket, connected, gameId, attempt, matched, failed]);
 
   // No socket for a while counts as the server not answering.
   useEffect(() => {
     if (connected || phase.kind === "error" || phase.kind === "matched") return;
-    const t = setTimeout(() => setPhase({ kind: "error", reason: "timeout" }), JOIN_TIMEOUT_MS);
+    const t = setTimeout(() => failed("timeout"), JOIN_TIMEOUT_MS);
     return () => clearTimeout(t);
-  }, [connected, phase.kind]);
+  }, [connected, phase.kind, failed]);
 
   const acceptBot = useCallback(() => {
     socket?.timeout(JOIN_TIMEOUT_MS).emit("queue:acceptBot", (err: Error | null, res: Ack) => {
-      if (err) return setPhase({ kind: "error", reason: "timeout" });
-      if (!res.ok) return setPhase({ kind: "error", reason: res.reason });
+      if (err) return failed("timeout");
+      if (!res.ok) return failed(res.reason);
       if (res.matchId) matched(res.matchId);
     });
-  }, [socket, matched]);
+  }, [socket, matched, failed]);
 
   const cancel = useCallback(() => {
     settled.current = true;

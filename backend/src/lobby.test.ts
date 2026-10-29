@@ -115,9 +115,11 @@ describe("quick match", () => {
     assert.equal(startA.bot, false);
     await waitFor(a, "queue:status", (d) => d.state === "matched" && d.matchId === res.matchId);
 
-    // Matched players are out of the queue and cannot queue again mid-match.
+    // Matched players are out of the queue; joining again mid-match lands on that match.
     assert.equal((await getJson("/api/games")).body.find((g: any) => g.id === G).queue, 0);
-    assert.deepEqual(await send(a, "queue:join", { gameId: G }), { ok: false, reason: "already in a match" });
+    assert.deepEqual(await send(a, "queue:join", { gameId: G }), { ok: true, state: "matched", matchId: res.matchId });
+    assert.deepEqual(await send(a, "queue:join", { gameId: "gebeta" }), { ok: false, reason: "already in a match" });
+    assert.equal(matches.live().length, 1);
 
     // Nobody got a bot offer.
     clock.advance(BOT_OFFER_MS);
@@ -163,8 +165,42 @@ describe("quick match", () => {
     await send(a, "queue:join", { gameId: G });
     clock.advance(BOT_OFFER_MS);
     await waitFor(a, "queue:botOffer");
-    assert.equal((await send(b, "queue:join", { gameId: G })).state, "matched");
-    assert.deepEqual(await send(a, "queue:acceptBot"), { ok: false, reason: "not in a queue" });
+    const res = await send(b, "queue:join", { gameId: G });
+    assert.equal(res.state, "matched");
+    // Alice tapped "play the bot" a moment too late: she goes to Bob's match.
+    assert.deepEqual(await send(a, "queue:acceptBot"), { ok: true, state: "matched", matchId: res.matchId });
+    assert.equal(matches.live().length, 1);
+  });
+
+  test("a second join right after being paired returns the same match", async () => {
+    // React strict mode mounts the queue screen twice: join, leave, join.
+    const a = await client(alice.token);
+    const b = await client(bob.token);
+    await send(a, "queue:join", { gameId: G });
+    const first = send(b, "queue:join", { gameId: G });
+    b.socket.emit("queue:leave");
+    const second = send(b, "queue:join", { gameId: G });
+    const [r1, r2] = await Promise.all([first, second]);
+    assert.equal(r1.state, "matched");
+    assert.deepEqual(r2, { ok: true, state: "matched", matchId: r1.matchId });
+    await waitFor(b, "queue:status", (d) => d.state === "matched" && d.matchId === r1.matchId);
+    assert.equal(matches.live().length, 1);
+  });
+
+  test("a player paired while reconnecting finds the match on rejoin", async () => {
+    const a = await client(alice.token);
+    const a2 = await client(alice.token);
+    await send(a, "queue:join", { gameId: G });
+    // Alice's phone drops the old socket and comes back on a new one after Bob paired her.
+    a.socket.disconnect();
+    const b = await client(bob.token);
+    const res = await send(b, "queue:join", { gameId: G });
+    assert.equal(res.state, "matched");
+    a2.socket.disconnect();
+    await settle();
+    const a3 = await client(alice.token);
+    assert.deepEqual(await send(a3, "queue:join", { gameId: G }), { ok: true, state: "matched", matchId: res.matchId });
+    await waitFor(a3, "match:start", (d) => d.matchId === res.matchId);
   });
 
   test("leaving the queue removes you immediately and cancels the bot offer", async () => {
