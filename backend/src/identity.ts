@@ -3,6 +3,7 @@ import { secp256k1 } from "@noble/curves/secp256k1";
 import { keccak_256 } from "@noble/hashes/sha3";
 import { bytesToHex } from "@noble/hashes/utils";
 import { Router, type Response } from "express";
+import { isAvatar } from "../../engine/avatars";
 import { sha256Hex } from "../../engine/hash";
 import type { Store } from "./store";
 
@@ -10,6 +11,8 @@ export interface Profile {
   id: string; // EVM-style address, 0x + 40 hex
   name: string;
   createdAt: number;
+  /** Picked picture (engine/avatars); absent means the id-derived default. */
+  avatar?: string;
 }
 
 interface StoredProfile extends Profile {
@@ -70,8 +73,8 @@ function hashToken(token: string): string {
   return sha256Hex(token);
 }
 
-function toProfile({ id, name, createdAt }: StoredProfile): Profile {
-  return { id, name, createdAt };
+function toProfile({ id, name, createdAt, avatar }: StoredProfile): Profile {
+  return { id, name, createdAt, ...(avatar && { avatar }) };
 }
 
 export class Identity {
@@ -107,11 +110,17 @@ export class Identity {
     return stored ? toProfile(stored) : null;
   }
 
-  signup(rawName: unknown, credentials?: { username?: unknown; password?: unknown }): { profile: Profile; token: string } {
+  signup(
+    rawName: unknown,
+    credentials?: { username?: unknown; password?: unknown },
+    rawAvatar?: unknown,
+  ): { profile: Profile; token: string } {
     const name = typeof rawName === "string" ? rawName.trim() : "";
     if (!name || name.length > NAME_MAX) {
       throw new Error(`name must be 1 to ${NAME_MAX} characters`);
     }
+
+    if (rawAvatar != null && !isAvatar(rawAvatar)) throw new Error("unknown avatar");
 
     const creds =
       credentials?.username || credentials?.password ? parseCredentials(credentials.username, credentials.password) : null;
@@ -123,6 +132,7 @@ export class Identity {
       id: addressFromPublicKey(publicKey),
       name,
       createdAt: this.now(),
+      ...(rawAvatar != null && { avatar: rawAvatar as string }),
       publicKey: bytesToHex(publicKey),
       privateKey: bytesToHex(privateKey),
       ...(creds && {
@@ -148,6 +158,16 @@ export class Identity {
       username,
       passwordHash: hashPassword(password),
     };
+    this.store.write(PROFILES, profiles);
+    return toProfile(profiles[me.id]);
+  }
+
+  setAvatar(token: unknown, rawAvatar: unknown): Profile {
+    const me = this.byToken(token);
+    if (!me) throw new AuthError("invalid or missing session token", 401);
+    if (!isAvatar(rawAvatar)) throw new AuthError("unknown avatar");
+    const profiles = this.profiles();
+    profiles[me.id] = { ...profiles[me.id], avatar: rawAvatar };
     this.store.write(PROFILES, profiles);
     return toProfile(profiles[me.id]);
   }
@@ -211,7 +231,7 @@ export function identityRoutes(identity: Identity): Router {
 
   router.post("/api/signup", (req, res) => {
     try {
-      res.status(201).json(identity.signup(req.body?.name, req.body));
+      res.status(201).json(identity.signup(req.body?.name, req.body, req.body?.avatar));
     } catch (err) {
       fail(res, err);
     }
@@ -233,6 +253,15 @@ export function identityRoutes(identity: Identity): Router {
   router.post("/api/me/credentials", (req, res) => {
     try {
       const profile = identity.claim(bearerToken(req.headers.authorization), req.body?.username, req.body?.password);
+      res.json({ ...profile, ...identity.account(profile.id) });
+    } catch (err) {
+      fail(res, err);
+    }
+  });
+
+  router.put("/api/me/avatar", (req, res) => {
+    try {
+      const profile = identity.setAvatar(bearerToken(req.headers.authorization), req.body?.avatar);
       res.json({ ...profile, ...identity.account(profile.id) });
     } catch (err) {
       fail(res, err);

@@ -15,6 +15,8 @@ export interface Profile {
   id: string;
   name: string;
   createdAt: number;
+  /** Picked picture name (engine/avatars); absent means the default for the id. */
+  avatar?: string;
   /** Sign-in handle; only on your own profile (GET /api/me), null for a guest. */
   username?: string | null;
 }
@@ -183,8 +185,17 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  signup: (name: string, creds?: Credentials) =>
-    request<{ profile: Profile; token: string }>("/api/signup", { method: "POST", body: JSON.stringify({ name, ...creds }) }),
+  signup: (name: string, creds?: Credentials, avatar?: string) =>
+    request<{ profile: Profile; token: string }>("/api/signup", {
+      method: "POST",
+      body: JSON.stringify({ name, ...creds, avatar }),
+    }),
+  setAvatar: (token: string, avatar: string) =>
+    request<Profile>("/api/me/avatar", {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ avatar }),
+    }),
   login: (creds: Credentials) =>
     request<{ profile: Profile; token: string }>("/api/login", { method: "POST", body: JSON.stringify(creds) }),
   claim: (token: string, creds: Credentials) =>
