@@ -65,6 +65,39 @@ export interface RoomState {
   countdownMs: number | null;
 }
 
+export interface TournamentEntrant {
+  id: string;
+  name: string;
+  bot: boolean;
+  seed: number;
+}
+
+export interface BracketMatch {
+  /** Null until the feeding matches are decided. */
+  players: [TournamentEntrant | null, TournamentEntrant | null];
+  matchIds: string[];
+  /** The latest match for this slot (a rematch after a draw replaces it). */
+  matchId: string | null;
+  state: "pending" | "playing" | "done";
+  winner: TournamentEntrant | null;
+  decidedBy: "match" | "coin flip" | null;
+}
+
+/** A tournament, as GET /api/tournaments/:id and the tournament:update event send it. */
+export interface TournamentState {
+  id: string;
+  link: string;
+  gameId: string;
+  gameName: string;
+  host: string | null;
+  state: "open" | "running" | "finished";
+  size: number;
+  entrants: TournamentEntrant[];
+  rounds: { name: string; matches: BracketMatch[] }[];
+  champion: TournamentEntrant | null;
+  createdAt: number;
+}
+
 export interface Tally {
   rating: number;
   wins: number;
@@ -142,5 +175,8 @@ export const api = {
   badges: () => request<BadgeInfo[]>("/api/badges"),
   ledger: () => request<LedgerResponse>("/api/ledger"),
   matchRoom: (id: string) => request<{ code: string }>(`/api/matches/${id}/room`),
+  tournaments: (game?: string) =>
+    request<TournamentState[]>(`/api/tournaments${game ? `?game=${encodeURIComponent(game)}` : ""}`),
+  tournament: (id: string) => request<TournamentState>(`/api/tournaments/${encodeURIComponent(id)}`),
   room: (code: string) => request<RoomState>(`/api/rooms/${encodeURIComponent(code)}`),
 };
