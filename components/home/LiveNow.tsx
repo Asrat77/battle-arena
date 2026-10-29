@@ -15,7 +15,7 @@ const POLL_MS = 10_000;
 
 import { GAME_ICONS as ART } from "@/lib/gameCatalog";
 
-export function LiveNow() {
+export function LiveNow({ className = "" }: { className?: string }) {
   const [rows, setRows] = useState<LiveMatch[] | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
@@ -35,7 +35,7 @@ export function LiveNow() {
   }, []);
 
   return (
-    <section aria-labelledby="live-now" className="flex flex-col gap-2.5">
+    <section aria-labelledby="live-now" className={`flex flex-col gap-2.5 ${className}`}>
       <div className="flex items-center gap-2.5 px-0.5">
         <h2 id="live-now" className="text-h2">
           Live now
