@@ -13,7 +13,7 @@ import type { RoomState } from "@/lib/api";
 import { useSession } from "@/lib/session";
 
 const CREATE_TIMEOUT_MS = 8000;
-const GAME_ICONS: Record<string, "vault" | "mancala"> = { "crack-the-code": "vault", gebeta: "mancala" };
+import { GAME_ICONS } from "@/lib/gameCatalog";
 
 type Ack = { ok: true; room: RoomState } | { ok: false; reason: string };
 

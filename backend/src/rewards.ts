@@ -37,7 +37,7 @@ export const BADGES: Record<BadgeId, { name: string; description: string; art: s
   codebreaker: { name: "Codebreaker", description: "Win Crack the Code in 5 rounds or fewer", art: "🔓" },
   seedMaster: { name: "Seed Master", description: "Win Gebeta by 10 or more seeds", art: "🌱" },
   onARoll: { name: "On a Roll", description: "3 wins in a row against players", art: "🔥" },
-  explorer: { name: "Explorer", description: "Finish a match in every launch game", art: "🧭" },
+  explorer: { name: "Explorer", description: "Finish a match in every game", art: "🧭" },
   champion: { name: "Champion", description: "Win a tournament", art: "🏆" },
   watcher: { name: "Watcher", description: "Spectate 3 matches to the end", art: "👀" },
 };

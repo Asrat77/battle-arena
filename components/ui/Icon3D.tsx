@@ -13,7 +13,7 @@ export const ICONS = [
   "medalsilver", "notification", "openlock", "owl", "padlock", "parrot", "pebble", "pebble2",
   "plus", "podium", "popper", "profile", "refresh", "robot", "satellite", "share", "smile",
   "sprout", "stopwatch", "surprise", "swords", "target", "thumbs", "token", "trophy",
-  "unverified", "vault", "verified", "vs", "warning", "whiteflag", "xmark", "zebra",
+  "tic tac toe", "unverified", "vault", "verified", "vs", "warning", "whiteflag", "xmark", "zebra",
 ] as const;
 
 export type Icon3DName = (typeof ICONS)[number];

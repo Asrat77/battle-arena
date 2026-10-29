@@ -2,7 +2,7 @@
 
 Live 1v1 games in the browser where the server is the referee and every finished match is written to a signed, hash-chained ledger that anyone can check by replaying it.
 
-**The idea:** a game is just a rules file plus a board. Matchmaking, rooms, sync, spectating, replay, chat, rewards and the ledger are shared, so adding a game never touches them. Two games that look nothing alike run on it today.
+**The idea:** a game is just a rules file plus a board. Matchmaking, rooms, sync, spectating, replay, chat, rewards and the ledger are shared, so new games reuse the same infrastructure. Three games run on it today.
 
 ## Try it in five minutes (one person, one device)
 
@@ -11,19 +11,28 @@ Live 1v1 games in the browser where the server is the referee and every finished
 3. Play to the end. Both secret codes are revealed, and the match shows as *pending*, then *recorded*.
 4. Open the replay, step through it, and press **Verify**. The result hash, the committed secrets and the whole ledger chain are re-checked in your browser.
 5. Open your profile for the new points, the match history and any badges. The leaderboard is unchanged, because bot matches earn no rank.
-6. Play **Gebeta** the same way. With a second device or browser you can play a human, create a private room and share its link, or spectate with live chat.
+6. Play **Gebeta** or **Tic-Tac-Toe** the same way. With a second device or browser you can play a human, create a private room and share its link, or spectate with live chat.
 7. Open **Ledger** to see every block, its signature and the chain check.
 
 ## Approach and decisions
 
 ### Why a platform, not one game
 
-Spectating, replay, the result hash, rewards and the leaderboard all come from one thing: a match's ordered move log. So a game only has to define its rules (`engine/types.ts`): how to set up, which moves are legal, what a move does, when the match ends, and what each seat and a spectator may see. A new game is one file in `engine/games/` and one line in `engine/registry.ts`. The two launch games prove the point:
+Spectating, replay, the result hash, rewards and the leaderboard all come from one thing: a match's ordered move log. So a game only has to define its rules (`engine/types.ts`): how to set up, which moves are legal, what a move does, when the match ends, and what each seat and a spectator may see. A new game adds rules in `engine/games/`, a registry entry, a board adapter, display metadata in `lib/gameCatalog.ts`, and rules copy. The three games prove the point:
 
 | Game | Proves | Hidden information | Commitment |
 | --- | --- | --- | --- |
 | Crack the Code | simultaneous rounds, hidden secrets | each player's secret code | hash of secret + salt, revealed at the end |
 | Gebeta (mancala) | turn-based play, extra turns, captures | none | none |
+| Tic-Tac-Toe | three-board series, alternating openers, timed board transitions | none | none |
+
+### Tic-Tac-Toe
+
+A match is up to three 3×3 boards. Three in a row wins a board and earns one point. Drawn boards count toward the limit and award no points. A series ends early when the other player cannot catch up; otherwise the higher score after three boards wins, with equal scores drawing the match.
+
+Seat 0 opens the first board. Players alternate who opens and uses X; seat identities stay the same. Turns last 30 seconds; a timeout plays the first empty square in row order. Between boards, the finished grid stays visible for three seconds before the next board starts automatically. Moves and board transitions are logged, so the entire series can be replayed and verified. Leaving forfeits the whole series.
+
+The bot plays optimally 85% of the time and picks a weaker legal move when available the remaining 15%. Rewards and ratings apply once per series. Explorer now requires finishing all three games; existing badges are retained. Tournaments reuse the shared drawn-match policy (two rematches, then a seeded coin flip).
 
 ### Why a rewrite
 
@@ -31,7 +40,7 @@ This started as a Crack the Code prototype that trusted the browser: both secret
 
 ### What the ledger does and does not do
 
-Each match produces two kinds of ledger blocks:
+Matches produce result blocks, plus commit blocks for games with hidden information:
 
 - a **commit** block before play, holding the hash of each hidden secret plus a salt;
 - a **result** block after play, holding the match ID, winner, timestamp and `resultHash`, which is the sha256 of the match's canonical JSON (players, seed, full move log, outcome).
@@ -68,7 +77,7 @@ Grid games are close to configurations of a single rules file, which is the firs
 
 ## What's in it
 
-- **Games**: Crack the Code and Gebeta, each with a bot so you can play alone.
+- **Games**: Crack the Code, Gebeta and Tic-Tac-Toe, each with a bot so you can play alone.
 - **Play**: quick match with bot fallback, private rooms with invite links, spectating with room chat and reactions, rematches.
 - **Profiles**: wallet-free signup, points, badges, a leaderboard and token rewards, plus friends and presence.
 - **Tournaments**: 4-player single elimination, created by the server with bots filling empty seats.

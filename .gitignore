@@ -4,6 +4,8 @@ node_modules/
 out/
 build/
 coverage/
+output/playwright/
+.playwright-cli/
 *.tsbuildinfo
 next-env.d.ts
 

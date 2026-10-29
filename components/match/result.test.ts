@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { CtcView } from "@/engine/games/crackTheCode";
 import type { GebetaView } from "@/engine/games/gebeta";
+import { ticTacToe } from "@/engine/games/ticTacToe";
 import { resultSummary, type ResultInput } from "./result";
 
 const ctcView = (exact: number): CtcView => ({
@@ -103,4 +104,21 @@ test("spectators get a neutral result", () => {
   assert.equal(r.kind, "watched");
   assert.equal(r.eyebrow, "Final · Gebeta");
   assert.equal(r.headline, "Abebe out-seeded Hana");
+});
+
+test("Tic-Tac-Toe results show series scores, draws, spectators and forfeits", () => {
+  const input: ResultInput = {
+    gameId: "tic-tac-toe", gameName: "Tic-Tac-Toe", outcome: { winner: 0, draw: false, reason: "most boards won" },
+    view: { ...ticTacToe.setup({ seed: "x" }), scores: [2, 0], history: [{}, {}] },
+    reveal: {}, seat: 0, names: ["Alice", "Bob"], bots: [false, false],
+  };
+  const won = resultSummary(input);
+  assert.equal(won.headline, "You win the series");
+  assert.deepEqual(won.score, [2, 0]);
+  assert.equal(won.detail, "2 boards played · 2–0 in board wins");
+  assert.equal(resultSummary({ ...input, seat: "spectator" }).headline, "Alice wins the series");
+  assert.equal(resultSummary({ ...input, outcome: { winner: null, draw: true, reason: "series draw" } }).headline, "Series drawn");
+  const forfeit = resultSummary({ ...input, outcome: { winner: 1, draw: false, reason: "forfeit" } });
+  assert.equal(forfeit.headline, "You forfeited");
+  assert.deepEqual(forfeit.score, [2, 0], "forfeiting can override an unfinished series score");
 });

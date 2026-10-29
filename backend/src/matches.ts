@@ -224,13 +224,14 @@ export class MatchRuntime extends EventEmitter {
 
   private append(m: Match, entry: LogEntry) {
     if (m.cur.outcome) return;
+    const previousDeadlineMs = m.game.deadlineMs(m.cur.state);
     m.cur = step(m.game, m.seed, m.cur, entry, m.log.length);
     m.log.push(entry);
-    this.advanced(m, false);
+    this.advanced(m, false, previousDeadlineMs);
   }
 
   /** After the state changed: push views, then end or re-arm timers and the bot. */
-  private advanced(m: Match, first: boolean) {
+  private advanced(m: Match, first: boolean, previousDeadlineMs?: number | null) {
     const { state, outcome } = m.cur;
     const prev = m.active;
     m.active = outcome ? [] : m.game.activeSeats(state);
@@ -243,7 +244,8 @@ export class MatchRuntime extends EventEmitter {
 
     // Keep the running deadline while a simultaneous phase only loses seats
     // (one player has moved, the other still has the same time left).
-    const shrinking = !first && m.active.length < prev.length && m.active.every((s) => prev.includes(s));
+    const shrinking = !first && m.active.length > 0 && m.active.length < prev.length &&
+      m.active.every((s) => prev.includes(s)) && previousDeadlineMs === m.game.deadlineMs(state);
     if (!shrinking) {
       m.timers.deadline?.cancel();
       m.timers.deadline = undefined;

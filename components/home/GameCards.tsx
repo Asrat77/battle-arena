@@ -1,28 +1,19 @@
 "use client";
 
-// The two game cards on Home. Quick match goes to the queue screen, the key
+// The game cards on Home. Quick match goes to the queue screen, the key
 // opens a private room, and Rules opens the How to play sheet. Queue and live
 // counts poll /api/games; the cards render straight away and the counts fill in.
 
 import { useCallback, useEffect, useState } from "react";
 import { Button, ButtonLink } from "@/components/ui/Button";
-import { Icon3D, type Icon3DName } from "@/components/ui/Icon3D";
-import type { GameId } from "@/components/match/adapter";
+import { Icon3D } from "@/components/ui/Icon3D";
+import { GAME_CATALOG, type GameId } from "@/lib/gameCatalog";
 import { api, type GameSummary } from "@/lib/api";
 import { RulesSheet } from "./RulesSheet";
 
 const POLL_MS = 5000;
 
-const GAMES: { id: GameId; name: string; kicker: string; blurb: string; art: Icon3DName }[] = [
-  {
-    id: "crack-the-code",
-    name: "Crack the Code",
-    kicker: "Logic · 1v1",
-    blurb: "Guess their 4-digit code before they guess yours.",
-    art: "vault",
-  },
-  { id: "gebeta", name: "Gebeta", kicker: "Ethiopian mancala", blurb: "Sow, capture, out-seed them.", art: "mancala" },
-];
+const GAMES = GAME_CATALOG;
 
 export function GameCards() {
   const [counts, setCounts] = useState<Record<string, GameSummary> | null>(null);
@@ -88,7 +79,7 @@ function GameCard({
       className="relative flex flex-col gap-3 overflow-hidden rounded-game bg-sf p-4 md:min-h-[300px] md:gap-3.5 md:rounded-[32px] md:p-[22px] [.light_&]:shadow-[0_0_0_1px_rgb(var(--ln))]"
     >
       <Icon3D
-        name={game.art}
+        name={game.id === "tic-tac-toe" ? "tic tac toe" : game.art}
         size={210}
         className="pointer-events-none absolute -right-3.5 -top-2.5 h-[150px] w-[150px] drop-shadow-[0_16px_24px_rgba(0,0,0,.5)] md:-right-5 md:-top-4 md:h-[210px] md:w-[210px]"
       />

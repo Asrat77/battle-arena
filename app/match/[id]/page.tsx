@@ -14,7 +14,7 @@ import { useSession } from "@/lib/session";
 import { useMatch, type MatchEnd, type MatchStart, type MatchViewMsg } from "@/lib/useMatch";
 import { usePlayerNames } from "@/lib/usePlayerNames";
 
-const GAME_ICONS = { "crack-the-code": "vault", gebeta: "mancala" } as const;
+import { GAME_ICONS } from "@/lib/gameCatalog";
 
 export default function MatchPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -129,6 +129,7 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
             players={players}
             commit={commit}
             error={error}
+            deadline={view.deadline}
           />
         ) : (
           <pre className="card mono overflow-x-auto whitespace-pre-wrap p-4 text-[13px]">{JSON.stringify(view.view, null, 2)}</pre>
