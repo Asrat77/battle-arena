@@ -79,7 +79,7 @@ function GameCard({
       className="relative flex flex-col gap-3 overflow-hidden rounded-game bg-sf p-4 md:min-h-[300px] md:gap-3.5 md:rounded-[32px] md:p-[22px] [.light_&]:shadow-[0_0_0_1px_rgb(var(--ln))]"
     >
       <Icon3D
-        name={game.id === "tic-tac-toe" ? "tic tac toe" : game.art}
+        name={game.art}
         size={210}
         className="pointer-events-none absolute -right-3.5 -top-2.5 h-[150px] w-[150px] drop-shadow-[0_16px_24px_rgba(0,0,0,.5)] md:-right-5 md:-top-4 md:h-[210px] md:w-[210px]"
       />

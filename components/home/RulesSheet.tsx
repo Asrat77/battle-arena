@@ -9,12 +9,13 @@ import { Sheet } from "@/components/ui/Overlay";
 import type { GameAdapter, GameId } from "@/components/match/adapter";
 import { rulesText as gebetaRules } from "@/engine/games/gebeta";
 import { rules as ticTacToeRules } from "@/engine/games/ticTacToe";
+import { GAME_ICONS } from "@/lib/gameCatalog";
 
 export type Rules = GameAdapter<unknown, unknown>["rules"] & { subtitle: string };
 
 export const RULES: Record<GameId, Rules> = {
   "tic-tac-toe": {
-    title: "How to play Tic-Tac-Toe", subtitle: "3×3 grid · up to three boards · 30 seconds a turn", art: "keypad", lines: ticTacToeRules,
+    title: "How to play Tic-Tac-Toe", subtitle: "3×3 grid · up to three boards · 30 seconds a turn", art: GAME_ICONS["tic-tac-toe"], lines: ticTacToeRules,
   },
   "crack-the-code": {
     title: "How to play Crack the Code",

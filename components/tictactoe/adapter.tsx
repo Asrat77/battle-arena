@@ -5,6 +5,7 @@ import type { GameAdapter, ReplayStepProps } from "@/components/match/adapter";
 import { useTimeLeft } from "@/components/match/TurnTimer";
 import { markFor, PAUSE_MS, rules, ticTacToe, TURN_MS, type TicTacToeMove, type TicTacToeView } from "@/engine/games/ticTacToe";
 import { replay } from "@/engine/replay";
+import { GAME_ICONS } from "@/lib/gameCatalog";
 import { TicTacToeBoard } from "./TicTacToeBoard";
 
 const LiveBoard: GameAdapter<TicTacToeView, TicTacToeMove>["Board"] = ({ view, seat, names, onMove, disabled, deadline, error }) => {
@@ -28,7 +29,7 @@ function ReplayStep({ log, step, seed, names }: ReplayStepProps) {
 }
 
 export const ticTacToeAdapter: GameAdapter<TicTacToeView, TicTacToeMove> = {
-  id: "tic-tac-toe", icon: "keypad", Board: LiveBoard, ReplayStep,
+  id: "tic-tac-toe", icon: GAME_ICONS["tic-tac-toe"], Board: LiveBoard, ReplayStep,
   status(view, seat, names) {
     if (view.phase === "finished") return "Match over";
     if (view.phase === "pause") {
@@ -40,5 +41,5 @@ export const ticTacToeAdapter: GameAdapter<TicTacToeView, TicTacToeMove> = {
   seatState: (view, seat) => `${markFor(view.round, seat)} · ${view.phase === "pause" ? "Next board" : view.turn === seat ? "Thinking" : "Waiting"}`,
   timer: (view) => ({ total: view.phase === "pause" ? PAUSE_MS : TURN_MS, owner: view.phase === "pause" ? "both" : view.turn }),
   describeMove: (move) => `marks row ${Math.floor(move.cell / 3) + 1}, column ${move.cell % 3 + 1}`,
-  rules: { title: "Tic-Tac-Toe", art: "keypad", lines: rules }, hasHiddenInfo: false,
+  rules: { title: "Tic-Tac-Toe", art: GAME_ICONS["tic-tac-toe"], lines: rules }, hasHiddenInfo: false,
 };
