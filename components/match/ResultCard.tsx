@@ -86,9 +86,11 @@ export function ResultCard({
               className={`card flex flex-col gap-1 p-3.5 ${i === 0 ? "shadow-[inset_0_0_0_1.5px_rgb(var(--you))]" : "shadow-[inset_0_0_0_1.5px_rgb(var(--opp))]"}`}
             >
               <span className="text-small text-ink-2">{seats[s].label === "You" ? "Your secret" : `${seats[s].name}’s`}</span>
-              <span className={`mono text-[26px] font-semibold tracking-[.1em] ${i === 0 ? "text-you" : "text-opp"}`}>
-                {result.secrets![s] ?? "None"}
-              </span>
+              {result.secrets![s] ? (
+                <span className={`mono text-[26px] font-semibold tracking-[.1em] ${i === 0 ? "text-you" : "text-opp"}`}>{result.secrets![s]}</span>
+              ) : (
+                <span className="text-small text-ink-3">Not set</span>
+              )}
             </div>
           ))}
         </div>
@@ -108,7 +110,7 @@ export function ResultCard({
         <Icon3D name="blockchain" size={36} />
         <span className="flex min-w-0 flex-1 flex-col">
           <b className="text-small font-semibold">Ledger record</b>
-          <span className="text-small text-ink-2">Gameplay never waits for this</span>
+          <span className="text-small text-ink-2 max-sm:hidden">Gameplay never waits for this</span>
         </span>
         <span aria-live="polite" className="flex-none" data-testid="record-chip">
           <RecordChip state={ledgerIndex === null ? "pending" : "recorded"} block={ledgerIndex} long />

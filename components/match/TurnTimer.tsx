@@ -25,13 +25,16 @@ function clock(secs: number): string {
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
 }
 
-export function TurnTimer({ deadline }: { deadline: number | null }) {
+export function TurnTimer({ deadline, over = false }: { deadline: number | null; over?: boolean }) {
   const left = useTimeLeft(deadline);
   const secs = left === null ? null : Math.ceil(left / 1000);
   const urgent = secs !== null && secs <= URGENT_SECONDS;
 
   // Hold the announcement at the last threshold crossed: 10, then 5.
   const announce = secs === null || secs > URGENT_SECONDS ? "" : secs > 5 ? "10 seconds left" : "5 seconds left";
+
+  // Keep the column's width so the seats don't jump when the match ends.
+  if (over) return <span className="inline-flex h-9 w-[84px] flex-none items-center justify-center text-small font-semibold text-ink-3">Final</span>;
 
   return (
     <span
