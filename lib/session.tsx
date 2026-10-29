@@ -5,6 +5,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { io, type Socket } from "socket.io-client";
+import { rememberAvatar } from "./avatars";
 import { api, API_URL, ApiError, type Credentials, type Profile } from "./api";
 
 const TOKEN_KEY = "arena.token";
@@ -15,11 +16,13 @@ interface Session {
   profile: Profile | null;
   socket: Socket | null;
   connected: boolean;
-  signup(name: string, creds?: Credentials): Promise<void>;
+  signup(name: string, creds?: Credentials, avatar?: string): Promise<void>;
   /** Sign in to an account made on this or another device. */
   signIn(creds: Credentials): Promise<void>;
   /** Give a guest profile a username and password. */
   claim(creds: Credentials): Promise<void>;
+  /** Change your profile picture. */
+  setAvatar(avatar: string): Promise<void>;
   signOut(): void;
 }
 
@@ -59,6 +62,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       .me(stored)
       .then((p) => {
         setToken(stored);
+        rememberAvatar(p.id, p.avatar);
         setProfile(p);
       })
       .catch((err) => {
@@ -83,11 +87,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const start = (res: { profile: Profile; token: string }, username: string | null) => {
     writeToken(res.token);
     setToken(res.token);
+    rememberAvatar(res.profile.id, res.profile.avatar);
     setProfile({ ...res.profile, username });
   };
 
-  const signup = useCallback(async (name: string, creds?: Credentials) => {
-    start(await api.signup(name, creds), creds?.username.trim().toLowerCase() ?? null);
+  const signup = useCallback(async (name: string, creds?: Credentials, avatar?: string) => {
+    start(await api.signup(name, creds, avatar), creds?.username.trim().toLowerCase() ?? null);
   }, []);
 
   const signIn = useCallback(async (creds: Credentials) => {
@@ -97,6 +102,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const claim = useCallback(
     async (creds: Credentials) => {
       if (token) setProfile(await api.claim(token, creds));
+    },
+    [token],
+  );
+
+  const setAvatar = useCallback(
+    async (avatar: string) => {
+      if (!token) return;
+      const updated = await api.setAvatar(token, avatar);
+      rememberAvatar(updated.id, updated.avatar);
+      setProfile((p) => (p ? { ...p, avatar: updated.avatar } : p));
     },
     [token],
   );
@@ -119,6 +134,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         signup,
         signIn,
         claim,
+        setAvatar,
         signOut,
       }}
     >

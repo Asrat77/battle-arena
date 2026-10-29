@@ -111,3 +111,19 @@ test("usernames are unique and validated; logout revokes the token", () => {
   identity.logout(a.token);
   assert.equal(identity.byToken(a.token), null);
 });
+
+test("avatar can be chosen at signup and changed later, only to known pictures", () => {
+  const identity = new Identity(new MemoryStore());
+  const plain = identity.signup("Abebe");
+  assert.equal(plain.profile.avatar, undefined);
+  assert.throws(() => identity.signup("Sara", undefined, "dragon"));
+
+  const { profile, token } = identity.signup("Sara", undefined, "owl");
+  assert.equal(profile.avatar, "owl");
+  assert.equal(identity.get(profile.id)?.avatar, "owl");
+
+  assert.equal(identity.setAvatar(token, "zebra").avatar, "zebra");
+  assert.equal(identity.byToken(token)?.avatar, "zebra");
+  assert.throws(() => identity.setAvatar(token, "robot"));
+  assert.throws(() => identity.setAvatar("bad-token", "lion"));
+});

@@ -12,6 +12,8 @@ import { GebetaPreview } from "./GebetaPreview";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { AvatarPicker } from "@/components/ui/AvatarPicker";
+import type { AvatarName } from "@/engine/avatars";
 
 const NAME_MAX = 20;
 
@@ -27,6 +29,7 @@ export function Signup() {
   const toast = useToast();
   const [name, setName] = useState("");
   const [mode, setMode] = useState<"new" | "signin">("new");
+  const [avatar, setAvatar] = useState<AvatarName | null>(null);
   // Optional on signup: a username and password make the profile survive sign-out.
   const [secure, setSecure] = useState(false);
   const [username, setUsername] = useState("");
@@ -68,7 +71,7 @@ export function Signup() {
         });
         return;
       }
-      await signup(trimmed, secure ? { username, password } : undefined);
+      await signup(trimmed, secure ? { username, password } : undefined, avatar ?? undefined);
       toast.show({
         icon: "idcard",
         body: (
@@ -163,6 +166,10 @@ export function Signup() {
             )}
             {mode === "new" && (
               <>
+                <div className="flex flex-col gap-2">
+                  <span className="text-small font-semibold text-ink-2">Pick a picture (optional)</span>
+                  <AvatarPicker value={avatar} onChange={setAvatar} />
+                </div>
                 <label className="flex items-center gap-2.5 text-small text-ink-2">
                   <input type="checkbox" checked={secure} onChange={(e) => setSecure(e.target.checked)} />
                   Save my account with a password, so I can sign in on any device
