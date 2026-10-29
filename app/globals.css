@@ -105,6 +105,9 @@
   .btn-act {
     @apply bg-action text-action-ink;
   }
+  .btn-act:disabled {
+    @apply bg-sf-3 text-ink-3 opacity-100;
+  }
   .btn-sec {
     @apply bg-sf-2 text-ink;
   }
@@ -121,6 +124,17 @@
   .btn:not(.btn-sec, .btn-ghost, .btn-bad) {
     @apply bg-action text-action-ink;
   }
+  .btn:not(.btn-sec, .btn-ghost, .btn-bad):disabled {
+    @apply bg-sf-3 text-ink-3 opacity-100;
+  }
+  @media (hover: hover) {
+    .btn-sec:hover:not(:disabled) {
+      @apply bg-sf-3;
+    }
+    .btn-ghost:hover:not(:disabled) {
+      @apply text-ink;
+    }
+  }
   .btn-outline {
     @apply btn btn-sec btn-sm;
   }
@@ -134,6 +148,9 @@
 
   .chip {
     @apply inline-flex h-7 flex-none items-center gap-1.5 whitespace-nowrap rounded-chip bg-sf-2 px-[11px] text-[12.5px] font-semibold text-ink-2 no-underline;
+  }
+  button.chip {
+    @apply transition-transform duration-100 active:scale-[.97];
   }
 
   .input {

@@ -112,10 +112,10 @@ function Toast({ toast, onDismiss }: { toast: ToastItem; onDismiss: () => void }
       <button
         type="button"
         aria-label="Dismiss"
-        className="flex h-8 w-8 flex-none items-center justify-center rounded-[10px]"
+        className="flex h-9 w-9 flex-none items-center justify-center rounded-[10px] text-base leading-none text-ink-3"
         onClick={onDismiss}
       >
-        <Icon3D name="xmark" size={16} />
+        <span aria-hidden>✕</span>
       </button>
     </div>
   );
