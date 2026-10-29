@@ -21,20 +21,6 @@ const config: Config = {
         recorded: { DEFAULT: v("rec"), soft: "var(--rec-s)" },
         mismatch: { DEFAULT: v("bad"), soft: "var(--bad-s)" },
         walnut: { 300: "#5A3622", 500: "#3B2316", 700: "#2A180E", pit: "#120A05" },
-        // Bridge for the pre-redesign screens, which still use gray-*: map it
-        // onto the ink/line tokens so they stay legible in both themes. Drop
-        // once every screen is rebuilt.
-        gray: {
-          50: v("bg"),
-          100: v("ln"),
-          200: v("ln"),
-          300: v("sf3"),
-          400: v("ink3"),
-          500: v("ink2"),
-          600: v("ink2"),
-          700: v("ink"),
-          900: v("ink"),
-        },
       },
       fontFamily: {
         sans: ["var(--font-geist-sans)", "system-ui", "-apple-system", "sans-serif"],
