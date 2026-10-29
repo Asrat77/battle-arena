@@ -58,7 +58,7 @@ export function TicTacToeBoard({ view, seat, names, disabled = false, onMove, co
       </div>
       <p className="min-h-6 text-center text-small font-semibold text-ink-2" aria-live="polite">
         {view.phase === "pause" ? `${boardEnd} · next board${countdown != null ? ` in ${countdown}s` : " shortly"}` : boardEnd ??
-          (disabled ? "Board at this replay step" : interactive ? `Place your ${markFor(view.round, view.turn)}` : `${names[view.turn]} is playing ${markFor(view.round, view.turn)}`)}
+          (disabled ? "Board at this replay step" : null)}
       </p>
       {view.history.length > 0 && <div className="flex flex-wrap justify-center gap-1.5" aria-label="Completed boards">
         {view.history.map((r, i) => <span key={i} className="chip !text-[11px]">{i + 1} · {r.winner === null ? "Draw" : `${label(r.winner)} ${r.winner === seat ? "win" : "wins"}`}</span>)}

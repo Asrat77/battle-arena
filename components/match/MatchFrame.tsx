@@ -98,7 +98,7 @@ export function MatchFrame({
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
           <PlayerSeat {...you} side="you" />
-          <TurnTimer deadline={clock} />
+          <TurnTimer deadline={clock} over={over} />
           <PlayerSeat {...opp} side="opp" align="right" />
         </div>
         <TurnBar deadline={clock} total={total} />

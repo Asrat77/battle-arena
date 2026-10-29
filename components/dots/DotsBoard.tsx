@@ -149,7 +149,7 @@ export function DotsBoard({ view, seat, names, players, disabled = false, onMove
           })}
         </div>
       </div>
-      <p className="min-h-6 text-center text-small font-semibold text-ink-2" aria-live="polite">{status}</p>
+      {disabled && <p className="min-h-6 text-center text-small font-semibold text-ink-2" aria-live="polite">{status}</p>}
       <p className="text-center text-small text-ink-3">
         <span className="mono">{view.moves}/60</span> lines · <span className="mono">{view.scores[0] + view.scores[1]}/25</span> boxes
         {interactive && <span className={`${KEY_HINT_CLASS} ml-2`}>· arrows aim, Enter draws</span>}
