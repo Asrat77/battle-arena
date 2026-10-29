@@ -86,7 +86,7 @@ export function IconButton({
     <button
       type="button"
       aria-label={label}
-      className={`relative inline-flex h-11 w-11 flex-none items-center justify-center rounded-[14px] bg-sf ${className}`}
+      className={`relative inline-flex h-11 w-11 flex-none items-center justify-center rounded-[14px] bg-sf transition-transform duration-100 active:scale-[.97] ${className}`}
       {...rest}
     >
       <Icon3D name={icon} size={28} />

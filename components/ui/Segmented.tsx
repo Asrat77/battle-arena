@@ -1,7 +1,7 @@
 // Segmented control (leaderboard Overall / Code / Gebeta, profile tabs).
 
 import { Icon3D, type Icon3DName } from "./Icon3D";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export function Segmented<T extends string>({
   options,
@@ -15,6 +15,17 @@ export function Segmented<T extends string>({
   label: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
+  const [fade, setFade] = useState(false);
+  // Fade the right edge while more options are hidden off-screen.
+  const measure = useCallback(() => {
+    const el = container.current;
+    if (el) setFade(el.scrollWidth - el.clientWidth - el.scrollLeft > 2);
+  }, []);
+  useEffect(() => {
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [measure, options.length]);
   useEffect(() => {
     const el = container.current;
     const selected = el?.querySelector<HTMLElement>('[aria-checked="true"]');
@@ -22,9 +33,13 @@ export function Segmented<T extends string>({
     const outer = el.getBoundingClientRect(), inner = selected.getBoundingClientRect();
     if (inner.left < outer.left) el.scrollLeft -= outer.left - inner.left;
     else if (inner.right > outer.right) el.scrollLeft += inner.right - outer.right;
-  }, [value]);
+    measure();
+  }, [value, measure]);
   return (
-    <div ref={container} role="radiogroup" aria-label={label} className="flex gap-1 overflow-x-auto rounded-2xl bg-sf-2 p-1">
+    <div ref={container} role="radiogroup" aria-label={label} onScroll={measure}
+      className="flex gap-1 overflow-x-auto rounded-2xl bg-sf-2 p-1"
+      style={fade ? { maskImage: "linear-gradient(to right, #000 85%, transparent)" } : undefined}
+    >
       {options.map((o) => {
         const on = o.value === value;
         return (
