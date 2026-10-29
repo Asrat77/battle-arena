@@ -10,6 +10,7 @@ import { rulesText, TURN_MS, type GebetaMove, type GebetaState, type GebetaView 
 import { getGame } from "@/engine/registry";
 import { initial, step } from "@/engine/replay";
 import type { GameDef, Seat } from "@/engine/types";
+import { useHotkeys } from "@/lib/useHotkeys";
 import { GebetaBoard } from "./GebetaBoard";
 import { boardHint, gebetaStatus, legalFor } from "./status";
 import { useSowing } from "./useSowing";
@@ -24,6 +25,13 @@ const LiveBoard: GameAdapter<GebetaView, GebetaMove>["Board"] = ({ view, seat, o
   const legal = disabled || frame ? [] : legalFor(view, me);
   const left = useTimeLeft(legal.length > 0 ? deadline : null);
   const auto = left !== null && left <= AUTO_WARN_MS ? legal[0] : null;
+  // Number keys 1-6 play your pits in the order they're drawn; Space or Enter skips the sowing.
+  useHotkeys((e) => {
+    if (frame && (e.key === " " || e.key === "Enter")) skip();
+    else if (/^[1-6]$/.test(e.key) && legal.includes(Number(e.key) - 1)) onMove({ pit: Number(e.key) - 1 });
+    else return false;
+    return true;
+  }, !spectating && !disabled);
   const mover = moment?.mover;
   const callout =
     moment &&
