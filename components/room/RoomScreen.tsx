@@ -4,7 +4,8 @@
 // seats with Ready toggles. Once both are ready the server counts 3-2-1 (either
 // player can un-ready to stop it) and starts the match; a short versus moment
 // plays and the match screen takes over. Signed out, the link lands on signup
-// and joins once you have a name.
+// and joins once you have a name. A third visitor finds the room full and can
+// watch the match from there once it starts.
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -16,7 +17,7 @@ import { Chip } from "@/components/ui/Chip";
 import { Icon3D, type Icon3DName } from "@/components/ui/Icon3D";
 import { Dialog } from "@/components/ui/Overlay";
 import { useToast } from "@/components/ui/Toast";
-import type { RoomState } from "@/lib/api";
+import { api, type RoomState } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { InviteSheet, useFriends } from "./InviteSheet";
 import { RoomChat } from "./RoomChat";
@@ -29,11 +30,6 @@ const REASONS: Record<string, { icon: Icon3DName; title: string; body: string; r
     icon: "magnifier",
     title: "No room with that code",
     body: "It may have closed when everyone left. Check the letters with whoever sent it.",
-  },
-  "room is full": {
-    icon: "padlock",
-    title: "Room full",
-    body: "Two players are already sitting in this room.",
   },
   timeout: {
     icon: "satellite",
@@ -69,6 +65,8 @@ function Room({ code, me }: { code: string; me: string }) {
     const t = setTimeout(() => router.push(`/match/${matchId}`), MATCHED_HOLD_MS);
     return () => clearTimeout(t);
   }, [matchId, router]);
+
+  if (phase.kind === "error" && phase.reason === "room is full") return <FullRoom code={code} />;
 
   if (phase.kind === "error") {
     const r = REASONS[phase.reason] ?? { icon: "warning", title: "Couldn’t join the room", body: phase.reason, retry: true };
@@ -245,6 +243,60 @@ function Room({ code, me }: { code: string; me: string }) {
       >
         {them ? `Your seat opens up and ${theirName} stays in the room.` : "The code stops working once you leave."}
       </Dialog>
+    </Frame>
+  );
+}
+
+const WATCH_POLL_MS = 3000;
+
+/** Both seats taken: offer to watch, polling until their match has started. */
+function FullRoom({ code }: { code: string }) {
+  const [matchId, setMatchId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const check = () =>
+      api.room(code).then(
+        (r) => alive && setMatchId(r.matchId),
+        () => {},
+      );
+    check();
+    const t = setInterval(check, WATCH_POLL_MS);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [code]);
+
+  return (
+    <Frame>
+      <div className="flex flex-1 flex-col items-center justify-center gap-6 p-6 text-center" role="alert">
+        <div className="plate flex h-[170px] w-[170px] items-center justify-center rounded-[56px]">
+          <Icon3D name={matchId ? "binoculars" : "padlock"} size={120} />
+        </div>
+        <div className="flex flex-col items-center gap-2">
+          <h1 className="text-h2">{matchId ? "Room full, watch instead?" : "Room full"}</h1>
+          <p className="max-w-[300px] text-ink-2">
+            {matchId
+              ? "Two players are already playing here. You can watch live and chat with them."
+              : "Two players are already sitting here. You can watch once their match starts."}
+          </p>
+        </div>
+        <div className="flex w-full max-w-[360px] flex-col gap-2">
+          {matchId ? (
+            <ButtonLink href={`/match/${matchId}`} variant="act" block icon="binoculars">
+              Watch the match
+            </ButtonLink>
+          ) : (
+            <ButtonLink href="/r" variant="act" block icon="key">
+              Enter another code
+            </ButtonLink>
+          )}
+          <ButtonLink href="/" variant="ghost" block>
+            Back home
+          </ButtonLink>
+        </div>
+      </div>
     </Frame>
   );
 }
