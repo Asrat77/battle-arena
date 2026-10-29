@@ -13,6 +13,7 @@ import { useInviteToasts } from "@/components/room/useInviteToasts";
 import { Icon3D } from "@/components/ui/Icon3D";
 import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { useFriends } from "@/lib/useFriends";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { activeTab, BARE_ON_MOBILE, hasDock, TABS } from "./nav";
 
@@ -114,16 +115,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-interface Presence {
-  profileId: string;
-  status: string;
-}
-
 /** Points for the pill and friends online for the dot, kept live over the socket. */
 function useShellCounts() {
   const { profile, socket } = useSession();
   const [points, setPoints] = useState<number | null>(null);
-  const [online, setOnline] = useState(0);
+  const online = (useFriends() ?? []).filter((f) => f.status !== "offline").length;
 
   useEffect(() => {
     if (!profile) {
@@ -144,31 +140,6 @@ function useShellCounts() {
       socket?.off("notify", onNotify);
     };
   }, [profile, socket]);
-
-  useEffect(() => {
-    if (!socket) {
-      setOnline(0);
-      return;
-    }
-    const status = new Map<string, string>();
-    const count = () => setOnline([...status.values()].filter((s) => s !== "offline").length);
-    const onFriends = (p: { friends?: Presence[] }) => {
-      status.clear();
-      for (const f of p?.friends ?? []) status.set(f.profileId, f.status);
-      count();
-    };
-    const onPresence = (f: Presence) => {
-      if (!status.has(f.profileId)) return;
-      status.set(f.profileId, f.status);
-      count();
-    };
-    socket.on("friends", onFriends);
-    socket.on("presence", onPresence);
-    return () => {
-      socket.off("friends", onFriends);
-      socket.off("presence", onPresence);
-    };
-  }, [socket]);
 
   return { points, online };
 }
