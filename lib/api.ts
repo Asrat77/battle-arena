@@ -15,6 +15,13 @@ export interface Profile {
   id: string;
   name: string;
   createdAt: number;
+  /** Sign-in handle; only on your own profile (GET /api/me), null for a guest. */
+  username?: string | null;
+}
+
+export interface Credentials {
+  username: string;
+  password: string;
 }
 
 export interface GameSummary {
@@ -176,7 +183,17 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  signup: (name: string) => request<{ profile: Profile; token: string }>("/api/signup", { method: "POST", body: JSON.stringify({ name }) }),
+  signup: (name: string, creds?: Credentials) =>
+    request<{ profile: Profile; token: string }>("/api/signup", { method: "POST", body: JSON.stringify({ name, ...creds }) }),
+  login: (creds: Credentials) =>
+    request<{ profile: Profile; token: string }>("/api/login", { method: "POST", body: JSON.stringify(creds) }),
+  claim: (token: string, creds: Credentials) =>
+    request<Profile>("/api/me/credentials", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(creds),
+    }),
+  logout: (token: string) => request<void>("/api/logout", { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
   me: (token: string) => request<Profile>("/api/me", { headers: { Authorization: `Bearer ${token}` } }),
   profile: (id: string) => request<Profile>(`/api/profiles/${id}`),
   games: () => request<GameSummary[]>("/api/games"),
