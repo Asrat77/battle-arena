@@ -39,7 +39,8 @@ export function nextEdge(edges: readonly Edge[], from: number, dir: Dir): number
     if (along <= 0.5) return;
     // Left and right stay in the row; up and down take the nearest row first.
     const horizontal = dir === "left" || dir === "right";
-    const score = horizontal ? across * 1000 + along : along * 1000 + across;
+    if (horizontal && across > 0.5) return;
+    const score = horizontal ? along : along * 1000 + across;
     if (score < bestScore) { bestScore = score; best = i; }
   });
   return best;
