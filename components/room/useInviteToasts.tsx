@@ -1,13 +1,19 @@
 "use client";
 
 // A friend's room invite (`notify {kind: "invite"}` from backend/src/social.ts)
-// shows as a toast with Join, wherever you are in the app.
+// shows as a toast with Join, wherever you are in the app. Friend requests and
+// accepted requests get a toast that opens the Friends page.
 
 import { useEffect } from "react";
 import { useToast } from "@/components/ui/Toast";
 import { useSession } from "@/lib/session";
 
 const INVITE_TOAST_MS = 20_000;
+
+interface Person {
+  profileId: string;
+  name: string | null;
+}
 
 interface Invite {
   kind: "invite";
@@ -24,6 +30,25 @@ export function useInviteToasts() {
   useEffect(() => {
     if (!socket) return;
     const onNotify = (n: { kind?: string }) => {
+      if (n?.kind === "friendRequest" || n?.kind === "friendAccepted") {
+        const who = n.kind === "friendRequest" ? (n as { from: Person }).from : (n as unknown as Person);
+        toast.show({
+          avatar: { id: who.profileId },
+          body:
+            n.kind === "friendRequest" ? (
+              <>
+                <b>{who.name ?? "Someone"}</b> sent you a friend request
+              </>
+            ) : (
+              <>
+                <b>{who.name ?? "Someone"}</b> accepted your friend request
+              </>
+            ),
+          action: { label: n.kind === "friendRequest" ? "Review" : "View", href: "/friends", primary: true },
+          duration: INVITE_TOAST_MS,
+        });
+        return;
+      }
       if (n?.kind !== "invite") return;
       const inv = n as Invite;
       toast.show({

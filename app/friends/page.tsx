@@ -1,8 +1,8 @@
 "use client";
 
-// Friends: add by profile ID, see who is online, watch a friend who is in a
-// match, remove via a Dialog. Inviting happens from a room (InviteSheet), so
-// the list points at "Start a room".
+// Friends: send a request by username or profile ID, answer incoming requests,
+// see who is online, watch a friend who is in a match, remove via a Dialog.
+// Inviting happens from a room (InviteSheet), so the list points at "Start a room".
 
 import { useState } from "react";
 import { Avatar3D } from "@/components/ui/Avatar3D";
@@ -21,7 +21,8 @@ const ORDER = { online: 0, "in-match": 1, offline: 2 };
 export default function FriendsPage() {
   const { profile } = useSession();
   const toast = useToast();
-  const { friends, add, remove } = useFriendsList();
+  const { friends, requests, request, accept, decline, cancel, remove } = useFriendsList();
+  const [working, setWorking] = useState<string | null>(null);
   const [id, setId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -39,7 +40,7 @@ export default function FriendsPage() {
           </ButtonLink>
         }
       >
-        Pick a name first, then add friends by their profile ID.
+        Pick a name first, then send friend requests.
       </EmptyState>
     );
   }
@@ -47,13 +48,24 @@ export default function FriendsPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const target = id.trim().toLowerCase();
-    if (!target) return setError("Paste a friend’s profile ID.");
+    if (!target) return setError("Type a friend’s username or paste their profile ID.");
     setAdding(true);
     setError(null);
-    const err = await add(target);
+    const res = await request(target);
     setAdding(false);
-    if (err) return setError(err);
+    if ("error" in res) return setError(res.error);
     setId("");
+    toast.show({
+      icon: "check",
+      body: res.status === "accepted" ? "You’re now friends." : "Request sent. They’ll see it next time they’re on.",
+    });
+  };
+
+  const answer = async (id: string, action: (id: string) => Promise<string | null>) => {
+    setWorking(id);
+    const err = await action(id);
+    setWorking(null);
+    if (err) toast.show({ icon: "warning", tone: "warn", body: err });
   };
 
   const confirmRemove = async () => {
@@ -83,8 +95,8 @@ export default function FriendsPage() {
 
       <form onSubmit={submit} className="flex flex-col gap-3 rounded-card bg-sf p-4" noValidate>
         <Field
-          label="Add a friend by profile ID"
-          placeholder="Paste their profile ID"
+          label="Send a friend request"
+          placeholder="Username or profile ID"
           value={id}
           onChange={(e) => {
             setId(e.target.value);
@@ -102,7 +114,7 @@ export default function FriendsPage() {
         />
         <div className="flex gap-2">
           <Button type="submit" variant="act" icon="plus" loading={adding}>
-            Add friend
+            Send request
           </Button>
           <Button onClick={copyId} icon="link">
             Copy my ID
@@ -110,13 +122,50 @@ export default function FriendsPage() {
         </div>
       </form>
 
+      {requests.incoming.length > 0 && (
+        <section aria-label="Friend requests">
+          <span className="eyebrow">Requests · {requests.incoming.length}</span>
+          <ul>
+            {requests.incoming.map((r) => (
+              <li key={r.profileId} className="flex items-center gap-3 border-t border-line py-3">
+                <Avatar3D id={r.profileId} />
+                <b className="min-w-0 flex-1 truncate font-semibold">{r.name ?? "Player"}</b>
+                <Button size="sm" onClick={() => answer(r.profileId, decline)} disabled={working === r.profileId}>
+                  Decline
+                </Button>
+                <Button size="sm" variant="act" onClick={() => answer(r.profileId, accept)} loading={working === r.profileId}>
+                  Accept
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {requests.outgoing.length > 0 && (
+        <section aria-label="Sent requests">
+          <span className="eyebrow">Waiting for an answer · {requests.outgoing.length}</span>
+          <ul>
+            {requests.outgoing.map((r) => (
+              <li key={r.profileId} className="flex items-center gap-3 border-t border-line py-3">
+                <Avatar3D id={r.profileId} />
+                <b className="min-w-0 flex-1 truncate font-semibold">{r.name ?? "Player"}</b>
+                <Button size="sm" onClick={() => answer(r.profileId, cancel)} loading={working === r.profileId}>
+                  Cancel
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {friends === null ? (
         <div className="flex justify-center py-8" role="status">
           <span className="spin h-6 w-6 text-ink-2" aria-label="Loading friends" />
         </div>
       ) : friends.length === 0 ? (
         <EmptyState icon="handshake" title="No friends yet">
-          Add a friend by their profile ID. Then you can see when they’re online and invite them to a room.
+          Send a friend request by username or profile ID. Once they accept, you can see when they’re online and invite them to a room.
         </EmptyState>
       ) : (
         <section aria-label="Your friends">
@@ -169,7 +218,7 @@ export default function FriendsPage() {
           </>
         }
       >
-        You won’t see when they’re online. You can add them again by ID.
+        They’ll be removed from your list too. You can send a new request any time.
       </Dialog>
     </div>
   );
