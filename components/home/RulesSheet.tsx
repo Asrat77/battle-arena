@@ -7,19 +7,25 @@ import { Button } from "@/components/ui/Button";
 import { Icon3D } from "@/components/ui/Icon3D";
 import { Sheet } from "@/components/ui/Overlay";
 import type { GameAdapter, GameId } from "@/components/match/adapter";
-import { rulesText as bingoRules } from "@/engine/games/bingo";
 import { rulesText as gebetaRules } from "@/engine/games/gebeta";
+import { rules as ticTacToeRules } from "@/engine/games/ticTacToe";
+import { GAME_ICONS } from "@/lib/gameCatalog";
+import { rules as dotsRules } from "@/engine/games/dotsAndBoxes";
 
 export type Rules = GameAdapter<unknown, unknown>["rules"] & { subtitle: string };
 
 export const RULES: Record<GameId, Rules> = {
+  "dots-and-boxes": { title: "How to play Dots and Boxes", subtitle: "6×6 dots · 25 boxes · 30 seconds a turn", art: GAME_ICONS["dots-and-boxes"], lines: dotsRules },
+  "tic-tac-toe": {
+    title: "How to play Tic-Tac-Toe", subtitle: "3×3 grid · up to three boards · 30 seconds a turn", art: GAME_ICONS["tic-tac-toe"], lines: ticTacToeRules,
+  },
   "crack-the-code": {
     title: "How to play Crack the Code",
     subtitle: "4-digit codes · both guess at once · 30 rounds",
     art: "vault",
     lines: [
       "Set your secret: 4 different digits, 1–9. It stays hidden until the end. You have 60 s to lock it in.",
-      "Each round you both guess the other's code at the same time, 45 s a round.",
+      "Each round you both guess the other’s code at the same time, 45 s a round.",
       "The meter shows how many digits are in the right spot (saffron) and how many more are in the code (grey).",
       "Crack their code first to win. Both in the same round, or no one by round 30, is a draw.",
     ],
@@ -30,12 +36,6 @@ export const RULES: Record<GameId, Rules> = {
     art: "mancala",
     // Split the engine's own rules so the copy can't drift from the referee.
     lines: gebetaRules.split(/(?<=\.)\s+/).slice(1),
-  },
-  bingo: {
-    title: "How to play BINGO",
-    subtitle: "Private 5×25 grids · shared calls · first to 5 lines",
-    art: "target",
-    lines: bingoRules.split(/(?<=\.)\s+/),
   },
 };
 

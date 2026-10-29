@@ -6,14 +6,14 @@ import type { CSSProperties } from "react";
 
 export const ICONS = [
   "bean", "binoculars", "blockchain", "boxing", "brokenheart", "chat", "check", "cheetah",
-  "clap", "coffeecup", "compass", "confetti", "controller", "crown", "elephant", "envelope",
+  "clap", "coffeecup", "compass", "confetti", "connect_the_dots", "controller", "crown", "elephant", "envelope",
   "err404", "fennec", "flame", "friends", "gelada", "gift", "giraffe", "handshake",
   "hedgehog", "hippo", "hourglass", "ibex", "idcard", "key", "keypad", "lightning", "link",
   "lion", "lockpick", "magnifier", "mancala", "manual", "medalbronze", "medalgold",
   "medalsilver", "notification", "openlock", "owl", "padlock", "parrot", "pebble", "pebble2",
   "plus", "podium", "popper", "profile", "refresh", "robot", "satellite", "share", "smile",
   "sprout", "stopwatch", "surprise", "swords", "target", "thumbs", "token", "trophy",
-  "unverified", "vault", "verified", "vs", "warning", "whiteflag", "xmark", "zebra",
+  "tic tac toe", "unverified", "vault", "verified", "vs", "warning", "whiteflag", "xmark", "zebra",
 ] as const;
 
 export type Icon3DName = (typeof ICONS)[number];

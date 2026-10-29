@@ -145,7 +145,7 @@ describe("spectating", () => {
       { profileId: bob.id, name: "Bob" },
     ]);
     assert.equal(row.spectators, 1);
-    assert.equal(row.link, `/watch/${m.id}`);
+    assert.equal(row.link, `/match/${m.id}`);
     assert.equal(row.room, null);
     const other = await (await fetch(`${url}/api/live?game=${crackTheCode.id}`)).json();
     assert.ok(!other.some((r: any) => r.matchId === m.id));

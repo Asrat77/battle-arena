@@ -4,6 +4,8 @@
 import type { Icon3DName } from "@/components/ui/Icon3D";
 import type { CtcView } from "@/engine/games/crackTheCode";
 import type { GebetaView } from "@/engine/games/gebeta";
+import type { TicTacToeView } from "@/engine/games/ticTacToe";
+import type { DotsView } from "@/engine/games/dotsAndBoxes";
 import type { Outcome, Seat, Viewer } from "@/engine/types";
 
 export type ResultKind = "win" | "loss" | "draw" | "watched";
@@ -71,12 +73,19 @@ export function resultSummary(r: ResultInput): ResultSummary {
 
   if (r.gameId === "crack-the-code") return { ...base, ...ctcWords(r, who) };
   if (r.gameId === "gebeta") return { ...base, ...gebetaWords(r, who, whom) };
+  if (r.gameId === "tic-tac-toe") {
+    const v = r.view as TicTacToeView;
+    return { ...base, headline: outcome.draw ? "Series drawn" : `${who(winner!)} ${winner === seat ? "win" : "wins"} the series`,
+      detail: `${v.history.length} boards played · ${v.scores[0]}–${v.scores[1]} in board wins` };
+  }
 
   if (outcome.draw) return { ...base, headline: "Dead even", detail: outcome.reason };
   return { ...base, headline: `${who(winner!)} ${winner === seat ? "win" : "wins"}`, detail: outcome.reason };
 }
 
 function gameFacts(r: ResultInput): Pick<ResultSummary, "score" | "secrets"> {
+  if (r.gameId === "dots-and-boxes") return { score: [...(r.view as DotsView).scores] };
+  if (r.gameId === "tic-tac-toe") return { score: [...(r.view as TicTacToeView).scores] };
   if (r.gameId === "gebeta") {
     const v = r.view as GebetaView | null;
     return v?.stores ? { score: [v.stores[0], v.stores[1]] } : {};

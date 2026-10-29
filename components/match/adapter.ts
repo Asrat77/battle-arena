@@ -5,7 +5,8 @@ import type { FC } from "react";
 import type { LogEntry, Seat, Viewer } from "@/engine/types";
 import type { Icon3DName } from "@/components/ui/Icon3D";
 
-export type GameId = "crack-the-code" | "gebeta" | "bingo";
+import type { GameId } from "@/lib/gameCatalog";
+export type { GameId } from "@/lib/gameCatalog";
 
 export interface TurnClock {
   /** Epoch ms when the current turn times out. Left out when the view does
@@ -60,6 +61,8 @@ export interface GameAdapter<View, Move> {
     players?: [AdapterPlayer, AdapterPlayer];
     commit?: MatchCommit | null;
     error?: MoveError | null;
+    /** Server deadline, also used for between-board countdowns. */
+    deadline?: number | null;
   }>;
   /** One plain sentence for the aria-live status line, e.g. "Your turn". */
   status(view: View, seat: Viewer, names: [string, string]): string;

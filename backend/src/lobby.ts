@@ -124,7 +124,7 @@ export class Lobby {
         startedAt: m.startedAt,
         spectators: this.matches.spectators(m).length,
         room: this.roomOfMatch(m.id)?.code ?? null,
-        link: `/watch/${m.id}`,
+        link: `/match/${m.id}`,
       }));
   }
 

@@ -1,16 +1,18 @@
 // The game adapters MatchFrame knows about, keyed by game id. A game without
 // an entry here falls back to the page's plain rendering.
 
-import { BingoAdapter } from "@/components/bingo/adapter";
 import { ctcAdapter } from "@/components/ctc/adapter";
 import { GebetaAdapter } from "@/components/gebeta/adapter";
+import { ticTacToeAdapter } from "@/components/tictactoe/adapter";
+import { dotsAdapter } from "@/components/dots/adapter";
 import type { GameAdapter, GameId } from "./adapter";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const adapters: Partial<Record<GameId, GameAdapter<any, any>>> = {
   "crack-the-code": ctcAdapter,
   gebeta: GebetaAdapter,
-  bingo: BingoAdapter,
+  "tic-tac-toe": ticTacToeAdapter,
+  "dots-and-boxes": dotsAdapter,
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -8,12 +8,12 @@ import { Avatar3D } from "@/components/ui/Avatar3D";
 import { ButtonLink } from "@/components/ui/Button";
 import { BotTag, LiveChip } from "@/components/ui/Chip";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Icon3D, type Icon3DName } from "@/components/ui/Icon3D";
+import { Icon3D } from "@/components/ui/Icon3D";
 import { api, type LiveMatch } from "@/lib/api";
 
 const POLL_MS = 10_000;
 
-const ART: Record<string, Icon3DName> = { "crack-the-code": "vault", gebeta: "mancala" };
+import { GAME_ICONS as ART } from "@/lib/gameCatalog";
 
 export function LiveNow() {
   const [rows, setRows] = useState<LiveMatch[] | null>(null);

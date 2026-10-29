@@ -8,6 +8,11 @@ import { CodeSlots } from "@/components/ctc/CodeSlots";
 import { Keypad } from "@/components/ctc/Keypad";
 import { Meter, meterText } from "@/components/ctc/Meter";
 import { GebetaBoard } from "@/components/gebeta/GebetaBoard";
+import { TicTacToeBoard } from "@/components/tictactoe/TicTacToeBoard";
+import { DotsBoard } from "@/components/dots/DotsBoard";
+import { dotsAndBoxes } from "@/engine/games/dotsAndBoxes";
+import { ticTacToe } from "@/engine/games/ticTacToe";
+import { GAME_OPTIONS } from "@/lib/gameCatalog";
 import { Avatar3D } from "@/components/ui/Avatar3D";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -40,6 +45,7 @@ export default function KitPage() {
   const [seg, setSeg] = useState("overall");
   const [code, setCode] = useState("47");
   const [locked, setLocked] = useState<string | null>(null);
+  const [ticBoard, setTicBoard] = useState(() => ticTacToe.setup({ seed: "kit" }));
 
   return (
     <div className="relative flex flex-col gap-6">
@@ -199,8 +205,7 @@ export default function KitPage() {
             onChange={setSeg}
             options={[
               { value: "overall", label: "Overall" },
-              { value: "code", label: "Code" },
-              { value: "gebeta", label: "Gebeta" },
+              ...GAME_OPTIONS,
             ]}
           />
         </Spec>
@@ -263,6 +268,17 @@ export default function KitPage() {
         <ResultStates />
       </Spec>
 
+      <Spec title="Tic-Tac-Toe board">
+        <p className="text-small text-ink-2">Play either seat to preview the board. Series scores, alternate X/O and completed lines use the live game rules.</p>
+        <TicTacToeBoard view={ticBoard} seat={ticBoard.turn} names={["Abebe", "Hana"]} onMove={(cell) => setTicBoard((s) => ticTacToe.apply(s, s.turn, { cell }))} />
+        {ticBoard.phase !== "playing" && <Button onClick={() => setTicBoard((s) => s.phase === "finished" ? ticTacToe.setup({ seed: "kit" }) : ticTacToe.onTimeout(s, { next: () => 0, int: () => 0, pick: (items) => items[0] }))}>
+          {ticBoard.phase === "finished" ? "New series" : "Next board"}
+        </Button>}
+      </Spec>
+
+      <Spec title="Dots and Boxes board">
+        <DotsBoard view={dotsAndBoxes.setup({ seed: "kit" })} seat="spectator" names={["Abebe", "Hana"]} disabled />
+      </Spec>
       <Spec title="Gebeta board">
         <p className="text-small text-ink-2">
           Stands up under 640 px, lies flat above. Glowing pits are legal; tap one to fire <span className="mono">onPick</span>.

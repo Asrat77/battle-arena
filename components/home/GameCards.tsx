@@ -1,35 +1,19 @@
 "use client";
 
-// The two game cards on Home. Quick match goes to the queue screen, the key
+// The game cards on Home. Quick match goes to the queue screen, the key
 // opens a private room, and Rules opens the How to play sheet. Queue and live
 // counts poll /api/games; the cards render straight away and the counts fill in.
 
 import { useCallback, useEffect, useState } from "react";
 import { Button, ButtonLink } from "@/components/ui/Button";
-import { Icon3D, type Icon3DName } from "@/components/ui/Icon3D";
-import type { GameId } from "@/components/match/adapter";
+import { Icon3D } from "@/components/ui/Icon3D";
+import { GAME_CATALOG, type GameId } from "@/lib/gameCatalog";
 import { api, type GameSummary } from "@/lib/api";
 import { RulesSheet } from "./RulesSheet";
 
 const POLL_MS = 5000;
 
-const GAMES: { id: GameId; name: string; kicker: string; blurb: string; art: Icon3DName }[] = [
-  {
-    id: "crack-the-code",
-    name: "Crack the Code",
-    kicker: "Logic · 1v1",
-    blurb: "Guess their 4-digit code before they guess yours.",
-    art: "vault",
-  },
-  { id: "gebeta", name: "Gebeta", kicker: "Ethiopian mancala", blurb: "Sow, capture, out-seed them.", art: "mancala" },
-  {
-    id: "bingo",
-    name: "BINGO",
-    kicker: "Paper game · 1v1",
-    blurb: "Fill your private 5×5 grid, call numbers, slash B-I-N-G-O first.",
-    art: "target",
-  },
-];
+const GAMES = GAME_CATALOG;
 
 export function GameCards() {
   const [counts, setCounts] = useState<Record<string, GameSummary> | null>(null);

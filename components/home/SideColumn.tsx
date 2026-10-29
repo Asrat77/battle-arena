@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import { Avatar3D } from "@/components/ui/Avatar3D";
 import { Button } from "@/components/ui/Button";
 import { RecordChip } from "@/components/ui/Chip";
-import { Icon3D, type Icon3DName } from "@/components/ui/Icon3D";
+import { Icon3D } from "@/components/ui/Icon3D";
 import { useToast } from "@/components/ui/Toast";
 import { getGame } from "@/engine/registry";
 import { api, type MatchSummary, type Profile } from "@/lib/api";
@@ -18,7 +18,7 @@ import { shortId, usePlayerNames } from "@/lib/usePlayerNames";
 
 const RECENT = 5;
 
-const GAME_ART: Record<string, Icon3DName> = { "crack-the-code": "vault", gebeta: "mancala" };
+import { GAME_ICONS as GAME_ART } from "@/lib/gameCatalog";
 
 type Result = "Won" | "Lost" | "Draw";
 

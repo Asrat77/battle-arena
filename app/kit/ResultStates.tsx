@@ -10,6 +10,7 @@ import { Segmented } from "@/components/ui/Segmented";
 import type { CtcView } from "@/engine/games/crackTheCode";
 import type { GebetaView } from "@/engine/games/gebeta";
 import type { Seat } from "@/engine/types";
+import { ticTacToe } from "@/engine/games/ticTacToe";
 
 const gebetaView: GebetaView = {
   pits: [
@@ -35,6 +36,13 @@ const ctcView = (round: number, exact: number): CtcView => ({
 });
 
 const SAMPLES: Record<string, { input: ResultInput; ledger: number | null }> = {
+  tic: {
+    input: {
+      gameId: "tic-tac-toe", gameName: "Tic-Tac-Toe", outcome: { winner: 0, draw: false, reason: "most boards won" },
+      reveal: {}, view: { ...ticTacToe.setup({ seed: "kit" }), phase: "finished", round: 2, scores: [2, 0], history: [{}, {}] },
+      seat: 0, names: ["Abebe", "Hana"], bots: [false, false],
+    }, ledger: 91,
+  },
   win: {
     input: {
       gameId: "gebeta",
@@ -128,6 +136,7 @@ export function ResultStates() {
           { value: "draw", label: "Draw" },
           { value: "forfeit", label: "Forfeit" },
           { value: "watch", label: "Watching" },
+          { value: "tic", label: "Tic-Tac-Toe" },
         ]}
       />
       <div className="relative mx-auto w-full max-w-[390px] overflow-hidden rounded-sheet bg-bg px-3.5">

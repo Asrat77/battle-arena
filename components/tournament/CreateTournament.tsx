@@ -50,7 +50,7 @@ export function CreateTournament({ open, onClose, defaultGame }: { open: boolean
           <span className="flex flex-col">
             <b className="font-semibold">Fill with bots</b>
             <span className="text-small text-ink-2">
-              {bots ? "Starts right away: you play three rounds of bots." : "Waits for three more players to join."}
+              {bots ? "Starts right away, with bots filling the three open seats." : "Waits for three more players to join."}
             </span>
           </span>
         </label>
