@@ -22,7 +22,7 @@ export default function Home() {
             <h1 className="text-[30px] font-semibold leading-[1.02] tracking-[-.045em] md:text-[clamp(34px,4.4vw,56px)]">
               Pick a game, {profile.name}.
             </h1>
-            <p className="hidden text-[17px] text-ink-2 md:block [@media(min-width:1024px)_and_(max-height:780px)]:hidden">
+            <p className="text-small text-ink-2 md:text-[17px] [@media(min-width:1024px)_and_(max-height:780px)]:hidden">
               Quick match finds someone in seconds. Nobody around? A bot is offered after 10.
             </p>
             <Link href="/r" className="chip mt-1 w-fit hover:text-ink">

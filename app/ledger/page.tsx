@@ -121,19 +121,21 @@ export default function LedgerPage() {
       <header className="flex items-center gap-3">
         <Icon3D name="blockchain" size={56} />
         <div className="min-w-0 flex-1">
-          <h1 className="text-[30px] font-semibold leading-tight tracking-[-.04em]">Ledger</h1>
+          <h1 className="text-h2">Ledger</h1>
           <p className="text-small text-ink-2">Every result, badge and token, in order</p>
         </div>
-        <div className="flex flex-col items-end gap-1">
-          {ledger.pending > 0 ? (
-            <Chip tone="pend" spin>
-              {ledger.pending} pending
-            </Chip>
-          ) : (
-            <Chip>All sealed</Chip>
-          )}
-          <span className="mono text-[11px] text-ink-3">{blocks.length} blocks</span>
-        </div>
+        {blocks.length > 0 && (
+          <div className="flex flex-col items-end gap-1">
+            {ledger.pending > 0 ? (
+              <Chip tone="pend" spin>
+                {ledger.pending} pending
+              </Chip>
+            ) : (
+              <Chip>All sealed</Chip>
+            )}
+            <span className="mono text-[11px] text-ink-3">{blocks.length} blocks</span>
+          </div>
+        )}
       </header>
 
       {failed && (
@@ -142,7 +144,7 @@ export default function LedgerPage() {
         </p>
       )}
 
-      <ChainCheck blocks={blocks} publicKey={ledger.publicKey} onResult={setCheck} onOpen={setOpen} />
+      {blocks.length > 0 && <ChainCheck blocks={blocks} publicKey={ledger.publicKey} onResult={setCheck} onOpen={setOpen} />}
 
       {blocks.length === 0 ? (
         <EmptyState

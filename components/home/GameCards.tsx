@@ -80,7 +80,6 @@ function GameCard({
   count?: GameSummary;
   onRules: () => void;
 }) {
-  const quiet = count?.queue === 0;
   return (
     <section
       aria-labelledby={`game-${game.id}`}
@@ -122,12 +121,6 @@ function GameCard({
           <span className="hidden md:inline">Private room</span>
         </ButtonLink>
       </div>
-      {quiet && (
-        <span className="relative flex items-center gap-2 text-small text-ink-2">
-          <Icon3D name="robot" size={24} />
-          Nobody queued? A bot is offered after 10 seconds.
-        </span>
-      )}
     </section>
   );
 }
