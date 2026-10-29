@@ -2,10 +2,12 @@
 
 // Full-width 3×4 keypad for entering a code: digits 1–9, Clear, ⌫ and the
 // saffron submit key. Digits already in the code are disabled, since codes
-// are 4 distinct digits. While focus is inside, the physical keyboard works
-// too: 1–9, Backspace, Escape (clear) and Enter (submit). With `onInvalid`,
+// are 4 distinct digits. On a desktop the physical keyboard works anywhere on
+// the page, no click first: 1–9, Backspace, Escape (clear) and Enter (submit),
+// with the keys labelled on the buttons. With `onInvalid`,
 // submitting a short code reports why instead of the key staying disabled.
 
+import { Kbd, useHotkeys } from "@/lib/useHotkeys";
 import { CODE_LENGTH, isCode } from "@/engine/games/crackTheCode";
 
 const DIGITS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
@@ -46,19 +48,18 @@ export function Keypad({
     else onInvalid?.(`Pick ${CODE_LENGTH} different digits first.`);
   };
 
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.metaKey || e.ctrlKey || e.altKey) return;
+  useHotkeys((e) => {
     if (/^[1-9]$/.test(e.key)) press(e.key);
     else if (e.key === "Backspace") back();
     else if (e.key === "Escape") clear();
     else if (e.key === "Enter") submit();
-    else return;
-    e.preventDefault();
-  };
+    else return false;
+    return true;
+  }, !disabled);
 
   const h = size === "sm" ? "h-[52px]" : "h-[60px]";
   return (
-    <div role="group" aria-label="Keypad" tabIndex={-1} onKeyDown={onKeyDown} className="grid w-full grid-cols-3 gap-2 outline-none">
+    <div role="group" aria-label="Keypad" data-keypad className="grid w-full grid-cols-3 gap-2 outline-none">
       {DIGITS.map((d) => (
         <button
           key={d}
@@ -72,6 +73,7 @@ export function Keypad({
       ))}
       <button type="button" className={`${KEY} ${h} text-[14px] font-semibold text-ink-2`} disabled={disabled || !value} onClick={clear}>
         Clear
+        <Kbd>Esc</Kbd>
       </button>
       <button
         type="button"
@@ -89,6 +91,7 @@ export function Keypad({
         onClick={submit}
       >
         {submitLabel}
+        <Kbd>↵</Kbd>
       </button>
     </div>
   );

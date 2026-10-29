@@ -2,6 +2,7 @@
 // The count is always printed; at most 14 seeds are drawn.
 
 import type { CSSProperties } from "react";
+import { KEY_HINT_CLASS } from "@/lib/useHotkeys";
 import { Seeds } from "./Seeds";
 
 export const PIT_SEEDS_MAX = 14;
@@ -22,6 +23,7 @@ export function Pit({
   mine = false,
   sm = false,
   onPick,
+  keyHint,
   className = "",
   style,
 }: {
@@ -42,6 +44,8 @@ export function Pit({
   mine?: boolean;
   sm?: boolean;
   onPick?: () => void;
+  /** Keyboard key that plays this pit; shown on desktop only. */
+  keyHint?: string;
   className?: string;
   style?: CSSProperties;
 }) {
@@ -55,6 +59,14 @@ export function Pit({
       >
         {n}
       </span>
+      {keyHint && legal && (
+        <kbd
+          aria-hidden
+          className={`${KEY_HINT_CLASS} mono pointer-events-none absolute bottom-1.5 left-1/2 -translate-x-1/2 items-center rounded-[5px] bg-[rgb(255_248_238/.14)] px-1.5 py-px text-[11px] font-medium text-[rgb(255_248_238/.75)]`}
+        >
+          {keyHint}
+        </kbd>
+      )}
       {last && <span className="absolute left-2.5 top-[9px] h-[7px] w-[7px] rounded-full bg-[#F3B542]" />}
       {auto ? (
         <span className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[0_0_0_3px_#F0928D,0_0_24px_rgb(240_146_141/.55)]" />

@@ -190,6 +190,7 @@ export function GebetaBoard({
           legal={playable && legal.includes(i)}
           auto={playable && auto === i}
           onPick={() => onPick?.(i)}
+          keyHint={String(i + 1)}
           label={`${spectating ? `${myName}'s` : "Your"} pit ${i + 1}, ${seeds(n)}`}
           last={last?.seat === seat && last.pit === i}
           hit={sameSpot(hit, { seat, pit: i })}
