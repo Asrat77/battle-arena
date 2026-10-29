@@ -25,6 +25,7 @@ Spectating, replay, the result hash, rewards and the leaderboard all come from o
 | Crack the Code | simultaneous rounds, hidden secrets | each player's secret code | hash of secret + salt, revealed at the end |
 | Gebeta (mancala) | turn-based play, extra turns, captures | none | none |
 | Tic-Tac-Toe | three-board series, alternating openers, timed board transitions | none | none |
+| Dots and Boxes | 6×6 dots, captured boxes and extra turns | none | none |
 
 ### Tic-Tac-Toe
 
@@ -77,7 +78,7 @@ Grid games are close to configurations of a single rules file, which is the firs
 
 ## What's in it
 
-- **Games**: Crack the Code, Gebeta and Tic-Tac-Toe, each with a bot so you can play alone.
+- **Games**: Crack the Code, Gebeta, Tic-Tac-Toe and Dots and Boxes, each with a bot so you can play alone.
 - **Play**: quick match with bot fallback, private rooms with invite links, spectating with room chat and reactions, rematches.
 - **Profiles**: wallet-free signup, points, badges, a leaderboard and token rewards, plus friends and presence.
 - **Tournaments**: 4-player single elimination, created by the server with bots filling empty seats.

@@ -10,10 +10,12 @@ import type { GameAdapter, GameId } from "@/components/match/adapter";
 import { rulesText as gebetaRules } from "@/engine/games/gebeta";
 import { rules as ticTacToeRules } from "@/engine/games/ticTacToe";
 import { GAME_ICONS } from "@/lib/gameCatalog";
+import { rules as dotsRules } from "@/engine/games/dotsAndBoxes";
 
 export type Rules = GameAdapter<unknown, unknown>["rules"] & { subtitle: string };
 
 export const RULES: Record<GameId, Rules> = {
+  "dots-and-boxes": { title: "How to play Dots and Boxes", subtitle: "6×6 dots · 25 boxes · 30 seconds a turn", art: GAME_ICONS["dots-and-boxes"], lines: dotsRules },
   "tic-tac-toe": {
     title: "How to play Tic-Tac-Toe", subtitle: "3×3 grid · up to three boards · 30 seconds a turn", art: GAME_ICONS["tic-tac-toe"], lines: ticTacToeRules,
   },

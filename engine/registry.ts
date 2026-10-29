@@ -1,10 +1,11 @@
 import { crackTheCode } from "./games/crackTheCode";
 import { gebeta } from "./games/gebeta";
 import { ticTacToe } from "./games/ticTacToe";
+import { dotsAndBoxes } from "./games/dotsAndBoxes";
 import type { AnyGame } from "./types";
 
 // Each game adds one line here.
-const games: AnyGame[] = [crackTheCode, gebeta, ticTacToe];
+const games: AnyGame[] = [crackTheCode, gebeta, ticTacToe, dotsAndBoxes];
 
 export function listGames(): AnyGame[] {
   return games;

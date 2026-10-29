@@ -66,6 +66,14 @@
     color-scheme: light;
   }
 
+  /* Dots and Boxes uses the arena's saffron and warm neutral player colors. */
+  .dots-palette {
+    --you: var(--acc);
+    --opp: var(--ink);
+    --you-s: rgb(var(--acc) / 0.16);
+    --opp-s: rgb(var(--ink) / 0.15);
+  }
+
   body {
     @apply bg-bg font-sans text-body text-ink antialiased;
   }

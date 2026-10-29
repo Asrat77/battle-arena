@@ -5,6 +5,7 @@ import type { Icon3DName } from "@/components/ui/Icon3D";
 import type { CtcView } from "@/engine/games/crackTheCode";
 import type { GebetaView } from "@/engine/games/gebeta";
 import type { TicTacToeView } from "@/engine/games/ticTacToe";
+import type { DotsView } from "@/engine/games/dotsAndBoxes";
 import type { Outcome, Seat, Viewer } from "@/engine/types";
 
 export type ResultKind = "win" | "loss" | "draw" | "watched";
@@ -83,6 +84,7 @@ export function resultSummary(r: ResultInput): ResultSummary {
 }
 
 function gameFacts(r: ResultInput): Pick<ResultSummary, "score" | "secrets"> {
+  if (r.gameId === "dots-and-boxes") return { score: [...(r.view as DotsView).scores] };
   if (r.gameId === "tic-tac-toe") return { score: [...(r.view as TicTacToeView).scores] };
   if (r.gameId === "gebeta") {
     const v = r.view as GebetaView | null;
