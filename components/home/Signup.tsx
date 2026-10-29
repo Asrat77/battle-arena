@@ -23,9 +23,14 @@ function nameError(name: string): string | null {
 }
 
 export function Signup() {
-  const { signup } = useSession();
+  const { signup, signIn } = useSession();
   const toast = useToast();
   const [name, setName] = useState("");
+  const [mode, setMode] = useState<"new" | "signin">("new");
+  // Optional on signup: a username and password make the profile survive sign-out.
+  const [secure, setSecure] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [phase, setPhase] = useState<Phase>("edit");
   const [error, setError] = useState<string | null>(null);
   // Bumped on each failed submit so the field shakes again.
@@ -45,13 +50,34 @@ export function Signup() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = name.trim();
-    if (!trimmed) return fail("Type a name to play.");
-    if (live) return fail(live);
+    const signingIn = mode === "signin";
+    if (!signingIn) {
+      if (!trimmed) return fail("Type a name to play.");
+      if (live) return fail(live);
+    }
+    if ((signingIn || secure) && (!username.trim() || !password)) return fail("Enter a username and password.");
     setPhase("busy");
     setError(null);
     try {
-      await signup(trimmed);
-      toast.show({ icon: "idcard", body: <>Welcome, {trimmed}. Your profile ID is ready.</>, href: "/profile" });
+      if (signingIn) {
+        await signIn({ username, password });
+        toast.show({
+          icon: "idcard",
+          body: <>Welcome back, {username.trim().toLowerCase()}.</>,
+          href: "/profile",
+        });
+        return;
+      }
+      await signup(trimmed, secure ? { username, password } : undefined);
+      toast.show({
+        icon: "idcard",
+        body: (
+          <>
+            Welcome, {trimmed}. {secure ? "Your account is saved." : "Your profile ID is ready."}
+          </>
+        ),
+        href: "/profile",
+      });
     } catch (err) {
       if (err instanceof ApiError && err.status < 500) {
         setPhase("edit");
@@ -62,7 +88,7 @@ export function Signup() {
     }
   };
 
-  if (phase === "busy") return <Creating name={name.trim()} />;
+  if (phase === "busy") return <Creating name={mode === "signin" ? username.trim() : name.trim()} />;
 
   const offline = phase === "offline";
 
@@ -94,20 +120,75 @@ export function Signup() {
             </div>
           )}
 
-          <div ref={field} key={shakes} className={shakes ? "animate-shake" : ""}>
-            <Field
-              label="Display name"
-              placeholder="e.g. Abebe"
-              autoComplete="nickname"
-              autoFocus
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                setError(null);
-              }}
-              error={shown}
-              hint={<span className="font-semibold">{count ? `${count} / ${NAME_MAX}` : `1–${NAME_MAX} characters`}</span>}
-            />
+          <div ref={field} key={shakes} className={`flex flex-col gap-3.5 ${shakes ? "animate-shake" : ""}`}>
+            {mode === "signin" ? (
+              <>
+                <Field
+                  label="Username"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoFocus
+                  value={username}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    setError(null);
+                  }}
+                />
+                <Field
+                  label="Password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setError(null);
+                  }}
+                  error={error}
+                />
+              </>
+            ) : (
+              <Field
+                label="Display name"
+                placeholder="e.g. Abebe"
+                autoComplete="nickname"
+                autoFocus
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setError(null);
+                }}
+                error={shown}
+                hint={<span className="font-semibold">{count ? `${count} / ${NAME_MAX}` : `1–${NAME_MAX} characters`}</span>}
+              />
+            )}
+            {mode === "new" && (
+              <>
+                <label className="flex items-center gap-2.5 text-small text-ink-2">
+                  <input type="checkbox" checked={secure} onChange={(e) => setSecure(e.target.checked)} />
+                  Save my account with a password, so I can sign in on any device
+                </label>
+                {secure && (
+                  <>
+                    <Field
+                      label="Username"
+                      autoComplete="username"
+                      autoCapitalize="none"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      hint="3–20 letters, numbers or underscores"
+                    />
+                    <Field
+                      label="Password"
+                      type="password"
+                      autoComplete="new-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      hint="At least 8 characters"
+                    />
+                  </>
+                )}
+              </>
+            )}
           </div>
 
           <Button
@@ -115,11 +196,23 @@ export function Signup() {
             variant="act"
             block
             icon={offline ? "refresh" : undefined}
-            disabled={!name || Boolean(live)}
+            disabled={mode === "new" && (!name || Boolean(live))}
             className="h-[58px] text-lg"
           >
-            {offline ? "Try again" : "Play"}
+            {offline ? "Try again" : mode === "signin" ? "Sign in" : "Play"}
           </Button>
+
+          <button
+            type="button"
+            className="text-small font-semibold text-ink-2 underline"
+            onClick={() => {
+              setMode(mode === "new" ? "signin" : "new");
+              setError(null);
+              setPhase("edit");
+            }}
+          >
+            {mode === "new" ? "Already have an account? Sign in" : "New here? Create a profile"}
+          </button>
 
           <div className="flex items-center gap-2.5 text-small text-ink-2">
             <Icon3D name="idcard" size={28} />
