@@ -19,7 +19,8 @@ import { Dialog } from "@/components/ui/Overlay";
 import { useToast } from "@/components/ui/Toast";
 import { api, type RoomState } from "@/lib/api";
 import { useSession } from "@/lib/session";
-import { InviteSheet, useFriends } from "./InviteSheet";
+import { useFriends } from "@/lib/useFriends";
+import { InviteSheet } from "./InviteSheet";
 import { RoomChat } from "./RoomChat";
 import { useRoom } from "./useRoom";
 

@@ -5,45 +5,18 @@
 // side; friends in a match can be watched instead, offline ones are listed
 // but can't be invited.
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Avatar3D } from "@/components/ui/Avatar3D";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { Icon3D } from "@/components/ui/Icon3D";
 import { Sheet } from "@/components/ui/Overlay";
 import { useSession } from "@/lib/session";
+import type { Friend } from "@/lib/useFriends";
 
 const INVITE_TIMEOUT_MS = 8000;
 
-export interface Friend {
-  profileId: string;
-  name: string | null;
-  status: "offline" | "online" | "in-match";
-  matchId: string | null;
-}
-
-type Ack = { ok: true; friends?: Friend[] } | { ok: false; reason: string };
-
-/** Your friends with live presence, kept current over the socket. */
-export function useFriends(): Friend[] | null {
-  const { socket, connected } = useSession();
-  const [friends, setFriends] = useState<Friend[] | null>(null);
-
-  useEffect(() => {
-    if (!socket || !connected) return;
-    const onFriends = (p: { friends?: Friend[] }) => setFriends(p?.friends ?? []);
-    const onPresence = (f: Friend) => setFriends((xs) => xs && xs.map((x) => (x.profileId === f.profileId ? f : x)));
-    socket.on("friends", onFriends);
-    socket.on("presence", onPresence);
-    socket.emit("friend:list", (res: Ack) => res.ok && setFriends(res.friends ?? []));
-    return () => {
-      socket.off("friends", onFriends);
-      socket.off("presence", onPresence);
-    };
-  }, [socket, connected]);
-
-  return friends;
-}
+type Ack = { ok: true } | { ok: false; reason: string };
 
 export function InviteSheet({
   open,
