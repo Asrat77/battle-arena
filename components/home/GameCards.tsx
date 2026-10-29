@@ -22,6 +22,13 @@ const GAMES: { id: GameId; name: string; kicker: string; blurb: string; art: Ico
     art: "vault",
   },
   { id: "gebeta", name: "Gebeta", kicker: "Ethiopian mancala", blurb: "Sow, capture, out-seed them.", art: "mancala" },
+  {
+    id: "bingo",
+    name: "BINGO",
+    kicker: "Paper game · 1v1",
+    blurb: "Fill your private 5×5 grid, call numbers, slash B-I-N-G-O first.",
+    art: "target",
+  },
 ];
 
 export function GameCards() {

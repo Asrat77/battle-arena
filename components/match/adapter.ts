@@ -5,7 +5,7 @@ import type { FC } from "react";
 import type { LogEntry, Seat, Viewer } from "@/engine/types";
 import type { Icon3DName } from "@/components/ui/Icon3D";
 
-export type GameId = "crack-the-code" | "gebeta";
+export type GameId = "crack-the-code" | "gebeta" | "bingo";
 
 export interface TurnClock {
   /** Epoch ms when the current turn times out. Left out when the view does

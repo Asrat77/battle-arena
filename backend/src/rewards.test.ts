@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import { describe, test } from "node:test";
 import { io as connect } from "socket.io-client";
+import { bingo, type BingoState } from "../../engine/games/bingo";
 import { crackTheCode } from "../../engine/games/crackTheCode";
 import { gebeta, storeOf, type GebetaState } from "../../engine/games/gebeta";
 import { initial, step, type MatchState } from "../../engine/replay";
@@ -95,6 +96,21 @@ function gebetaGame(want: (margin: number) => boolean) {
     if (want(margin)) return { gameId: gebeta.id, seed, log, outcome: cur.outcome, winner: w };
   }
   throw new Error("no such game");
+}
+
+/** Run a bot-vs-bot BINGO game to completion and return the log. */
+function bingoGame(): Pick<MatchRecord, "gameId" | "seed" | "log" | "outcome"> {
+  const seed = "bingo-test";
+  let cur: MatchState<BingoState> = initial(bingo, seed);
+  const log: LogEntry[] = [];
+  const rng = createRng(`${seed}:bots`);
+  while (!cur.outcome) {
+    const seat = cur.state.turn;
+    const entry: LogEntry = { t: log.length, seat, move: bingo.bot(bingo.view(cur.state, seat), seat, rng) };
+    cur = step(bingo, seed, cur, entry, log.length);
+    log.push(entry);
+  }
+  return { gameId: bingo.id, seed, log, outcome: cur.outcome! };
 }
 
 describe("points table", () => {
@@ -264,6 +280,9 @@ describe("badges", () => {
     assert.deepEqual(badgeIds(rewards, "a"), []);
     const g = gebetaGame(() => true);
     rewards.matchRecorded(stored({ players: g.winner === 0 ? [BOT, "a"] : ["a", BOT], ...g, endedAt: T0 + 1 }));
+    assert.deepEqual(badgeIds(rewards, "a"), []);
+    const b = bingoGame();
+    rewards.matchRecorded(stored({ players: b.outcome.winner === 0 ? [BOT, "a"] : ["a", BOT], ...b, endedAt: T0 + 2 }));
     assert.deepEqual(badgeIds(rewards, "a"), ["explorer"]);
   });
 
