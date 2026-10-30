@@ -41,10 +41,6 @@ export function GameCards() {
 
   return (
     <div className="flex flex-col gap-3.5 md:gap-[22px] lg:min-h-0 lg:flex-1">
-      <div className="hidden items-center gap-2.5 px-0.5 lg:flex">
-        <h2 className="text-h2">Games</h2>
-        <span className="chip font-mono tabular-nums">{GAMES.length}</span>
-      </div>
       <div
         tabIndex={0}
         aria-label="Games"
