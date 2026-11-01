@@ -7,13 +7,12 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Badges } from "@/components/profile/Badges";
+import { GearIcon } from "@/components/settings/GearIcon";
 import { Avatar3D } from "@/components/ui/Avatar3D";
-import { AvatarPicker } from "@/components/ui/AvatarPicker";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { RecordChip } from "@/components/ui/Chip";
 import { Icon3D, type Icon3DName } from "@/components/ui/Icon3D";
 import { useToast } from "@/components/ui/Toast";
-import { isAvatar, type AvatarName } from "@/engine/avatars";
 import { getGame } from "@/engine/registry";
 import { ApiError, api, type BadgeInfo, type LeaderboardRow, type MatchSummary, type PlayerRewards, type Profile } from "@/lib/api";
 import { useSession } from "@/lib/session";
@@ -114,9 +113,16 @@ export function ProfileView({ id, own }: { id: string; own: boolean }) {
             <span className="font-semibold text-ink">@{profile.username}</span> · Joined {day(profile.createdAt)}
           </span>
         </div>
+        {own && (
+          <Link
+            href="/settings"
+            aria-label="Settings"
+            className="ml-auto inline-flex h-11 w-11 flex-none items-center justify-center rounded-[14px] bg-sf text-ink-2 hover:text-ink md:hidden"
+          >
+            <GearIcon />
+          </Link>
+        )}
       </header>
-
-      {own && <PictureCard />}
 
       <IdCard id={profile.id} own={own} />
 
@@ -140,37 +146,6 @@ export function ProfileView({ id, own }: { id: string; own: boolean }) {
       <Badges profileId={profile.id} catalog={catalog} earned={rewards.badges} watched={rewards.watched.length} own={own} />
 
       <History profileId={profile.id} matches={matches} rewards={rewards} own={own} />
-    </div>
-  );
-}
-
-function PictureCard() {
-  const { profile, setAvatar } = useSession();
-  const toast = useToast();
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const pick = async (a: AvatarName) => {
-    setBusy(true);
-    try {
-      await setAvatar(a);
-      setOpen(false);
-    } catch {
-      toast.show({ icon: "warning", body: "Couldn’t save your picture. Try again." });
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <div className="card flex flex-col gap-3 !px-3.5 !py-3">
-      <div className="flex items-center gap-3">
-        <b className="min-w-0 flex-1 font-semibold">Profile picture</b>
-        <Button size="sm" onClick={() => setOpen((o) => !o)}>
-          {open ? "Cancel" : "Change"}
-        </Button>
-      </div>
-      {open && (
-        <AvatarPicker value={isAvatar(profile?.avatar) ? profile.avatar : null} onChange={pick} disabled={busy} />
-      )}
     </div>
   );
 }

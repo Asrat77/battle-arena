@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { GearIcon } from "@/components/settings/GearIcon";
 import { Avatar3D } from "@/components/ui/Avatar3D";
 import { CountDot } from "@/components/ui/Button";
 import { useInviteToasts } from "@/components/room/useInviteToasts";
@@ -76,6 +77,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <Icon3D name="handshake" size={28} />
                 {online > 0 && <CountDot count={online} />}
+              </Link>
+              <Link
+                href="/settings"
+                aria-label="Settings"
+                aria-current={pathname === "/settings" ? "page" : undefined}
+                className="hidden h-11 w-11 flex-none items-center justify-center rounded-[14px] bg-sf-2 text-ink-2 hover:text-ink md:inline-flex"
+              >
+                <GearIcon />
               </Link>
               <Link href="/profile" aria-label={`Profile: ${profile.name}`} className="hidden md:block">
                 <Avatar3D id={profile.id} />
