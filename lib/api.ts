@@ -17,13 +17,22 @@ export interface Profile {
   createdAt: number;
   /** Picked picture name (engine/avatars); absent means the default for the id. */
   avatar?: string;
-  /** Sign-in handle; only on your own profile (GET /api/me), null for a guest. */
-  username?: string | null;
+  /** Unique @handle, lowercase. Every profile has one; guests get an automatic one. */
+  username: string;
+  /** Only on your own profile (GET /api/me): false for a guest, who cannot sign back in. */
+  hasPassword?: boolean;
 }
 
 export interface Credentials {
   username: string;
   password: string;
+}
+
+/** GET /api/usernames/:u */
+export interface UsernameStatus {
+  username: string;
+  available: boolean;
+  reason?: string;
 }
 
 export interface GameSummary {
@@ -198,7 +207,23 @@ export const api = {
     }),
   login: (creds: Credentials) =>
     request<{ profile: Profile; token: string }>("/api/login", { method: "POST", body: JSON.stringify(creds) }),
-  claim: (token: string, creds: Credentials) =>
+  updateMe: (token: string, changes: { name?: string; username?: string }) =>
+    request<Profile>("/api/me", {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(changes),
+    }),
+  changePassword: (token: string, current: string, next: string) =>
+    request<Profile>("/api/me/password", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ current, next }),
+    }),
+  usernameStatus: (username: string, token?: string | null) =>
+    request<UsernameStatus>(`/api/usernames/${encodeURIComponent(username)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }),
+  claim: (token: string, creds: { username?: string; password: string }) =>
     request<Profile>("/api/me/credentials", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },

@@ -43,6 +43,7 @@ interface Data {
 }
 
 export function ProfileView({ id, own }: { id: string; own: boolean }) {
+  const { profile: me } = useSession();
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<"missing" | "failed" | null>(null);
 
@@ -93,7 +94,9 @@ export function ProfileView({ id, own }: { id: string; own: boolean }) {
 
   if (!data) return <Loading />;
 
-  const { profile, rewards, matches, rank, catalog } = data;
+  const { rewards, matches, rank, catalog } = data;
+  // Your own name and handle follow the session, so a rename shows at once.
+  const profile = own && me?.id === data.profile.id ? { ...data.profile, name: me.name, username: me.username } : data.profile;
   const tally = { Won: 0, Lost: 0, Draw: 0 };
   for (const m of matches) tally[resultFor(m, profile.id)]++;
   const mints = rewards.history.filter((h) => h.mintIndex !== null).length;
@@ -107,7 +110,9 @@ export function ProfileView({ id, own }: { id: string; own: boolean }) {
         <Avatar3D id={profile.id} size="lg" />
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="truncate text-[30px] font-semibold leading-[1.02] tracking-[-.045em]">{profile.name}</h1>
-          <span className="text-small text-ink-2">Joined {day(profile.createdAt)}</span>
+          <span className="truncate text-small text-ink-2">
+            <span className="font-semibold text-ink">@{profile.username}</span> · Joined {day(profile.createdAt)}
+          </span>
         </div>
       </header>
 

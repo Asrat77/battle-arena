@@ -307,7 +307,9 @@ export class Tournaments {
 
   payload(t: Tournament) {
     const game = this.games.get(t.gameId);
-    const who = (i: number | null) => (i === null ? null : { ...t.entrants[i], seed: i + 1 });
+    // Names are read live so a rename shows in brackets too; the stored one is a fallback.
+    const entrant = (e: Entrant, i: number) => ({ ...e, name: e.bot ? e.name : (this.identity.get(e.id)?.name ?? e.name), seed: i + 1 });
+    const who = (i: number | null) => (i === null ? null : entrant(t.entrants[i], i));
     return {
       id: t.id,
       link: `/t/${t.id}`,
@@ -316,7 +318,7 @@ export class Tournaments {
       host: t.host,
       state: t.state,
       size: TOURNAMENT_SIZE,
-      entrants: t.entrants.map((e, i) => ({ ...e, seed: i + 1 })),
+      entrants: t.entrants.map(entrant),
       rounds: t.rounds.map((matches, r) => ({
         name: ROUND_NAMES[r],
         matches: matches.map((bm) => ({
