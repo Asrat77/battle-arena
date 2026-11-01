@@ -183,6 +183,14 @@ export class ApiError extends Error {
   }
 }
 
+export interface ProfileHit {
+  profileId: string;
+  name: string;
+  username: string;
+  avatar: string | null;
+  relationship?: "friend" | "sent" | "incoming" | "none";
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
@@ -222,6 +230,11 @@ export const api = {
   usernameStatus: (username: string, token?: string | null) =>
     request<UsernameStatus>(`/api/usernames/${encodeURIComponent(username)}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }),
+  searchProfiles: (q: string, token?: string | null, signal?: AbortSignal) =>
+    request<{ results: ProfileHit[] }>(`/api/profiles/search?q=${encodeURIComponent(q)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      signal,
     }),
   claim: (token: string, creds: { username?: string; password: string }) =>
     request<Profile>("/api/me/credentials", {

@@ -9,7 +9,7 @@ import { Avatar3D } from "@/components/ui/Avatar3D";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { PresenceChip } from "@/components/ui/Chip";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Field } from "@/components/ui/Field";
+import { UserSearch } from "@/components/friends/UserSearch";
 import { Icon3D } from "@/components/ui/Icon3D";
 import { Dialog } from "@/components/ui/Overlay";
 import { useToast } from "@/components/ui/Toast";
@@ -95,18 +95,28 @@ export default function FriendsPage() {
       <h1 className="text-h2">Friends</h1>
 
       <form onSubmit={submit} className="flex flex-col gap-3 rounded-card bg-sf p-4" noValidate>
-        <Field
-          label="Send a friend request"
-          placeholder="Username or profile ID"
+        <UserSearch
           value={id}
-          onChange={(e) => {
-            setId(e.target.value);
+          onChange={(v) => {
+            setId(v);
             setError(null);
           }}
           error={error}
-          autoComplete="off"
-          autoCapitalize="none"
-          spellCheck={false}
+          relation={(pid) =>
+            friends?.some((f) => f.profileId === pid)
+              ? "friend"
+              : requests.outgoing.some((r) => r.profileId === pid)
+                ? "sent"
+                : requests.incoming.some((r) => r.profileId === pid)
+                  ? "incoming"
+                  : "none"
+          }
+          onAdd={async (pid) => {
+            const res = await request(pid);
+            if ("error" in res) return res.error;
+            toast.show({ icon: "check", body: res.status === "accepted" ? "You’re now friends." : "Request sent." });
+            return null;
+          }}
           hint={
             <>
               Your ID is{" "}

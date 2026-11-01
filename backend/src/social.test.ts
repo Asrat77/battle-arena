@@ -265,3 +265,47 @@ describe("toasts", () => {
     }
   });
 });
+
+describe("profile search", () => {
+  const search = async (q: string, token?: string) =>
+    (await (await fetch(`${url}/api/profiles/search?q=${encodeURIComponent(q)}`, { headers: token ? { authorization: `Bearer ${token}` } : {} })).json()) as any;
+
+  test("matches username prefix first, then display name, case-insensitively", async () => {
+    const zed = identity.signup("Someone Else", { username: "zedra_prefix" });
+    const other = identity.signup("Zedra Fan", { username: "fan_of_things" });
+    const { results } = await search("ZEDRA");
+    assert.deepEqual(
+      results.map((r: any) => r.username),
+      [zed.profile.username, other.profile.username],
+    );
+    assert.equal(results[0].profileId, zed.profile.id);
+    assert.ok("avatar" in results[0]);
+    assert.equal("relationship" in results[0], false);
+    assert.equal((await search("@zedra_p")).results.length, 1);
+  });
+
+  test("needs two characters and caps at eight", async () => {
+    assert.deepEqual((await search("z")).results, []);
+    for (let i = 0; i < 10; i++) identity.signup(`Many ${i}`, { username: `manyhit_${i}` });
+    assert.equal((await search("manyhit")).results.length, 8);
+  });
+
+  test("with a token: hides you and reports the relationship", async () => {
+    assert.equal((await search("alice", alice.token)).results.length, 0);
+    const none = (await search("bob", alice.token)).results.find((r: any) => r.profileId === B);
+    assert.equal(none.relationship, "none");
+    social.request(A, B);
+    const sent = (await search("bob", alice.token)).results.find((r: any) => r.profileId === B);
+    assert.equal(sent.relationship, "sent");
+    const incoming = (await search("alice", bob.token)).results.find((r: any) => r.profileId === A);
+    assert.equal(incoming.relationship, "incoming");
+    social.accept(B, A);
+    assert.equal((await search("bob", alice.token)).results.find((r: any) => r.profileId === B).relationship, "friend");
+  });
+
+  test("is rate limited per IP", async () => {
+    let last = 200;
+    for (let i = 0; i < 70 && last === 200; i++) last = (await fetch(`${url}/api/profiles/search?q=zz`)).status;
+    assert.equal(last, 429);
+  });
+});
