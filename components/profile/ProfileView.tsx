@@ -1,37 +1,23 @@
 "use client";
 
-// A profile, yours or someone else's: identity first (animal, name, the full
-// ID with copy), then rank, record and points, tokens, the seven badges and
-// match history. Everything here comes from recorded matches.
+// A profile, yours or someone else's: identity, one stats card, then
+// Overview / Matches / Badges tabs (two columns, no tabs, on desktop). Everything here comes from recorded matches.
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Badges } from "@/components/profile/Badges";
-import { GearIcon } from "@/components/settings/GearIcon";
-import { Avatar3D } from "@/components/ui/Avatar3D";
+import { MatchList, resultFor } from "@/components/profile/MatchList";
+import { ProfileHeader } from "@/components/profile/ProfileHeader";
+import { ProfileStats, fmt } from "@/components/profile/ProfileStats";
 import { Button, ButtonLink } from "@/components/ui/Button";
-import { RecordChip } from "@/components/ui/Chip";
-import { Icon3D, type Icon3DName } from "@/components/ui/Icon3D";
-import { useToast } from "@/components/ui/Toast";
+import { Icon3D } from "@/components/ui/Icon3D";
+import { Segmented } from "@/components/ui/Segmented";
 import { getGame } from "@/engine/registry";
 import { ApiError, api, type BadgeInfo, type LeaderboardRow, type MatchSummary, type PlayerRewards, type Profile } from "@/lib/api";
+import { GAME_SHORT } from "@/lib/gameCatalog";
 import { useSession } from "@/lib/session";
-import { shortId, usePlayerNames } from "@/lib/usePlayerNames";
+import { shortId } from "@/lib/usePlayerNames";
 
-const PAGE = 10;
-
-const GAME_ART: Record<string, Icon3DName> = { "crack-the-code": "vault", gebeta: "mancala" };
-const GAME_SHORT: Record<string, string> = { "crack-the-code": "CtC", gebeta: "Geb" };
-
-const fmt = (n: number) => n.toLocaleString("en-US");
-const day = (ts: number) => new Date(ts).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-
-type Result = "Won" | "Lost" | "Draw";
-
-function resultFor(m: MatchSummary, profileId: string): Result {
-  if (m.outcome.draw) return "Draw";
-  return m.outcome.winner === m.players.indexOf(profileId) ? "Won" : "Lost";
-}
+type Tab = "overview" | "matches" | "badges";
 
 interface Data {
   profile: Profile;
@@ -44,6 +30,7 @@ interface Data {
 export function ProfileView({ id, own }: { id: string; own: boolean }) {
   const { profile: me } = useSession();
   const [data, setData] = useState<Data | null>(null);
+  const [tab, setTab] = useState<Tab>("overview");
   const [error, setError] = useState<"missing" | "failed" | null>(null);
 
   const load = useCallback(() => {
@@ -103,154 +90,44 @@ export function ProfileView({ id, own }: { id: string; own: boolean }) {
     .filter(([, t]) => t.wins + t.losses + t.draws > 0)
     .map(([g, t]) => `${GAME_SHORT[g] ?? getGame(g)?.name ?? g} ${fmt(t.rating)}`);
 
+  // Phones and tablets show one tab at a time; from lg up the page is two
+  // columns (identity, stats, badges | matches) and the tabs disappear.
+
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex items-center gap-4">
-        <Avatar3D id={profile.id} size="lg" />
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="truncate text-[30px] font-semibold leading-[1.02] tracking-[-.045em]">{profile.name}</h1>
-          <span className="truncate text-small text-ink-2">
-            <span className="font-semibold text-ink">@{profile.username}</span> · Joined {day(profile.createdAt)}
-          </span>
+    <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)] lg:items-start lg:gap-x-8 lg:gap-y-4">
+      <div className="flex flex-col gap-4">
+        <ProfileHeader profile={profile} own={own} />
+        <ProfileStats rank={rank} rewards={rewards} tally={tally} />
+        <div className="lg:hidden">
+          <Segmented<Tab>
+            label="Profile sections"
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: "overview", label: "Overview" },
+              { value: "matches", label: "Matches" },
+              { value: "badges", label: "Badges" },
+            ]}
+          />
         </div>
-        {own && (
-          <Link
-            href="/settings"
-            aria-label="Settings"
-            className="ml-auto inline-flex h-11 w-11 flex-none items-center justify-center rounded-[14px] bg-sf text-ink-2 hover:text-ink md:hidden"
-          >
-            <GearIcon />
-          </Link>
-        )}
-      </header>
 
-      <IdCard id={profile.id} own={own} />
-
-      <div className="grid grid-cols-3 gap-2">
-        <Stat icon="podium" big={rank ? `#${rank.rank}` : "–"} label={rank ? `${fmt(rank.rating)} rating` : "Unranked"} href="/leaderboard" />
-        <Stat icon="target" big={`${tally.Won}·${tally.Lost}·${tally.Draw}`} label="Wins · losses · draws" small />
-        <Stat icon="token" big={fmt(rewards.points)} label="Points" />
-      </div>
-
-      <div className="card flex items-center gap-3 !px-3.5 !py-3">
-        <Icon3D name="blockchain" size={34} />
-        <div className="min-w-0 flex-1">
-          <b className="font-semibold">{fmt(rewards.tokens)} tokens</b>
-          <p className="text-small text-ink-2">
-            {mints ? `Points minted in ${mints} ledger block${mints === 1 ? "" : "s"}` : "Points become tokens once they’re sealed on the ledger"}
+        <div className={`${tab === "overview" ? "flex" : "hidden"} flex-col gap-4 lg:hidden`}>
+          <p className="card !px-3.5 !py-3 text-small text-ink-2">
+            {mints ? `Points minted in ${mints} ledger block${mints === 1 ? "" : "s"}.` : "Points become tokens once they’re sealed on the ledger."}
+            {ratings.length > 0 && <span className="mono mt-1 block text-ink">{ratings.join(" · ")}</span>}
           </p>
+          <MatchList profileId={profile.id} matches={matches} rewards={rewards} own={own} limit={3} onMore={() => setTab("matches")} />
         </div>
-        {ratings.length > 0 && <span className="mono whitespace-nowrap text-right text-small text-ink-2">{ratings.join(" · ")}</span>}
+
+        <div className={`${tab === "badges" ? "block" : "hidden"} lg:block`}>
+          <Badges profileId={profile.id} catalog={catalog} earned={rewards.badges} watched={rewards.watched.length} own={own} />
+        </div>
       </div>
 
-      <Badges profileId={profile.id} catalog={catalog} earned={rewards.badges} watched={rewards.watched.length} own={own} />
-
-      <History profileId={profile.id} matches={matches} rewards={rewards} own={own} />
-    </div>
-  );
-}
-
-function IdCard({ id, own }: { id: string; own: boolean }) {
-  const toast = useToast();
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(id);
-      toast.show({ icon: "idcard", body: own ? "Copied your profile ID" : "Copied the profile ID" });
-    } catch {
-      toast.show({ icon: "warning", tone: "warn", body: `Couldn’t copy. The ID is ${id}` });
-    }
-  };
-  return (
-    <div className="card flex flex-col gap-1.5 !px-3.5 !py-3">
-      <div className="flex items-center justify-between">
-        <span className="flex items-center gap-2">
-          <Icon3D name="idcard" size={26} />
-          <span className="eyebrow">Profile ID</span>
-        </span>
-        <Button size="sm" icon="link" onClick={copy}>
-          Copy
-        </Button>
+      <div className={`${tab === "matches" ? "block" : "hidden"} lg:block`}>
+        <MatchList profileId={profile.id} matches={matches} rewards={rewards} own={own} />
       </div>
-      <span className="mono text-[13px]" data-testid="profile-id">
-        {id}
-      </span>
-      {own && <span className="text-small text-ink-2">Created for you, held by Battle Arena, no wallet needed.</span>}
     </div>
-  );
-}
-
-function Stat({ icon, big, label, small, href }: { icon: Icon3DName; big: string; label: string; small?: boolean; href?: string }) {
-  const body = (
-    <>
-      <Icon3D name={icon} size={28} />
-      <div className={`mono mt-1.5 font-semibold tracking-[-.04em] ${small ? "text-[22px]" : "text-[28px]"} leading-tight`}>{big}</div>
-      <span className="text-small text-ink-2">{label}</span>
-    </>
-  );
-  return href ? (
-    <Link href={href} className="card !p-3.5 hover:bg-sf-2">
-      {body}
-    </Link>
-  ) : (
-    <div className="card !p-3.5">{body}</div>
-  );
-}
-
-function History({ profileId, matches, rewards, own }: { profileId: string; matches: MatchSummary[]; rewards: PlayerRewards; own: boolean }) {
-  const [count, setCount] = useState(PAGE);
-  const shown = matches.slice(0, count);
-  const names = usePlayerNames(shown.length ? [...new Set(shown.flatMap((m) => m.players))] : undefined);
-  const points = new Map(rewards.history.map((h) => [h.matchId, h.points]));
-
-  return (
-    <section aria-labelledby="history-heading" className="flex flex-col gap-2.5">
-      <h2 id="history-heading" className="eyebrow px-0.5">
-        Match history
-      </h2>
-      {matches.length === 0 ? (
-        <div className="card flex flex-col items-center gap-2.5 !p-4 text-center">
-          <Icon3D name="controller" size={72} />
-          <b className="text-[17px] font-semibold">No matches yet</b>
-          <span className="text-small text-ink-2">
-            {own ? "Your first finished match puts points, a rank and your first badge here." : "Finished matches will show up here."}
-          </span>
-          {own && (
-            <ButtonLink href="/" variant="sec" icon="lightning" block>
-              Play a match
-            </ButtonLink>
-          )}
-        </div>
-      ) : (
-        <>
-          <ul className="card !px-3.5 !py-1">
-            {shown.map((m) => {
-              const opponent = m.players[m.players.indexOf(profileId) === 0 ? 1 : 0];
-              const pts = points.get(m.matchId);
-              return (
-                <li key={m.matchId} className="flex items-center gap-3 border-t border-line py-2.5 first:border-t-0">
-                  <Icon3D name={GAME_ART[m.gameId] ?? "controller"} size={34} />
-                  <Link href={`/replay/${m.matchId}`} className="min-w-0 flex-1 hover:underline">
-                    <p className="truncate">
-                      <b className="font-semibold">{resultFor(m, profileId)}</b> vs {names[opponent] ?? shortId(opponent)}
-                    </p>
-                    <p className="truncate text-small text-ink-2">
-                      {getGame(m.gameId)?.name ?? m.gameId}
-                      {pts !== undefined && ` · +${pts}`}
-                    </p>
-                  </Link>
-                  <RecordChip state={m.status} block={m.resultIndex} />
-                </li>
-              );
-            })}
-          </ul>
-          {matches.length > count && (
-            <button type="button" className="self-center text-small text-ink-2 underline" onClick={() => setCount((c) => c + PAGE)}>
-              Showing {count} of {matches.length} · Load more
-            </button>
-          )}
-        </>
-      )}
-    </section>
   );
 }
 
