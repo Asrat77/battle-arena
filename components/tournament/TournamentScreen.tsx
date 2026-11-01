@@ -5,18 +5,17 @@
 // the seats, with Join / Leave and, for the host, Add bots.
 
 import { PlayerLink } from "@/components/profile/PlayerSheet";
-import Link from "next/link";
 import { useState } from "react";
 import { Avatar3D } from "@/components/ui/Avatar3D";
 import { Button, ButtonLink } from "@/components/ui/Button";
-import { Chip } from "@/components/ui/Chip";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon3D } from "@/components/ui/Icon3D";
-import { type BracketMatch, type TournamentEntrant, type TournamentState } from "@/lib/api";
+import { type TournamentEntrant, type TournamentState } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { useTournament } from "@/lib/useTournament";
 import { GAME_ICONS, Name, StateChip } from "./shared";
 import { Page } from "@/components/ui/Page";
+import { Bracket } from "./Bracket";
 
 export function TournamentScreen({ id }: { id: string }) {
   const { phase, busy, send, retry } = useTournament(id);
@@ -55,17 +54,21 @@ export function TournamentScreen({ id }: { id: string }) {
   const me = profile?.id;
   const joined = Boolean(me) && t.entrants.some((e) => e.id === me);
   const isHost = Boolean(me) && t.host === me;
-  const act = async (event: "tournament:join" | "tournament:leave" | "tournament:addBots") => {
+  const act = async (event: "tournament:join" | "tournament:leave" | "tournament:start") => {
     setError(await send(event));
   };
 
   return (
-    <Page className="flex flex-col gap-4">
+    <Page width="wide" className="flex flex-col gap-4">
       <header className="flex items-center gap-3">
         <Icon3D name={GAME_ICONS[t.gameId] ?? "controller"} size={44} />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="eyebrow">Tournament</span>
-          <h1 className="text-h2 truncate">{t.gameName}</h1>
+          <h1 className="text-h2 truncate">{t.name}</h1>
+          <span className="text-small text-ink-2">
+            {t.gameName} · {t.size} players · {t.bestOf === 3 ? "Best of 3" : "Single game"}
+            {t.visibility === "link" ? " · Link only" : ""}
+          </span>
         </div>
         <StateChip state={t.state} />
       </header>
@@ -75,14 +78,7 @@ export function TournamentScreen({ id }: { id: string }) {
       {t.state === "open" ? (
         <Lobby t={t} joined={joined} isHost={isHost} signedIn={Boolean(me)} busy={busy} act={act} />
       ) : (
-        t.rounds.map((r) => (
-          <section key={r.name} aria-label={r.name} className="flex flex-col gap-2.5">
-            <h2 className="eyebrow">{r.name}</h2>
-            {r.matches.map((m, i) => (
-              <MatchCard key={i} m={m} you={me} />
-            ))}
-          </section>
-        ))
+        <Bracket t={t} you={me} />
       )}
 
       {error && (
@@ -127,15 +123,15 @@ function Lobby({
   isHost: boolean;
   signedIn: boolean;
   busy: boolean;
-  act(e: "tournament:join" | "tournament:leave" | "tournament:addBots"): void;
+  act(e: "tournament:join" | "tournament:leave" | "tournament:start"): void;
 }) {
   const seats = Array.from({ length: t.size }, (_, i) => t.entrants[i]);
   return (
     <section className="flex flex-col gap-3" aria-label="Entrants">
       <p className="text-ink-2">
-        {t.entrants.length}/{t.size} players. It starts when the bracket is full.
+        {t.entrants.length}/{t.size} players. It starts when the bracket is full{isHost ? ", or start it early and bots take the empty seats" : ""}.
       </p>
-      <ul className="flex flex-col gap-2">
+      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {seats.map((e, i) => (
           <li key={i} className="card flex items-center gap-3 !py-3">
             {e ? (
@@ -158,8 +154,8 @@ function Lobby({
         </Button>
       )}
       {isHost && (
-        <Button variant="act" block icon="robot" loading={busy} onClick={() => act("tournament:addBots")}>
-          Add bots and start
+        <Button variant="act" block icon="robot" loading={busy} onClick={() => act("tournament:start")}>
+          Start now with bots
         </Button>
       )}
       {joined && (
@@ -168,48 +164,5 @@ function Lobby({
         </Button>
       )}
     </section>
-  );
-}
-
-function MatchCard({ m, you }: { m: BracketMatch; you?: string }) {
-  const mine = Boolean(you) && m.players.some((p) => p && !p.bot && p.id === you);
-  return (
-    <div className="card flex flex-col gap-3 !p-3.5" aria-label={mine ? "Your match" : undefined}>
-      <ul className="flex flex-col gap-2">
-        {m.players.map((p, i) => (
-          <li key={i} className="flex items-center gap-3">
-            {p ? (
-              <PlayerLink id={p.id} bot={p.bot} className="flex items-center gap-3">
-                <Avatar3D id={p.id} bot={p.bot} size="sm" seat={!p.bot && p.id === you ? "you" : undefined} />
-                <Name name={p.name} bot={p.bot} />
-              </PlayerLink>
-            ) : (
-              <>
-                <span className="h-[34px] w-[34px] rounded-[11px] border-2 border-dashed border-sf-3" />
-                <span className="text-ink-3">To be decided</span>
-              </>
-            )}
-            {p && m.winner?.seed === p.seed && <Icon3D name="crown" size={24} label="Winner" className="ml-auto" />}
-          </li>
-        ))}
-      </ul>
-      <div className="flex items-center gap-2">
-        {m.state === "pending" && <Chip>Waiting</Chip>}
-        {m.state === "playing" && (
-          <Chip tone="pend" spin>
-            {m.matchIds.length > 1 ? "Rematch in play" : "In play"}
-          </Chip>
-        )}
-        {m.state === "done" && <Chip tone="rec">{m.decidedBy === "coin flip" ? "Decided by coin flip" : "Played"}</Chip>}
-        {m.matchId && (
-          <Link
-            href={m.state === "done" ? `/replay/${m.matchId}` : `/match/${m.matchId}`}
-            className={`btn btn-sm ml-auto ${mine && m.state === "playing" ? "btn-act" : "btn-sec"}`}
-          >
-            {m.state === "done" ? "Replay" : mine ? "Play" : "Watch"}
-          </Link>
-        )}
-      </div>
-    </div>
   );
 }

@@ -45,7 +45,7 @@ export function useTournament(id: string) {
 
   /** Emit a tournament command; resolves to an error message, or null on success. */
   const send = useCallback(
-    (event: "tournament:join" | "tournament:leave" | "tournament:addBots"): Promise<string | null> => {
+    (event: "tournament:join" | "tournament:leave" | "tournament:start"): Promise<string | null> => {
       if (!socket) return Promise.resolve("You’re not connected.");
       setBusy(true);
       return new Promise((resolve) => {
