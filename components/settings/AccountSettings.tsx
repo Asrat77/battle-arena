@@ -1,6 +1,6 @@
 "use client";
 
-// Account settings on your own profile: change your display name and
+// Account settings (the Account section of /settings): change your display name and
 // @username, and add or change your password.
 
 import { useEffect, useState } from "react";

@@ -21,9 +21,9 @@ export function activeTab(pathname: string): Tab | undefined {
   return TABS.find((t) => (t.href === "/" ? pathname === "/" : pathname === t.href || pathname.startsWith(`${t.href}/`)));
 }
 
-/** Screens that also get the mobile dock: the tabs plus friends. */
+/** Screens that also get the mobile dock: the tabs plus friends and settings. */
 export function hasDock(pathname: string): boolean {
-  return Boolean(activeTab(pathname)) || pathname.startsWith("/friends");
+  return Boolean(activeTab(pathname)) || pathname.startsWith("/friends") || pathname.startsWith("/settings");
 }
 
 /**

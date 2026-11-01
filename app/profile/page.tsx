@@ -1,20 +1,13 @@
 "use client";
 
-// Your own profile, plus settings: theme, name, @username, password and sign out.
+// Your own profile. Settings live at /settings.
 
-import { useState } from "react";
-import { AccountSettings } from "@/components/profile/AccountSettings";
 import { ProfileView } from "@/components/profile/ProfileView";
 import { ComingSoon } from "@/components/shell/ComingSoon";
-import { Button } from "@/components/ui/Button";
-import { Segmented } from "@/components/ui/Segmented";
 import { useSession } from "@/lib/session";
-import { useTheme } from "@/lib/theme";
 
 export default function ProfilePage() {
-  const { profile, signOut } = useSession();
-  const [confirmOut, setConfirmOut] = useState(false);
-  const { theme, setTheme } = useTheme();
+  const { profile } = useSession();
   if (!profile)
     return (
       <ComingSoon icon="idcard" title="Profile">
@@ -22,35 +15,8 @@ export default function ProfilePage() {
       </ComingSoon>
     );
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-3.5">
+    <div className="mx-auto max-w-xl">
       <ProfileView id={profile.id} own />
-      <section aria-labelledby="settings-heading" className="mt-2 flex flex-col gap-2.5">
-        <h2 id="settings-heading" className="eyebrow px-0.5">
-          Settings
-        </h2>
-        <div className="card flex flex-col gap-3">
-          <span className="text-small text-ink-2">Theme</span>
-          <Segmented
-            label="Theme"
-            value={theme}
-            onChange={setTheme}
-            options={[
-              { value: "dark", label: "Arena Night" },
-              { value: "light", label: "Day" },
-            ]}
-          />
-        </div>
-        <AccountSettings />
-        {profile.hasPassword || confirmOut ? (
-          <Button variant="ghost" onClick={signOut}>
-            {profile.hasPassword ? "Sign out" : "Yes, sign out and lose this guest profile"}
-          </Button>
-        ) : (
-          <Button variant="ghost" onClick={() => setConfirmOut(true)}>
-            Sign out
-          </Button>
-        )}
-      </section>
     </div>
   );
 }
