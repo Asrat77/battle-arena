@@ -25,7 +25,7 @@ function nameError(name: string): string | null {
   return n > NAME_MAX ? `That’s ${n} characters. Keep it to ${NAME_MAX}.` : null;
 }
 
-export function Signup() {
+export function Signup({ invite }: { invite?: { title: string; detail: string } }) {
   const { signup, signIn } = useSession();
   const toast = useToast();
   // new = username + password; guest = just a display name; signin = existing account.
@@ -125,6 +125,15 @@ export function Signup() {
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
+              {invite && (
+                <div className="card flex items-center gap-3 !bg-pending-soft" role="status">
+                  <Icon3D name="trophy" size={44} />
+                  <div className="flex min-w-0 flex-col">
+                    <b className="truncate">{invite.title}</b>
+                    <span className="text-small text-ink-2">{invite.detail}</span>
+                  </div>
+                </div>
+              )}
               <span className="eyebrow">Battle Arena · live 1v1</span>
               <h1 className="text-h1">
                 {mode === "signin" ? "Welcome back." : mode === "guest" ? "Pick a name." : "Make an account."}

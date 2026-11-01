@@ -5,7 +5,9 @@
 // the seats, with Join / Leave and, for the host, Add bots.
 
 import { PlayerLink } from "@/components/profile/PlayerSheet";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Signup } from "@/components/home/Signup";
+import { ShareButton } from "./ShareButton";
 import { Avatar3D } from "@/components/ui/Avatar3D";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -19,8 +21,16 @@ import { Bracket } from "./Bracket";
 
 export function TournamentScreen({ id }: { id: string }) {
   const { phase, busy, send, retry } = useTournament(id);
-  const { profile } = useSession();
+  const { profile, ready, connected } = useSession();
   const [error, setError] = useState<string | null>(null);
+  // Set when a signed-out visitor was shown the invite, so they join once they have a profile.
+  const invited = useRef(false);
+  const t0 = phase.kind === "ready" ? phase.t : null;
+  useEffect(() => {
+    if (!invited.current || !profile || !connected || !t0 || t0.state !== "open") return;
+    invited.current = false;
+    if (t0.entrants.length < t0.size && !t0.entrants.some((e) => e.id === profile.id)) void send("tournament:join").then(setError);
+  }, [profile, connected, t0, send]);
 
   if (phase.kind === "loading") {
     return (
@@ -52,6 +62,18 @@ export function TournamentScreen({ id }: { id: string }) {
 
   const t = phase.t;
   const me = profile?.id;
+  if (!profile && ready && t.state === "open") {
+    invited.current = true;
+    const host = t.entrants.find((e) => e.id === t.host && !e.bot)?.name;
+    return (
+      <Signup
+        invite={{
+          title: host ? `${host} invited you to ${t.name}` : `You’re invited to ${t.name}`,
+          detail: `${t.gameName} · ${t.size} players · ${t.entrants.length}/${t.size} joined. Sign up and you’re in.`,
+        }}
+      />
+    );
+  }
   const joined = Boolean(me) && t.entrants.some((e) => e.id === me);
   const isHost = Boolean(me) && t.host === me;
   const act = async (event: "tournament:join" | "tournament:leave" | "tournament:start") => {
@@ -71,6 +93,7 @@ export function TournamentScreen({ id }: { id: string }) {
           </span>
         </div>
         <StateChip state={t.state} />
+        <ShareButton t={t} />
       </header>
 
       {t.champion && <Champion champion={t.champion} you={me} />}
