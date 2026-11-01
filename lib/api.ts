@@ -245,6 +245,8 @@ export const api = {
   logout: (token: string) => request<void>("/api/logout", { method: "POST", headers: { Authorization: `Bearer ${token}` } }),
   me: (token: string) => request<Profile>("/api/me", { headers: { Authorization: `Bearer ${token}` } }),
   profile: (id: string) => request<Profile>(`/api/profiles/${id}`),
+  presence: (id: string, signal?: AbortSignal) =>
+    request<{ profileId: string; status: "online" | "in-match" | "offline"; matchId: string | null }>(`/api/profiles/${id}/presence`, { signal }),
   games: () => request<GameSummary[]>("/api/games"),
   live: () => request<LiveMatch[]>("/api/live"),
   matches: (player: string) => request<MatchSummary[]>(`/api/matches?player=${encodeURIComponent(player)}`),
