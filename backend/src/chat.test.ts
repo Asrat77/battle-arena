@@ -250,6 +250,51 @@ describe("chat", () => {
     await send(b, "room:leave");
   });
 
+  test("spectators keep the room chat through a rematch and after the room closes", async () => {
+    const [a, b, c] = await Promise.all([alice, bob, carol].map((p) => client(p.token)));
+    const { room } = await send(a, "room:create", { gameId: firstToThree.id });
+    await send(b, "room:join", { code: room.code });
+    await send(a, "room:ready");
+    await send(b, "room:ready");
+    clock.advance(ROOM_COUNTDOWN_MS);
+    const { matchId } = await waitFor(a, "room:update", (u) => u.state === "playing");
+    await send(c, "match:watch", { matchId });
+    await send(a, "chat:send", { roomId: room.code, text: "game one" });
+    const finish = (id: string) => {
+      const m = matches.get(id)!;
+      while (!m.cur.outcome) {
+        const seat = (m.cur.state as { turn: 0 | 1 }).turn;
+        assert.equal(matches.move(m.players[seat], m.id, { type: "point" }), null);
+      }
+    };
+    finish(matchId);
+    await waitFor(c, "match:end");
+
+    // Rematch: the room's next match starts while the spectator is still on the first one.
+    await send(a, "rematch:request", { matchId });
+    const next = await send(b, "rematch:request", { matchId });
+    assert.equal(next.state, "matched");
+    assert.equal((await send(c, "chat:send", { roomId: matchId, text: "rematch time" })).ok, true);
+    assert.equal((await send(a, "chat:send", { roomId: room.code, text: "bring it" })).ok, true);
+    await settle();
+    assert.deepEqual(chats(c).map((x) => x.text), ["game one", "rematch time", "bring it"]);
+    assert.deepEqual(chats(b).map((x) => x.text), ["game one", "rematch time", "bring it"]);
+    finish(next.matchId);
+
+    // Both players leave: the room closes, but the spectator keeps the chat and its history.
+    await send(a, "room:leave");
+    await send(b, "room:leave");
+    const history = await send(c, "chat:history", { roomId: matchId });
+    assert.equal(history.ok, true);
+    assert.equal(history.roomId, room.code);
+    assert.deepEqual(history.messages.map((x: any) => x.text), ["game one", "rematch time", "bring it"]);
+    assert.equal((await send(c, "chat:send", { roomId: matchId, text: "good games" })).ok, true);
+    await settle();
+    assert.equal(chats(c).at(-1).text, "good games");
+    await send(c, "match:leave", { matchId });
+    assert.equal((await send(c, "chat:send", { roomId: matchId, text: "still here?" })).ok, false);
+  });
+
   test(`messages are capped at ${MAX_CHAT_CHARS} characters and must not be empty`, async () => {
     const [a] = await Promise.all([alice, bob].map((p) => client(p.token)));
     const m = matches.create({ game: firstToThree, players: [alice.id, bob.id] });

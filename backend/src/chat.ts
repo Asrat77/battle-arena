@@ -121,18 +121,18 @@ export class Chat {
     const room = match ? this.lobby.roomOfMatch(match.id) : this.lobby.roomInfo(roomId);
     if (room) {
       const member = room.members.includes(profileId);
-      const watching = room.watchMatchId !== null && this.matches.isWatching(socket, room.watchMatchId);
+      // Watching any of the room's matches keeps you in its chat, across rematches.
+      const watching = room.matchIds.some((id) => this.matches.isWatching(socket, id));
       if (!member && !watching) return "you are not in this room";
-      const channels = [roomChannel(room.code)];
-      if (room.watchMatchId) channels.push(specRoom(room.watchMatchId));
-      return { roomId: room.code, channels, member };
+      return { roomId: room.code, channels: [roomChannel(room.code), ...room.matchIds.map(specRoom)], member };
     }
 
     if (!match) return "no such room";
     const member = match.players.includes(profileId);
     if (!member && !this.matches.isWatching(socket, match.id)) return "you are not in this match";
     return {
-      roomId: match.id,
+      // A room that has closed still owns the chat history of its matches.
+      roomId: this.lobby.roomCodeOfMatch(match.id) ?? match.id,
       channels: [specRoom(match.id), ...match.players.map(profileRoom)],
       member,
     };

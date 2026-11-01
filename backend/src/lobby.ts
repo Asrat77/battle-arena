@@ -42,6 +42,8 @@ interface Room {
   matchId: string | null;
   /** The room's previous match, so its spectators keep the room chat after it ends. */
   lastMatchId: string | null;
+  /** Every match played in the room, so spectators of an earlier one keep its chat across rematches. */
+  matchIds: string[];
   /** Set while both are ready and the 3-2-1 runs. */
   countdown?: { endsAt: number; timer: TimerHandle };
   createdAt: number;
@@ -81,6 +83,8 @@ export class Lobby {
   /** Which room each profile is in (one at a time). */
   private roomOf = new Map<string, string>();
   private rematches = new Map<string, Rematch>();
+  /** Match ID to the code of the room it was played in; kept after the room closes. */
+  private matchRooms = new Map<string, string>();
   private readonly clock: Clock;
   private readonly games: NonNullable<LobbyOptions["games"]>;
 
@@ -134,7 +138,7 @@ export class Lobby {
    */
   roomInfo(
     code: string,
-  ): { code: string; members: string[]; matchId: string | null; watchMatchId: string | null } | undefined {
+  ): { code: string; members: string[]; matchId: string | null; watchMatchId: string | null; matchIds: string[] } | undefined {
     const room = this.rooms.get(code.trim().toUpperCase());
     return (
       room && {
@@ -142,16 +146,20 @@ export class Lobby {
         members: room.members.map((x) => x.profileId),
         matchId: room.matchId,
         watchMatchId: room.matchId ?? room.lastMatchId,
+        matchIds: [...room.matchIds],
       }
     );
   }
 
-  /** The room a match was started from, if any (live, or the room's last match). */
+  /** The room a match was started from, while the room exists and the match is one of its own. */
   roomOfMatch(matchId: string) {
-    for (const room of this.rooms.values()) {
-      if (room.matchId === matchId || (!room.matchId && room.lastMatchId === matchId)) return this.roomInfo(room.code);
-    }
-    return undefined;
+    const code = this.matchRooms.get(matchId);
+    return code ? this.roomInfo(code) : undefined;
+  }
+
+  /** The code of the room a match was played in, even after the room is gone (its chat history keeps that key). */
+  roomCodeOfMatch(matchId: string): string | undefined {
+    return this.matchRooms.get(matchId);
   }
 
   attach(socket: Socket, profileId: string) {
@@ -325,6 +333,7 @@ export class Lobby {
       members: [{ profileId, ready: false }],
       matchId: null,
       lastMatchId: null,
+      matchIds: [],
       createdAt: this.clock.now(),
     };
     this.rooms.set(code, room);
@@ -394,6 +403,10 @@ export class Lobby {
 
   private start(game: AnyGame, players: [string, string], botSeat: Seat | null, room: string | null) {
     const m = this.matches.create({ game, players, botSeat });
+    if (room) {
+      this.matchRooms.set(m.id, room);
+      this.rooms.get(room)?.matchIds.push(m.id);
+    }
     this.rematches.set(m.id, { game, players, botSeat, room, ended: false, state: "open", wants: [], next: null });
     return m;
   }
