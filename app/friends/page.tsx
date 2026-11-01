@@ -9,6 +9,7 @@ import { Avatar3D } from "@/components/ui/Avatar3D";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { PresenceChip } from "@/components/ui/Chip";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { RecentlyPlayed } from "@/components/friends/RecentlyPlayed";
 import { UserSearch } from "@/components/friends/UserSearch";
 import { Icon3D } from "@/components/ui/Icon3D";
 import { Dialog } from "@/components/ui/Overlay";
@@ -88,6 +89,22 @@ export default function FriendsPage() {
     }
   };
 
+  const relation = (pid: string) =>
+    friends?.some((f) => f.profileId === pid)
+      ? ("friend" as const)
+      : requests.outgoing.some((r) => r.profileId === pid)
+        ? ("sent" as const)
+        : requests.incoming.some((r) => r.profileId === pid)
+          ? ("incoming" as const)
+          : ("none" as const);
+
+  const addById = async (pid: string) => {
+    const res = await request(pid);
+    if ("error" in res) return res.error;
+    toast.show({ icon: "check", body: res.status === "accepted" ? "You’re now friends." : "Request sent." });
+    return null;
+  };
+
   const sorted = [...(friends ?? [])].sort((a, b) => ORDER[a.status] - ORDER[b.status]);
   const online = sorted.filter((f) => f.status === "online").length;
 
@@ -105,21 +122,8 @@ export default function FriendsPage() {
             setError(null);
           }}
           error={error}
-          relation={(pid) =>
-            friends?.some((f) => f.profileId === pid)
-              ? "friend"
-              : requests.outgoing.some((r) => r.profileId === pid)
-                ? "sent"
-                : requests.incoming.some((r) => r.profileId === pid)
-                  ? "incoming"
-                  : "none"
-          }
-          onAdd={async (pid) => {
-            const res = await request(pid);
-            if ("error" in res) return res.error;
-            toast.show({ icon: "check", body: res.status === "accepted" ? "You’re now friends." : "Request sent." });
-            return null;
-          }}
+          relation={relation}
+          onAdd={addById}
           hint={
             <>
               Your ID is{" "}
@@ -223,6 +227,7 @@ export default function FriendsPage() {
           </ul>
         </section>
       )}
+      <RecentlyPlayed meId={profile.id} relation={relation} onAdd={addById} />
       </div>
       </div>
 
