@@ -11,13 +11,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { GearIcon } from "@/components/settings/GearIcon";
-import { Avatar3D } from "@/components/ui/Avatar3D";
 import { CountDot } from "@/components/ui/Button";
 import { useInviteToasts } from "@/components/room/useInviteToasts";
 import { Icon3D } from "@/components/ui/Icon3D";
 import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { useFriends } from "@/lib/useFriends";
+import { AccountMenu } from "./AccountMenu";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { activeTab, BARE_ON_MOBILE, hasDock, TABS } from "./nav";
 
@@ -93,9 +93,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <GearIcon />
               </Link>
-              <Link href="/profile" aria-label={`Profile: ${profile.name}`} className="hidden rounded-[14px] transition-opacity hover:opacity-85 md:block">
-                <Avatar3D id={profile.id} className="lg:h-12 lg:w-12" />
-              </Link>
+              <AccountMenu />
             </div>
           )}
         </div>
