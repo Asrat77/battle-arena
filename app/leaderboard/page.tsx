@@ -45,7 +45,7 @@ export default function LeaderboardPage() {
   const table = rows?.slice(PODIUM) ?? [];
 
   return (
-    <Page className="flex flex-col gap-3">
+    <Page width="wide" className="flex flex-col gap-3">
       <h1 className="sr-only">Leaderboard</h1>
       <Segmented<Board> label="Leaderboard" value={board} onChange={setBoard} options={BOARDS} />
 
@@ -65,8 +65,11 @@ export default function LeaderboardPage() {
       ) : rows.length === 0 ? (
         <Empty board={board} />
       ) : (
-        <>
-          <Podium rows={rows} you={profile?.id} />
+        <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[400px_minmax(0,1fr)] lg:items-start lg:gap-8">
+          <div className="lg:sticky lg:top-4">
+            <Podium rows={rows} you={profile?.id} />
+          </div>
+          <div className="flex min-w-0 flex-col gap-3">
           {table.length > 0 && (
             <div className="-mb-1.5 grid grid-cols-[24px_34px_minmax(0,1fr)_52px_40px] gap-2.5 px-3.5" aria-hidden>
               <span className="eyebrow col-start-4 text-right">Rating</span>
@@ -82,7 +85,8 @@ export default function LeaderboardPage() {
           )}
           <p className="text-center text-small text-ink-2">Ranked only from recorded matches. Bot matches never change rank.</p>
           {profile && <Pinned row={mine} board={board} />}
-        </>
+          </div>
+        </div>
       )}
     </Page>
   );

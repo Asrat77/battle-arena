@@ -92,9 +92,11 @@ export default function FriendsPage() {
   const online = sorted.filter((f) => f.status === "online").length;
 
   return (
-    <Page className="flex flex-col gap-4">
+    <Page width="wide" className="flex flex-col gap-4">
       <h1 className="text-h2">Friends</h1>
 
+      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start lg:gap-8">
+      <div className="flex flex-col gap-4 lg:sticky lg:top-4">
       <form onSubmit={submit} className="flex flex-col gap-3 rounded-card bg-sf p-4" noValidate>
         <UserSearch
           value={id}
@@ -174,6 +176,9 @@ export default function FriendsPage() {
         </section>
       )}
 
+      </div>
+
+      <div className="min-w-0">
       {friends === null ? (
         <div className="flex justify-center py-8" role="status">
           <span className="spin h-6 w-6 text-ink-2" aria-label="Loading friends" />
@@ -218,6 +223,8 @@ export default function FriendsPage() {
           </ul>
         </section>
       )}
+      </div>
+      </div>
 
       <Dialog
         open={removing !== null}
