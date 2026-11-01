@@ -27,7 +27,7 @@ export function TicTacToeBoard({ view, seat, names, disabled = false, onMove, co
   const boardEnd = result.over ? result.winner === null ? "Board drawn" : `${label(result.winner)} ${result.winner === seat ? "win" : "wins"} this board` : null;
 
   return (
-    <section className="mx-auto flex w-full max-w-[460px] flex-col gap-3" aria-label="Tic-Tac-Toe board">
+    <section className="mx-auto flex w-full max-w-[460px] lg:max-w-[clamp(460px,calc(100dvh-360px),640px)] flex-col gap-3" aria-label="Tic-Tac-Toe board">
       <div className="card flex items-center gap-2 !px-3.5 !py-3">
         {([left, right] as const).map((s, i) => (
           <Fragment key={s}>

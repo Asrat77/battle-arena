@@ -81,7 +81,7 @@ export function DotsBoard({ view, seat, names, players, disabled = false, onMove
     : `${names[view.turn]} is drawing a line`;
 
   return (
-    <section className="mx-auto flex w-full max-w-[460px] flex-col gap-3" aria-label="Dots and Boxes board">
+    <section className="mx-auto flex w-full max-w-[460px] lg:max-w-[clamp(460px,calc(100dvh-360px),640px)] flex-col gap-3" aria-label="Dots and Boxes board">
       <div className="card flex items-center gap-2 !px-3.5 !py-3">
         {([left, right] as const).map((s, i) => (
           <div key={s} className={`flex min-w-0 flex-1 items-center gap-2 ${i ? "flex-row-reverse text-right" : ""}`}>

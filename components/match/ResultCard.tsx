@@ -51,8 +51,8 @@ export function ResultCard({
   const capped = useCapped(matchId, !spectating && !seats[right].bot);
   const room = useRoomCode(matchId, !spectating && !seats[right].bot);
   return (
-    <section aria-labelledby="result-title" className="relative mx-auto flex w-full max-w-[520px] flex-col gap-2.5 pb-2" data-testid="match-end">
-      <div className="dither h-[300px]" aria-hidden />
+    <section aria-labelledby="result-title" className="relative mx-auto flex w-full max-w-[520px] flex-col gap-2.5 pb-2 lg:max-w-[640px] lg:gap-4" data-testid="match-end">
+      <div className="dither h-[300px] lg:h-[340px]" aria-hidden />
       <header className="relative flex flex-col items-center gap-2 px-5 pb-2 pt-6 text-center">
         <Icon3D name={result.icon} size={120} className="animate-pop drop-shadow-[0_16px_24px_rgba(0,0,0,.45)]" />
         <span className={`eyebrow ${won ? "!text-accent" : ""}`}>{result.eyebrow}</span>

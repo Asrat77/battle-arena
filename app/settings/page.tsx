@@ -30,18 +30,22 @@ export default function SettingsPage() {
       </ComingSoon>
     );
   return (
-    <Page className="flex flex-col gap-6">
-      <h1 className="text-[30px] font-semibold leading-[1.02] tracking-[-.045em]">Settings</h1>
+    // lg: account forms on the left, picture and appearance on the right, so
+    // fields stop stretching across the screen.
+    <Page width="wide" className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:items-start lg:gap-x-10">
+      <h1 className="text-[30px] font-semibold leading-[1.02] tracking-[-.045em] lg:col-span-2 lg:text-h1">Settings</h1>
       <Section id="set-account" title="Account">
         <AccountSettings />
       </Section>
-      <Section id="set-picture" title="Profile picture">
-        <PictureSettings />
-      </Section>
-      <Section id="set-look" title="Appearance">
-        <AppearanceSettings />
-      </Section>
-      <SignOut />
+      <div className="flex flex-col gap-6">
+        <Section id="set-picture" title="Profile picture">
+          <PictureSettings />
+        </Section>
+        <Section id="set-look" title="Appearance">
+          <AppearanceSettings />
+        </Section>
+        <SignOut />
+      </div>
     </Page>
   );
 }

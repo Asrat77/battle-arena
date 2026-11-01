@@ -83,7 +83,7 @@ function Creating({ gameId, gameName }: { gameId: string; gameName: string }) {
 
 function PickGame() {
   return (
-    <div className="mx-auto flex max-w-[480px] flex-col gap-4 py-6">
+    <div className="mx-auto flex w-full max-w-[480px] lg:max-w-[560px] flex-col gap-4 py-6">
       <ButtonLink href="/" variant="ghost" size="sm" className="self-start md:hidden">
         ← Back
       </ButtonLink>

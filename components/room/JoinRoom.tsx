@@ -46,7 +46,7 @@ export function JoinRoom() {
   };
 
   return (
-    <div className="mx-auto flex max-w-[480px] flex-col gap-5 py-6">
+    <div className="mx-auto flex w-full max-w-[480px] lg:max-w-[560px] flex-col gap-5 py-6">
       <header className="flex items-center gap-3.5">
         <div className="plate flex h-[72px] w-[72px] flex-none items-center justify-center rounded-[24px]">
           <Icon3D name="key" size={52} />

@@ -118,7 +118,7 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
       }
       onForfeit={leave}
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 lg:justify-center">
         {adapter ? (
           <adapter.Board
             view={view.view}

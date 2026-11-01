@@ -27,7 +27,7 @@ export function PlayerSeat({
   const label = offline ? "Offline" : state;
   return (
     <div
-      className={`flex min-w-0 items-center gap-2 ${align === "right" ? "flex-row-reverse text-right" : ""} ${offline ? "opacity-60" : ""}`}
+      className={`flex min-w-0 items-center gap-2 ${align === "right" ? "flex-row-reverse text-right lg:flex-row lg:text-left" : ""} ${offline ? "opacity-60" : ""}`}
     >
       <PlayerLink id={id} bot={bot} className="flex-none" label={`Open ${name}`}>
         <Avatar3D id={id} bot={bot} seat={side} />
@@ -37,7 +37,7 @@ export function PlayerSeat({
           <b className="truncate text-[14px] font-semibold">{name}</b>
         </PlayerLink>
         {(bot || label) && (
-          <span className={`flex min-w-0 items-center gap-1.5 ${align === "right" ? "flex-row-reverse" : ""}`}>
+          <span className={`flex min-w-0 items-center gap-1.5 ${align === "right" ? "flex-row-reverse lg:flex-row" : ""}`}>
             {/* Phones rely on the robot avatar; the tag would crowd out the state. */}
             {bot && (
               <span className="hidden sm:contents">

@@ -70,11 +70,11 @@ const CELL: Record<Orientation, string> = {
 const V_GRID = "grid-cols-2";
 const V_ROWS = { md: "grid-rows-[76px_repeat(6,minmax(52px,1fr))_76px]", sm: "grid-rows-[50px_repeat(6,40px)_50px]" };
 const H_GRID = {
-  md: "grid-cols-[118px_repeat(6,minmax(0,1fr))_118px] grid-rows-[repeat(2,minmax(112px,1fr))] lg:grid-rows-[repeat(2,150px)]",
+  md: "grid-cols-[118px_repeat(6,minmax(0,1fr))_118px] grid-rows-[repeat(2,minmax(112px,1fr))] lg:grid-rows-[repeat(2,172px)]",
   sm: "grid-cols-[84px_repeat(6,minmax(0,1fr))_84px] grid-rows-[repeat(2,64px)]",
 };
 const AUTO_H = {
-  md: "sm:grid-cols-[118px_repeat(6,minmax(0,1fr))_118px] sm:grid-rows-[repeat(2,minmax(112px,1fr))] lg:grid-rows-[repeat(2,150px)]",
+  md: "sm:grid-cols-[118px_repeat(6,minmax(0,1fr))_118px] sm:grid-rows-[repeat(2,minmax(112px,1fr))] lg:grid-rows-[repeat(2,172px)]",
   sm: "sm:grid-cols-[84px_repeat(6,minmax(0,1fr))_84px] sm:grid-rows-[repeat(2,64px)]",
 };
 

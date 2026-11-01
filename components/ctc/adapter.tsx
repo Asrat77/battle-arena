@@ -55,11 +55,12 @@ function Play({ view, seat, onMove, disabled, names, error }: BoardProps) {
 
   const live = view.phase === "rounds" && !disabled;
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+    // lg: the round history on the left, the guess pad on the right.
+    <div className="flex min-h-0 flex-1 flex-col gap-2.5 lg:grid lg:flex-none lg:grid-cols-[minmax(0,1fr)_360px] lg:content-start lg:gap-x-8 lg:gap-y-3">
       {view.secrets ? (
-        <Secrets secrets={view.secrets} seat={seat} names={names} />
+        <div className="lg:col-span-2"><Secrets secrets={view.secrets} seat={seat} names={names} /></div>
       ) : (
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 lg:col-span-2">
           {seat !== "spectator" && view.mySecret ? (
             <MySecret code={view.mySecret} />
           ) : (
@@ -72,22 +73,26 @@ function Play({ view, seat, onMove, disabled, names, error }: BoardProps) {
           )}
         </div>
       )}
-      <RoundHistory
-        history={view.history}
-        seat={seat}
-        names={names}
-        current={live ? { round: view.round, mine: view.myPending, submitted: view.submitted } : null}
-      />
-      <div className="flex-1" />
-      {playing && view.phase === "rounds" && (
-        <GuessEntry
-          key={view.round}
-          round={view.round}
-          pending={view.myPending}
-          opp={opp}
-          error={error}
-          onGuess={(code) => onMove({ type: "guess", code })}
+      <div className="flex min-h-0 flex-1 flex-col lg:col-start-1 lg:row-start-2 lg:max-h-[calc(100dvh-380px)] lg:min-h-[320px]">
+        <RoundHistory
+          history={view.history}
+          seat={seat}
+          names={names}
+          current={live ? { round: view.round, mine: view.myPending, submitted: view.submitted } : null}
         />
+      </div>
+      <div className="flex-1 lg:hidden" />
+      {playing && view.phase === "rounds" && (
+        <div className="lg:col-start-2 lg:row-start-2">
+          <GuessEntry
+            key={view.round}
+            round={view.round}
+            pending={view.myPending}
+            opp={opp}
+            error={error}
+            onGuess={(code) => onMove({ type: "guess", code })}
+          />
+        </div>
       )}
     </div>
   );
@@ -97,7 +102,7 @@ function SecretEntry({ error, onLock }: { error?: MoveError | null; onLock(code:
   const [code, setCode] = useState("");
   const [illegal, reject] = useIllegal(error);
   return (
-    <div className="flex flex-1 flex-col gap-4 pb-2">
+    <div className="mx-auto flex w-full flex-1 flex-col gap-4 pb-2 lg:max-w-[480px] lg:flex-none">
       <div className="mt-2 flex items-center gap-3.5">
         <Icon3D name="vault" size={72} />
         <div className="flex flex-col gap-0.5">
