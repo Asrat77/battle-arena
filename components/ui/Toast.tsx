@@ -121,9 +121,9 @@ function Toast({ toast, onDismiss }: { toast: ToastItem; onDismiss: () => void }
       {ms > 0 && (
         <span
           aria-hidden
-          className="absolute inset-x-0 bottom-0 h-[3px] origin-left bg-accent/70 motion-reduce:hidden"
+          className="toast-bar absolute inset-x-0 bottom-0 h-[3px] origin-left bg-accent/70"
           style={{
-            animation: `drain ${ms}ms linear forwards`,
+            ["--toast-ms" as string]: `${ms}ms`,
             ...(toast.tone === "warn" ? { background: "rgb(240 146 141 / .8)" } : toast.tone === "reward" ? { background: "rgb(243 181 66 / .85)" } : null),
           }}
         />
