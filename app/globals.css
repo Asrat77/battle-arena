@@ -33,7 +33,19 @@
     --sh: 0 18px 40px rgb(0 0 0 / 0.45);
     --scrim: rgb(0 0 0 / 0.6);
     --sow-ms: 120ms;
+    /* Type steps: mobile sizes, one step up on desktop (lg). */
+    --fs-body: 15px;
+    --fs-h1: 40px;
+    --fs-h2: 26px;
     color-scheme: dark;
+  }
+
+  @media (min-width: 1024px) {
+    :root {
+      --fs-body: 16px;
+      --fs-h1: 48px;
+      --fs-h2: 30px;
+    }
   }
 
   .light {
@@ -128,11 +140,25 @@
     @apply bg-sf-3 text-ink-3 opacity-100;
   }
   @media (hover: hover) {
+    .btn {
+      @apply transition-[transform,background-color,color,filter] duration-150;
+    }
+    .btn-act:hover:not(:disabled),
+    .btn:not(.btn-sec, .btn-ghost, .btn-bad):hover:not(:disabled) {
+      filter: brightness(1.07);
+    }
     .btn-sec:hover:not(:disabled) {
       @apply bg-sf-3;
     }
     .btn-ghost:hover:not(:disabled) {
-      @apply text-ink;
+      @apply bg-sf-2 text-ink;
+    }
+    .btn-bad:hover:not(:disabled) {
+      filter: brightness(1.1);
+    }
+    button.chip:hover:not(:disabled),
+    a.chip:hover {
+      @apply bg-sf-3 text-ink;
     }
   }
   .btn-outline {

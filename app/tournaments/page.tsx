@@ -17,6 +17,7 @@ import { api, type TournamentState } from "@/lib/api";
 import { useSession } from "@/lib/session";
 
 import { GAME_OPTIONS, type GameId } from "@/lib/gameCatalog";
+import { Page } from "@/components/ui/Page";
 
 type Filter = "all" | GameId;
 
@@ -52,7 +53,7 @@ export default function TournamentsPage() {
   if (!profile) return <Signup />;
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-3">
+    <Page className="flex flex-col gap-3">
       <header className="flex items-center justify-between gap-3">
         <h1 className="text-h2">Tournaments</h1>
         {list?.length !== 0 && (
@@ -99,7 +100,7 @@ export default function TournamentsPage() {
         </ul>
       )}
       <CreateTournament key={filter} open={creating} onClose={() => setCreating(false)} defaultGame={filter === "all" ? undefined : filter} />
-    </div>
+    </Page>
   );
 }
 

@@ -28,9 +28,10 @@ const config: Config = {
       },
       fontSize: {
         display: ["56px", { lineHeight: "1", letterSpacing: "-0.05em", fontWeight: "600" }],
-        h1: ["40px", { lineHeight: "1.02", letterSpacing: "-0.045em", fontWeight: "600" }],
-        h2: ["26px", { lineHeight: "1.1", letterSpacing: "-0.04em", fontWeight: "600" }],
-        body: ["15px", "1.45"],
+        // h1, h2 and body step up at lg (see --fs-* in globals.css).
+        h1: ["var(--fs-h1)", { lineHeight: "1.02", letterSpacing: "-0.045em", fontWeight: "600" }],
+        h2: ["var(--fs-h2)", { lineHeight: "1.1", letterSpacing: "-0.04em", fontWeight: "600" }],
+        body: ["var(--fs-body)", "1.45"],
         small: ["13px", "1.4"],
         eyebrow: ["11px", { letterSpacing: "0.08em" }],
       },

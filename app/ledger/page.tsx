@@ -15,6 +15,7 @@ import { Icon3D } from "@/components/ui/Icon3D";
 import type { BlockKind, ChainCheck as Check } from "@/engine/ledger";
 import { api, type LedgerResponse } from "@/lib/api";
 import { shortId, usePlayerNames } from "@/lib/usePlayerNames";
+import { Page } from "@/components/ui/Page";
 
 const POLL_MS = 3000;
 const FLASH_MS = 2000;
@@ -117,7 +118,7 @@ export default function LedgerPage() {
     );
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-3.5">
+    <Page className="flex flex-col gap-3.5">
       <header className="flex items-center gap-3">
         <Icon3D name="blockchain" size={56} />
         <div className="min-w-0 flex-1">
@@ -232,6 +233,6 @@ export default function LedgerPage() {
         onClose={closeSheet}
         onOpen={setOpen}
       />
-    </div>
+    </Page>
   );
 }

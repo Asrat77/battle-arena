@@ -8,6 +8,7 @@ import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 import { PictureSettings } from "@/components/settings/PictureSettings";
 import { SignOut } from "@/components/settings/SignOut";
 import { useSession } from "@/lib/session";
+import { Page } from "@/components/ui/Page";
 
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
   return (
@@ -29,7 +30,7 @@ export default function SettingsPage() {
       </ComingSoon>
     );
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-6">
+    <Page className="flex flex-col gap-6">
       <h1 className="text-[30px] font-semibold leading-[1.02] tracking-[-.045em]">Settings</h1>
       <Section id="set-account" title="Account">
         <AccountSettings />
@@ -41,6 +42,6 @@ export default function SettingsPage() {
         <AppearanceSettings />
       </Section>
       <SignOut />
-    </div>
+    </Page>
   );
 }

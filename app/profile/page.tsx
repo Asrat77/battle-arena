@@ -5,6 +5,7 @@
 import { ProfileView } from "@/components/profile/ProfileView";
 import { ComingSoon } from "@/components/shell/ComingSoon";
 import { useSession } from "@/lib/session";
+import { Page } from "@/components/ui/Page";
 
 export default function ProfilePage() {
   const { profile } = useSession();
@@ -15,8 +16,8 @@ export default function ProfilePage() {
       </ComingSoon>
     );
   return (
-    <div className="mx-auto max-w-xl lg:max-w-5xl">
+    <Page width="wide">
       <ProfileView id={profile.id} own />
-    </div>
+    </Page>
   );
 }
