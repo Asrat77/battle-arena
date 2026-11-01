@@ -16,6 +16,7 @@ import { type BracketMatch, type TournamentEntrant, type TournamentState } from 
 import { useSession } from "@/lib/session";
 import { useTournament } from "@/lib/useTournament";
 import { GAME_ICONS, Name, StateChip } from "./shared";
+import { Page } from "@/components/ui/Page";
 
 export function TournamentScreen({ id }: { id: string }) {
   const { phase, busy, send, retry } = useTournament(id);
@@ -59,7 +60,7 @@ export function TournamentScreen({ id }: { id: string }) {
   };
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-4">
+    <Page className="flex flex-col gap-4">
       <header className="flex items-center gap-3">
         <Icon3D name={GAME_ICONS[t.gameId] ?? "controller"} size={44} />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -92,7 +93,7 @@ export function TournamentScreen({ id }: { id: string }) {
       <ButtonLink href="/tournaments" variant="ghost" block>
         All tournaments
       </ButtonLink>
-    </div>
+    </Page>
   );
 }
 

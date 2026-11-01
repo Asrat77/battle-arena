@@ -16,6 +16,7 @@ import { api, type LeaderboardRow } from "@/lib/api";
 import { useSession } from "@/lib/session";
 
 import { GAME_OPTIONS, type GameId } from "@/lib/gameCatalog";
+import { Page } from "@/components/ui/Page";
 
 type Board = "overall" | GameId;
 
@@ -44,7 +45,7 @@ export default function LeaderboardPage() {
   const table = rows?.slice(PODIUM) ?? [];
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-3">
+    <Page className="flex flex-col gap-3">
       <h1 className="sr-only">Leaderboard</h1>
       <Segmented<Board> label="Leaderboard" value={board} onChange={setBoard} options={BOARDS} />
 
@@ -83,7 +84,7 @@ export default function LeaderboardPage() {
           {profile && <Pinned row={mine} board={board} />}
         </>
       )}
-    </div>
+    </Page>
   );
 }
 

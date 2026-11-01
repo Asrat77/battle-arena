@@ -6,14 +6,15 @@
 import { use } from "react";
 import { ProfileView } from "@/components/profile/ProfileView";
 import { useSession } from "@/lib/session";
+import { Page } from "@/components/ui/Page";
 
 export default function PublicProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { profile } = useSession();
   const own = profile?.id === id.toLowerCase();
   return (
-    <div className="mx-auto flex max-w-xl flex-col lg:max-w-5xl">
+    <Page width="wide" className="flex flex-col">
       <ProfileView id={id.toLowerCase()} own={own} />
-    </div>
+    </Page>
   );
 }

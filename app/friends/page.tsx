@@ -16,6 +16,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useSession } from "@/lib/session";
 import { shortId } from "@/lib/usePlayerNames";
 import { useFriendsList, type Friend } from "@/lib/useFriends";
+import { Page } from "@/components/ui/Page";
 
 const ORDER = { online: 0, "in-match": 1, offline: 2 };
 
@@ -91,7 +92,7 @@ export default function FriendsPage() {
   const online = sorted.filter((f) => f.status === "online").length;
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-4">
+    <Page className="flex flex-col gap-4">
       <h1 className="text-h2">Friends</h1>
 
       <form onSubmit={submit} className="flex flex-col gap-3 rounded-card bg-sf p-4" noValidate>
@@ -234,6 +235,6 @@ export default function FriendsPage() {
       >
         They’ll be removed from your list too. You can send a new request any time.
       </Dialog>
-    </div>
+    </Page>
   );
 }
