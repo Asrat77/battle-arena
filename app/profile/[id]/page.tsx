@@ -12,7 +12,7 @@ export default function PublicProfilePage({ params }: { params: Promise<{ id: st
   const { profile } = useSession();
   const own = profile?.id === id.toLowerCase();
   return (
-    <div className="mx-auto flex max-w-xl flex-col">
+    <div className="mx-auto flex max-w-xl flex-col lg:max-w-5xl">
       <ProfileView id={id.toLowerCase()} own={own} />
     </div>
   );

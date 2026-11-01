@@ -15,7 +15,7 @@ export default function ProfilePage() {
       </ComingSoon>
     );
   return (
-    <div className="mx-auto max-w-xl">
+    <div className="mx-auto max-w-xl lg:max-w-5xl">
       <ProfileView id={profile.id} own />
     </div>
   );
