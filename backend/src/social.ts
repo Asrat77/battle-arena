@@ -3,6 +3,7 @@
 // declines, and once friends you see when each other is online or in a match
 // and can invite each other to a room. Toasts go out as `notify {kind, ...}`.
 
+import { RateLimiter } from "./rateLimit";
 import { Router } from "express";
 import type { Server, Socket } from "socket.io";
 import type { Seat } from "../../engine/types";
@@ -333,16 +334,12 @@ export function socialRoutes(social: Social, identity: Identity): Router {
 
   // Type-ahead search by @username (prefix) then display name. Needs no sign-in;
   // a Bearer token adds `relationship` and hides you. Limited per IP to stop scraping.
-  const hits = new Map<string, number[]>();
+  const searchLimit = new RateLimiter(SEARCH_MAX, SEARCH_WINDOW_MS);
   router.get("/api/profiles/search", (req, res) => {
-    const now = Date.now();
-    const recent = (hits.get(req.ip ?? "") ?? []).filter((t) => t > now - SEARCH_WINDOW_MS);
-    if (recent.length >= SEARCH_MAX) {
+    if (!searchLimit.take(req.ip ?? "")) {
       res.status(429).json({ error: "too many searches, slow down" });
       return;
     }
-    hits.set(req.ip ?? "", [...recent, now]);
-    if (hits.size > 5000) for (const [ip, ts] of hits) if (!ts.some((t) => t > now - SEARCH_WINDOW_MS)) hits.delete(ip);
     const me = identity.byToken(bearerToken(req.headers.authorization));
     const results = identity
       .search(req.query.q, 9)

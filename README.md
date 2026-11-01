@@ -107,6 +107,7 @@ Open http://localhost:3000. With no configuration the server generates a ledger 
 | Variable | Where | Purpose |
 | --- | --- | --- |
 | `LEDGER_PRIVATE_KEY` | server | Hex secp256k1 key that signs ledger blocks. Set it in production so the key survives a lost data file. |
+| `TRUST_PROXY` | server | Number of proxy hops in front of the server (`1` on Render) so rate limits see each visitor's real IP. Leave unset when exposed directly |
 | `FRONTEND_URL` | server | Allowed CORS origin, default `http://localhost:3000` |
 | `PORT` | server | Server port, default `3001` |
 | `DATA_FILE` | server | Where profiles and the ledger are stored, default `data/db.json` |

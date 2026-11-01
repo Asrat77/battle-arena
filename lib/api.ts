@@ -21,6 +21,8 @@ export interface Profile {
   username: string;
   /** Only on your own profile (GET /api/me): false for a guest, who cannot sign back in. */
   hasPassword?: boolean;
+  /** Only on your own profile: when you may change your @username again, or null if you may now. */
+  usernameChangeAt?: number | null;
 }
 
 export interface Credentials {
