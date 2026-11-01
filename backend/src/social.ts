@@ -16,6 +16,8 @@ const FRIENDS = "friends";
 const REQUESTS = "friendRequests";
 export const FRIENDS_MAX = 100;
 export const REQUESTS_MAX = 50;
+export const SEARCH_MAX = 60; // searches per IP per window
+export const SEARCH_WINDOW_MS = 60_000;
 
 interface FriendRequest {
   from: string;
@@ -103,6 +105,15 @@ export class Social {
     socket.on("disconnect", () => {
       if (this.socketCount(profileId) === 0) this.pushPresence(profileId);
     });
+  }
+
+  /** How `viewer` stands with `id`: friends, a request they sent, one you sent, or nothing. */
+  relationship(viewer: string, id: string): "friend" | "sent" | "incoming" | "none" {
+    if (this.list(viewer).includes(id)) return "friend";
+    const pending = this.pending();
+    if (pending.some((r) => r.from === viewer && r.to === id)) return "sent";
+    if (pending.some((r) => r.from === id && r.to === viewer)) return "incoming";
+    return "none";
   }
 
   /** Resolve a profile ID or username to a profile ID, or null. */
@@ -318,6 +329,33 @@ export function socialRoutes(social: Social, identity: Identity): Router {
       return;
     }
     res.json({ friends: social.friends(me.id), ...social.requests(me.id) });
+  });
+
+  // Type-ahead search by @username (prefix) then display name. Needs no sign-in;
+  // a Bearer token adds `relationship` and hides you. Limited per IP to stop scraping.
+  const hits = new Map<string, number[]>();
+  router.get("/api/profiles/search", (req, res) => {
+    const now = Date.now();
+    const recent = (hits.get(req.ip ?? "") ?? []).filter((t) => t > now - SEARCH_WINDOW_MS);
+    if (recent.length >= SEARCH_MAX) {
+      res.status(429).json({ error: "too many searches, slow down" });
+      return;
+    }
+    hits.set(req.ip ?? "", [...recent, now]);
+    if (hits.size > 5000) for (const [ip, ts] of hits) if (!ts.some((t) => t > now - SEARCH_WINDOW_MS)) hits.delete(ip);
+    const me = identity.byToken(bearerToken(req.headers.authorization));
+    const results = identity
+      .search(req.query.q, 9)
+      .filter((p) => p.id !== me?.id)
+      .slice(0, 8)
+      .map((p) => ({
+        profileId: p.id,
+        name: p.name,
+        username: p.username,
+        avatar: p.avatar ?? null,
+        ...(me && { relationship: social.relationship(me.id, p.id) }),
+      }));
+    res.json({ results });
   });
 
   router.get("/api/profiles/:id/presence", (req, res) => {

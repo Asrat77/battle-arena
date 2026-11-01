@@ -183,6 +183,18 @@ export class Identity {
     return Object.values(this.profiles()).find((p) => p.username === username);
   }
 
+  /** Profiles whose username starts with `q`, then ones whose display name contains it. Case-insensitive. */
+  search(rawQuery: unknown, limit = 8): Profile[] {
+    const q = typeof rawQuery === "string" ? rawQuery.trim().toLowerCase().replace(/^@/, "") : "";
+    if (q.length < 2) return [];
+    const all = Object.values(this.profiles());
+    const byHandle = all.filter((p) => p.username?.startsWith(q)).sort((a, b) => a.username!.localeCompare(b.username!));
+    const byName = all
+      .filter((p) => !p.username?.startsWith(q) && p.name.toLowerCase().includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return [...byHandle, ...byName].slice(0, limit).map(toProfile);
+  }
+
   /** A profile by its sign-in username (case-insensitive), or null. */
   byUsername(rawUsername: unknown): Profile | null {
     const username = normalUsername(rawUsername);
@@ -438,7 +450,8 @@ export function identityRoutes(identity: Identity): Router {
     res.json({ ...profile, ...identity.account(profile.id) });
   });
 
-  router.get("/api/profiles/:id", (req, res) => {
+  router.get("/api/profiles/:id", (req, res, next) => {
+    if (req.params.id === "search") return next(); // served by socialRoutes
     const profile = identity.get(req.params.id);
     if (!profile) {
       res.status(404).json({ error: "profile not found" });
