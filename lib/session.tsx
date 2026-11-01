@@ -7,6 +7,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { io, type Socket } from "socket.io-client";
 import { rememberAvatar } from "./avatars";
 import { api, API_URL, ApiError, type Credentials, type Profile } from "./api";
+import { rememberPlayerName } from "./usePlayerNames";
 
 const TOKEN_KEY = "arena.token";
 
@@ -19,8 +20,12 @@ interface Session {
   signup(name: string, creds?: Credentials, avatar?: string): Promise<void>;
   /** Sign in to an account made on this or another device. */
   signIn(creds: Credentials): Promise<void>;
-  /** Give a guest profile a username and password. */
-  claim(creds: Credentials): Promise<void>;
+  /** Give a guest profile a password (and optionally a new username). */
+  claim(creds: { username?: string; password: string }): Promise<void>;
+  /** Change your display name and/or @username. */
+  rename(changes: { name?: string; username?: string }): Promise<void>;
+  /** Change the password; other devices are signed out. */
+  changePassword(current: string, next: string): Promise<void>;
   /** Change your profile picture. */
   setAvatar(avatar: string): Promise<void>;
   signOut(): void;
@@ -76,6 +81,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     const s = io(API_URL, { auth: { token }, transports: ["websocket"] });
     s.on("connect", () => setConnected(true));
     s.on("disconnect", () => setConnected(false));
+    // A rename or new picture from another tab or device.
+    s.on("profile:update", (p: Profile) => {
+      rememberAvatar(p.id, p.avatar);
+      rememberPlayerName(p.id, p.name);
+      setProfile((old) => (old && old.id === p.id ? { ...old, ...p } : old));
+    });
     setSocket(s);
     return () => {
       s.disconnect();
@@ -84,24 +95,41 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     };
   }, [token]);
 
-  const start = (res: { profile: Profile; token: string }, username: string | null) => {
+  const start = (res: { profile: Profile; token: string }, hasPassword: boolean) => {
     writeToken(res.token);
     setToken(res.token);
     rememberAvatar(res.profile.id, res.profile.avatar);
-    setProfile({ ...res.profile, username });
+    setProfile({ ...res.profile, hasPassword });
   };
 
   const signup = useCallback(async (name: string, creds?: Credentials, avatar?: string) => {
-    start(await api.signup(name, creds, avatar), creds?.username.trim().toLowerCase() ?? null);
+    start(await api.signup(name, creds, avatar), Boolean(creds?.password));
   }, []);
 
   const signIn = useCallback(async (creds: Credentials) => {
-    start(await api.login(creds), creds.username.trim().toLowerCase());
+    start(await api.login(creds), true);
   }, []);
 
   const claim = useCallback(
-    async (creds: Credentials) => {
+    async (creds: { username?: string; password: string }) => {
       if (token) setProfile(await api.claim(token, creds));
+    },
+    [token],
+  );
+
+  const rename = useCallback(
+    async (changes: { name?: string; username?: string }) => {
+      if (!token) return;
+      const updated = await api.updateMe(token, changes);
+      rememberPlayerName(updated.id, updated.name);
+      setProfile(updated);
+    },
+    [token],
+  );
+
+  const changePassword = useCallback(
+    async (current: string, next: string) => {
+      if (token) setProfile(await api.changePassword(token, current, next));
     },
     [token],
   );
@@ -134,6 +162,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         signup,
         signIn,
         claim,
+        rename,
+        changePassword,
         setAvatar,
         signOut,
       }}

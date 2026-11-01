@@ -5,7 +5,7 @@ import express from "express";
 import { Server } from "socket.io";
 import type { Clock } from "./clock";
 import { Chat } from "./chat";
-import { Identity, identityRoutes } from "./identity";
+import { Identity, identityRoutes, type Profile } from "./identity";
 import { Ledger, ledgerRoutes, type LedgerOptions } from "./ledger";
 import { Lobby, lobbyRoutes, type LobbyOptions } from "./lobby";
 import { MatchRuntime, profileRoom, type Match } from "./matches";
@@ -25,7 +25,9 @@ export interface AppOptions {
 export function createApp(options: AppOptions = {}) {
   const origin = process.env.FRONTEND_URL || "http://localhost:3000";
   const store = options.store ?? new FileStore(process.env.DATA_FILE || "data/db.json");
-  const identity = new Identity(store);
+  // Bound once the socket server exists: a rename or new picture reaches the owner's open tabs.
+  let onProfileChange: (profile: Profile) => void = () => {};
+  const identity = new Identity(store, Date.now, { onChange: (p) => onProfileChange(p) });
   const ledger = new Ledger(store, options.ledger);
 
   const app = express();
@@ -54,6 +56,8 @@ export function createApp(options: AppOptions = {}) {
     socket.data.profileId = profile.id;
     next();
   });
+
+  onProfileChange = (profile) => io.to(profileRoom(profile.id)).emit("profile:update", profile);
 
   const matches = new MatchRuntime(io, { clock: options.clock });
   const recorder = new Recorder(store, ledger, matches);

@@ -5,6 +5,11 @@ import { api, BOT_PLAYER } from "./api";
 
 const cache = new Map<string, string>();
 
+/** Update a cached name after a rename, so lists show it without a reload. */
+export function rememberPlayerName(id: string, name: string) {
+  cache.set(id, name);
+}
+
 /** Display names for profile ids; the bot and unknown ids get a fallback. */
 export function usePlayerNames(ids: readonly string[] | undefined): Record<string, string> {
   const [names, setNames] = useState<Record<string, string>>({});
