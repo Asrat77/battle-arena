@@ -1,6 +1,7 @@
 // One side of the match header: avatar with the you/opp ring, name, bot tag
 // and a plain-words state ("Thinking", "Guessed", "Offline").
 
+import { PlayerLink } from "@/components/profile/PlayerSheet";
 import { Avatar3D } from "@/components/ui/Avatar3D";
 import { BotTag } from "@/components/ui/Chip";
 
@@ -28,9 +29,13 @@ export function PlayerSeat({
     <div
       className={`flex min-w-0 items-center gap-2 ${align === "right" ? "flex-row-reverse text-right" : ""} ${offline ? "opacity-60" : ""}`}
     >
-      <Avatar3D id={id} bot={bot} seat={side} />
+      <PlayerLink id={id} bot={bot} className="flex-none" label={`Open ${name}`}>
+        <Avatar3D id={id} bot={bot} seat={side} />
+      </PlayerLink>
       <div className="flex min-w-0 flex-col">
-        <b className="truncate text-[14px] font-semibold">{name}</b>
+        <PlayerLink id={id} bot={bot} className="truncate">
+          <b className="truncate text-[14px] font-semibold">{name}</b>
+        </PlayerLink>
         {(bot || label) && (
           <span className={`flex min-w-0 items-center gap-1.5 ${align === "right" ? "flex-row-reverse" : ""}`}>
             {/* Phones rely on the robot avatar; the tag would crowd out the state. */}

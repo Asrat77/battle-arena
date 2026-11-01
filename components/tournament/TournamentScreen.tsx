@@ -4,6 +4,7 @@
 // to your own live match and Watch/Replay for the rest. Open tournaments show
 // the seats, with Join / Leave and, for the host, Add bots.
 
+import { PlayerLink } from "@/components/profile/PlayerSheet";
 import Link from "next/link";
 import { useState } from "react";
 import { Avatar3D } from "@/components/ui/Avatar3D";
@@ -102,7 +103,9 @@ function Champion({ champion, you }: { champion: TournamentEntrant; you?: string
       <Icon3D name="trophy" size={56} className="animate-bob" />
       <div className="flex min-w-0 flex-col">
         <span className="eyebrow">Champion</span>
-        <b className="truncate text-lg">{mine ? "You won the tournament!" : champion.name}</b>
+        <PlayerLink id={champion.id} bot={champion.bot || mine} className="truncate">
+          <b className="truncate text-lg">{mine ? "You won the tournament!" : champion.name}</b>
+        </PlayerLink>
         {mine && <span className="text-small text-ink-2">+30 bonus points and the Champion badge.</span>}
       </div>
       <Avatar3D id={champion.id} bot={champion.bot} className="ml-auto" />
@@ -134,8 +137,17 @@ function Lobby({
       <ul className="flex flex-col gap-2">
         {seats.map((e, i) => (
           <li key={i} className="card flex items-center gap-3 !py-3">
-            {e ? <Avatar3D id={e.id} bot={e.bot} size="sm" /> : <span className="h-[34px] w-[34px] rounded-[11px] border-2 border-dashed border-sf-3" />}
-            {e ? <Name name={e.name} bot={e.bot} /> : <span className="text-ink-3">Open seat</span>}
+            {e ? (
+              <PlayerLink id={e.id} bot={e.bot} className="flex items-center gap-3">
+                <Avatar3D id={e.id} bot={e.bot} size="sm" />
+                <Name name={e.name} bot={e.bot} />
+              </PlayerLink>
+            ) : (
+              <>
+                <span className="h-[34px] w-[34px] rounded-[11px] border-2 border-dashed border-sf-3" />
+                <span className="text-ink-3">Open seat</span>
+              </>
+            )}
           </li>
         ))}
       </ul>
@@ -165,8 +177,17 @@ function MatchCard({ m, you }: { m: BracketMatch; you?: string }) {
       <ul className="flex flex-col gap-2">
         {m.players.map((p, i) => (
           <li key={i} className="flex items-center gap-3">
-            {p ? <Avatar3D id={p.id} bot={p.bot} size="sm" seat={!p.bot && p.id === you ? "you" : undefined} /> : <span className="h-[34px] w-[34px] rounded-[11px] border-2 border-dashed border-sf-3" />}
-            {p ? <Name name={p.name} bot={p.bot} /> : <span className="text-ink-3">To be decided</span>}
+            {p ? (
+              <PlayerLink id={p.id} bot={p.bot} className="flex items-center gap-3">
+                <Avatar3D id={p.id} bot={p.bot} size="sm" seat={!p.bot && p.id === you ? "you" : undefined} />
+                <Name name={p.name} bot={p.bot} />
+              </PlayerLink>
+            ) : (
+              <>
+                <span className="h-[34px] w-[34px] rounded-[11px] border-2 border-dashed border-sf-3" />
+                <span className="text-ink-3">To be decided</span>
+              </>
+            )}
             {p && m.winner?.seed === p.seed && <Icon3D name="crown" size={24} label="Winner" className="ml-auto" />}
           </li>
         ))}

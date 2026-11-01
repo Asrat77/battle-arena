@@ -5,7 +5,7 @@
 // Your row is always visible: tinted in place, or pinned above the dock while
 // it is scrolled off screen.
 
-import Link from "next/link";
+import { PlayerLink } from "@/components/profile/PlayerSheet";
 import { useCallback, useEffect, useState } from "react";
 import { fmt, Podium } from "@/components/leaderboard/Podium";
 import { Avatar3D } from "@/components/ui/Avatar3D";
@@ -101,12 +101,14 @@ function RankRow({ row, you, pinned }: { row: LeaderboardRow; you?: boolean; pin
       } ${you && !pinned ? "-mx-3.5 rounded-[14px] !border-t-transparent bg-you-soft px-3.5 [&+li]:border-t-transparent" : ""}`}
     >
       <span className={`font-mono font-semibold tabular-nums ${you ? "text-you" : "text-ink-3"}`}>{row.rank}</span>
-      <Avatar3D id={row.profileId} size="sm" />
+      <PlayerLink id={row.profileId} label={`Open ${row.name}`}>
+        <Avatar3D id={row.profileId} size="sm" />
+      </PlayerLink>
       <span className="flex min-w-0 flex-col">
-        <Link href={`/profile/${row.profileId}`} className="truncate font-semibold hover:underline">
+        <PlayerLink id={row.profileId} className="truncate font-semibold">
           {row.name}
           {you && " · you"}
-        </Link>
+        </PlayerLink>
         <span className="text-small text-ink-2" aria-label={`${row.wins} won, ${row.losses} lost${row.draws ? `, ${row.draws} drawn` : ""}`}>
           {record(row)}
         </span>
