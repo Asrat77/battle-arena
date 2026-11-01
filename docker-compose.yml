@@ -17,6 +17,8 @@ services:
       FRONTEND_URL: https://${WEB_HOST}
       LEDGER_PRIVATE_KEY: ${LEDGER_PRIVATE_KEY}
       DATA_FILE: /data/db.json
+      # Caddy sits in front, so rate limits must see the real client IP.
+      TRUST_PROXY: "1"
     volumes:
       - arena-data:/data
   caddy:
