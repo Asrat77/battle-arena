@@ -8,10 +8,11 @@
 
 import { useEffect, useState } from "react";
 import { ChatPanel } from "@/components/chat/ChatPanel";
-import { Button, IconButton } from "@/components/ui/Button";
+import { Button, CountDot, IconButton } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { Icon3D, type Icon3DName } from "@/components/ui/Icon3D";
 import { Dialog, Sheet } from "@/components/ui/Overlay";
+import { useChatAlerts } from "@/lib/useChatAlerts";
 import { useSession } from "@/lib/session";
 import { PlayerSeat } from "./PlayerSeat";
 import { ReactionBar } from "./ReactionBar";
@@ -80,6 +81,8 @@ export function MatchFrame({
   const [chatOpen, setChatOpen] = useState(false);
   const desktop = useIsDesktop();
   const { profile } = useSession();
+  const { unread, latest, dismiss } = useChatAlerts(matchId, chatOpen);
+  const hint = useChatHint(Boolean(profile) && !chatOpen);
   const covered = Boolean(result) && !boardOpen;
   const clock = over ? null : deadline;
 
@@ -133,13 +136,41 @@ export function MatchFrame({
         <div className="flex-1" />
         {profile && (
           // From lg the chat lives in the rail all the time, so no toggle.
-          <IconButton
-            className="lg:hidden"
+          <Button
+            variant="ghost"
+            size="sm"
             icon="chat"
-            label={chatOpen ? "Close chat" : "Open chat"}
+            className="relative lg:hidden"
+            aria-label={unread ? `${chatOpen ? "Close chat" : "Open chat"}, ${unread} new` : chatOpen ? "Close chat" : "Open chat"}
             aria-expanded={chatOpen}
-            onClick={() => setChatOpen((o) => !o)}
-          />
+            onClick={() => {
+              markHintSeen();
+              setChatOpen((o) => !o);
+            }}
+          >
+            Chat
+            {unread > 0 && <CountDot count={unread} />}
+          </Button>
+        )}
+        {profile && !chatOpen && (latest || hint) && (
+          <button
+            type="button"
+            onClick={() => {
+              dismiss();
+              markHintSeen();
+              setChatOpen(true);
+            }}
+            className="absolute bottom-full right-3 mb-1 flex max-w-[78%] animate-slide flex-col items-start rounded-[16px] rounded-br-[4px] bg-accent px-3 py-2 text-left text-[13px] font-semibold leading-snug text-accent-ink shadow-float lg:hidden"
+          >
+            {latest ? (
+              <>
+                <small className="text-[11px] opacity-75">{latest.from.name ?? "Player"}</small>
+                <span className="line-clamp-2 break-words">{latest.text}</span>
+              </>
+            ) : (
+              "Tap Chat to talk during the match"
+            )}
+          </button>
         )}
         {spectating ? (
           <Chip tone="act" icon="binoculars">
@@ -221,6 +252,40 @@ function AwayNotice({ name, until }: { name: string; until: number }) {
       {name} lost connection. Forfeit in {secs} s unless they come back.
     </p>
   );
+}
+
+const HINT_KEY = "ba.chatHint";
+
+function hintSeen(): boolean {
+  try {
+    return Boolean(localStorage.getItem(HINT_KEY));
+  } catch {
+    return true;
+  }
+}
+
+function markHintSeen() {
+  try {
+    localStorage.setItem(HINT_KEY, "1");
+  } catch {}
+}
+
+/** A one-time nudge that chat exists: shown for 7 s until chat is opened once. */
+function useChatHint(eligible: boolean): boolean {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    if (!eligible || hintSeen()) return;
+    setShow(true);
+    const t = setTimeout(() => {
+      markHintSeen();
+      setShow(false);
+    }, 7000);
+    return () => {
+      clearTimeout(t);
+      setShow(false);
+    };
+  }, [eligible]);
+  return show;
 }
 
 /** Tailwind `md` (768 px): where the chat becomes a side panel instead of a sheet. */

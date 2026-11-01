@@ -58,7 +58,7 @@ export function ChatPanel({
         className={`flex flex-col gap-2 overflow-y-auto ${listClass}`}
       >
         {messages.length === 0 && (
-          <li className="py-3 text-center text-small text-ink-2">Say hi. Spectators can chat here too.</li>
+          <li className="py-3 text-center text-small text-ink-2">No messages yet. Say hi, or tap a reaction. Spectators can chat here too.</li>
         )}
         {messages.map((m) => (
           <Bubble key={m.id} message={m} mine={m.from.profileId === me} />
