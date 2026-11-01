@@ -3,7 +3,7 @@
 // Account settings (the Account section of /settings): change your display name and
 // @username, and add or change your password.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
@@ -32,6 +32,12 @@ export function AccountSettings() {
   const [show, setShow] = useState(false);
   const [passError, setPassError] = useState<string | null>(null);
   const [savingPass, setSavingPass] = useState(false);
+  const nameForm = useRef<HTMLFormElement>(null);
+  const passForm = useRef<HTMLFormElement>(null);
+
+  // After a failed save, send focus to the field that has the error so it is read out.
+  const focusInvalid = (form: React.RefObject<HTMLFormElement | null>) =>
+    setTimeout(() => form.current?.querySelector<HTMLInputElement>('input[aria-invalid="true"]')?.focus(), 0);
 
   // Follow a rename made in another tab.
   useEffect(() => {
@@ -64,6 +70,7 @@ export function AccountSettings() {
       toast.show({ icon: "idcard", body: "Saved. Everyone sees your new name now." });
     } catch (err) {
       setNamesError(message(err));
+      focusInvalid(nameForm);
     } finally {
       setSavingNames(false);
     }
@@ -86,6 +93,7 @@ export function AccountSettings() {
       setShow(false);
     } catch (err) {
       setPassError(message(err));
+      focusInvalid(passForm);
     } finally {
       setSavingPass(false);
     }
@@ -100,8 +108,8 @@ export function AccountSettings() {
         </div>
       )}
 
-      <form className="card flex flex-col gap-3" onSubmit={saveNames}>
-        <span className="text-small text-ink-2">Name</span>
+      <form ref={nameForm} aria-labelledby="settings-name-h" className="card flex flex-col gap-3" onSubmit={saveNames}>
+        <h3 id="settings-name-h" className="text-small font-normal text-ink-2">Name</h3>
         <Field
           label="Display name"
           value={name}
@@ -118,6 +126,7 @@ export function AccountSettings() {
           value={username}
           disabled={locked}
           maxLength={21}
+          liveHint
           onChange={(e) => setUsername(e.target.value)}
           hint={locked ? lockNote : check.ok || checking ? (check.note ?? "Your @handle. Friends find you by it, and you sign in with it. You can change it once a week.") : undefined}
           error={check.ok || checking ? namesError : check.note}
@@ -127,10 +136,10 @@ export function AccountSettings() {
         </Button>
       </form>
 
-      <form className="card flex flex-col gap-3" onSubmit={savePassword}>
-        <span className="text-small text-ink-2">{profile.hasPassword ? "Change password" : "Add a password"}</span>
+      <form ref={passForm} aria-labelledby="settings-pass-h" className="card flex flex-col gap-3" onSubmit={savePassword}>
+        <h3 id="settings-pass-h" className="text-small font-normal text-ink-2">{profile.hasPassword ? "Change password" : "Add a password"}</h3>
         {/* Lets password managers pair the new password with the handle. */}
-        <input type="text" name="username" autoComplete="username" value={profile.username} readOnly hidden />
+        <input type="text" name="username" autoComplete="username" value={profile.username} readOnly hidden aria-hidden tabIndex={-1} />
         {profile.hasPassword && (
           <Field
             label="Current password"

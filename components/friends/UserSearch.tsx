@@ -86,9 +86,14 @@ export function UserSearch({
   };
 
   const showList = open && searchable && hits.length > 0;
+  // Spoken by screen readers as results arrive, since the list is not focused.
+  const count = showList ? `${hits.length} ${hits.length === 1 ? "player" : "players"} found. Use up and down arrows, Enter to add.` : "";
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") return setOpen(false);
+    if (e.key === "Escape") {
+      if (open) e.stopPropagation(); // don't also close a sheet around the search
+      return setOpen(false);
+    }
     if (!showList) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
@@ -117,11 +122,15 @@ export function UserSearch({
         spellCheck={false}
         role="combobox"
         aria-expanded={showList}
-        aria-controls={listId}
+        aria-controls={showList ? listId : undefined}
         aria-autocomplete="list"
         aria-activedescendant={showList && active >= 0 ? `${listId}-${active}` : undefined}
         hint={note ?? hint}
+        liveHint
       />
+      <span className="sr-only" role="status" aria-live="polite">
+        {count}
+      </span>
       {showList && (
         <ul
           id={listId}
@@ -150,7 +159,7 @@ export function UserSearch({
                 ) : rel === "sent" ? (
                   <span className="text-small font-semibold text-ink-2">Sent</span>
                 ) : (
-                  <Button size="sm" variant="act" loading={busy === h.profileId} onClick={() => add(h)}>
+                  <Button size="sm" variant="act" tabIndex={-1} aria-label={`${rel === "incoming" ? "Accept" : "Add"} ${h.name}`} loading={busy === h.profileId} onClick={() => add(h)}>
                     {rel === "incoming" ? "Accept" : "Add"}
                   </Button>
                 )}

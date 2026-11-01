@@ -4,7 +4,7 @@
 // on the server (no wallet) and Home takes over once the session has a profile.
 // Below it, a self-playing Gebeta round shows what you're signing up for.
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Icon3D, type Icon3DName } from "@/components/ui/Icon3D";
@@ -46,11 +46,21 @@ export function Signup({ invite }: { invite?: { title: string; detail: string } 
   const count = name.trim().length;
   const strength = passwordStrength(password);
 
-  const fail = (msg: string) => {
+  // Which field the form-level error belongs to, so it is announced there and focus goes there.
+  const [errorOn, setErrorOn] = useState<"name" | "username" | "password">("password");
+
+  const fail = (msg: string, on: "name" | "username" | "password" = "password") => {
     setError(msg);
+    setErrorOn(on);
     setShakes((s) => s + 1);
-    field.current?.querySelector("input")?.focus();
   };
+
+  // The shake remounts the fields, so put focus on the one with the error once they exist.
+  useEffect(() => {
+    if (!shakes) return;
+    const root = field.current;
+    (root?.querySelector<HTMLInputElement>('input[aria-invalid="true"]') ?? root?.querySelector("input"))?.focus();
+  }, [shakes]);
 
   const switchTo = (next: Mode) => {
     setMode(next);
@@ -62,13 +72,13 @@ export function Signup({ invite }: { invite?: { title: string; detail: string } 
     e.preventDefault();
     const handle = username.trim().replace(/^@/, "").toLowerCase();
     if (mode === "guest") {
-      if (!name.trim()) return fail("Type a name to play.");
-      if (live) return fail(live);
+      if (!name.trim()) return fail("Type a name to play.", "name");
+      if (live) return fail(live, "name");
     } else {
-      if (!handle) return fail("Enter your username.");
+      if (!handle) return fail("Enter your username.", "username");
       if (!password) return fail("Enter your password.");
       if (mode === "new") {
-        if (!check.ok) return fail(check.note === "Checking…" ? "Checking that username. One moment." : (check.note ?? "Pick a different username."));
+        if (!check.ok) return fail(check.note === "Checking…" ? "Checking that username. One moment." : (check.note ?? "Pick a different username."), "username");
         if (password.length < PASSWORD_MIN) return fail(`Password needs at least ${PASSWORD_MIN} characters.`);
       }
     }
@@ -88,7 +98,7 @@ export function Signup({ invite }: { invite?: { title: string; detail: string } 
     } catch (err) {
       if (err instanceof ApiError && err.status < 500) {
         setPhase("edit");
-        fail(mode === "signin" ? signInMessage(err) : err.message);
+        fail(mode === "signin" ? signInMessage(err) : err.message, mode === "signin" || /password/i.test(err.message) ? "password" : "username");
       } else {
         setPhase("offline");
       }
@@ -103,7 +113,7 @@ export function Signup({ invite }: { invite?: { title: string; detail: string } 
       type="button"
       onClick={() => setShow((v) => !v)}
       className="rounded-full px-2 py-1 text-small font-semibold text-ink-2"
-      aria-pressed={show}
+      aria-label={show ? "Hide password" : "Show password"}
     >
       {show ? "Hide" : "Show"}
     </button>
@@ -114,7 +124,7 @@ export function Signup({ invite }: { invite?: { title: string; detail: string } 
       <div className={`dither ${offline ? "grayscale" : ""}`} />
       <div className="relative mx-auto grid max-w-[960px] items-center md:grid-cols-2 md:gap-12">
         <Hero offline={offline} />
-        <form onSubmit={submit} noValidate className="flex flex-col gap-[18px] px-1.5 pb-6 md:px-0">
+        <form onSubmit={submit} noValidate aria-label={mode === "signin" ? "Sign in" : mode === "guest" ? "Play as a guest" : "Create account"} className="flex flex-col gap-[18px] px-1.5 pb-6 md:px-0">
           {offline ? (
             <div role="alert" className="flex items-center gap-3 rounded-[20px] bg-mismatch-soft p-3.5">
               <Icon3D name="warning" size={36} />
@@ -158,7 +168,7 @@ export function Signup({ invite }: { invite?: { title: string; detail: string } 
                   setName(e.target.value);
                   setError(null);
                 }}
-                error={error ?? live}
+                error={errorOn === "name" && error ? error : live}
                 hint={<span className="font-semibold">{count ? `${count} / ${NAME_MAX}` : `1–${NAME_MAX} characters`}</span>}
               />
             ) : (
@@ -171,12 +181,22 @@ export function Signup({ invite }: { invite?: { title: string; detail: string } 
                   autoCorrect="off"
                   spellCheck={false}
                   autoFocus
+                  required
                   value={username}
                   onChange={(e) => {
                     setUsername(e.target.value);
                     setError(null);
                   }}
-                  error={mode === "signin" ? null : !check.ok && check.note && check.note !== "Checking…" ? check.note : null}
+                  error={
+                    errorOn === "username" && error
+                      ? error
+                      : mode === "signin"
+                        ? null
+                        : !check.ok && check.note && check.note !== "Checking…"
+                          ? check.note
+                          : null
+                  }
+                  liveHint
                   hint={
                     mode === "signin"
                       ? undefined
@@ -195,7 +215,8 @@ export function Signup({ invite }: { invite?: { title: string; detail: string } 
                     setError(null);
                   }}
                   trailing={toggle}
-                  error={error}
+                  required
+                  error={errorOn === "password" ? error : null}
                   hint={
                     mode === "signin" ? (
                       "Playing as a guest before? Guests have no password. Choose “Just play as a guest” below."
@@ -218,8 +239,8 @@ export function Signup({ invite }: { invite?: { title: string; detail: string } 
             )}
             {mode !== "signin" && (
               <div className="flex flex-col gap-2">
-                <span className="text-small font-semibold text-ink-2">Pick a picture (optional)</span>
-                <AvatarPicker value={avatar} onChange={setAvatar} />
+                <span id="signup-picture" className="text-small font-semibold text-ink-2">Pick a picture (optional)</span>
+                <AvatarPicker value={avatar} onChange={setAvatar} labelledBy="signup-picture" />
               </div>
             )}
           </div>
