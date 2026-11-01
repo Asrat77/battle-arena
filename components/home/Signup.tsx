@@ -1,6 +1,6 @@
 "use client";
 
-// First visit: a 3D hero and one name field. Signing up creates the profile ID
+// First visit: a 3D hero and a username + password form (or a guest name). Signing up creates the profile ID
 // on the server (no wallet) and Home takes over once the session has a profile.
 // Below it, a self-playing Gebeta round shows what you're signing up for.
 
@@ -12,6 +12,7 @@ import { GebetaPreview } from "./GebetaPreview";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { useUsernameCheck } from "@/lib/useUsernameCheck";
 import { AvatarPicker } from "@/components/ui/AvatarPicker";
 import type { AvatarName } from "@/engine/avatars";
 
@@ -27,22 +28,23 @@ function nameError(name: string): string | null {
 export function Signup() {
   const { signup, signIn } = useSession();
   const toast = useToast();
-  const [name, setName] = useState("");
-  const [mode, setMode] = useState<"new" | "signin">("new");
+  // new = username + password; guest = just a display name; signin = existing account.
+  const [mode, setMode] = useState<Mode>("new");
   const [avatar, setAvatar] = useState<AvatarName | null>(null);
-  // Optional on signup: a username and password make the profile survive sign-out.
-  const [secure, setSecure] = useState(false);
+  const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [show, setShow] = useState(false);
   const [phase, setPhase] = useState<Phase>("edit");
   const [error, setError] = useState<string | null>(null);
-  // Bumped on each failed submit so the field shakes again.
+  // Bumped on each failed submit so the form shakes again.
   const [shakes, setShakes] = useState(0);
   const field = useRef<HTMLDivElement>(null);
 
+  const check = useUsernameCheck(mode === "new" ? username : "");
   const live = nameError(name);
-  const shown = error ?? live;
   const count = name.trim().length;
+  const strength = passwordStrength(password);
 
   const fail = (msg: string) => {
     setError(msg);
@@ -50,50 +52,62 @@ export function Signup() {
     field.current?.querySelector("input")?.focus();
   };
 
+  const switchTo = (next: Mode) => {
+    setMode(next);
+    setError(null);
+    setPhase("edit");
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = name.trim();
-    const signingIn = mode === "signin";
-    if (!signingIn) {
-      if (!trimmed) return fail("Type a name to play.");
+    const handle = username.trim().replace(/^@/, "").toLowerCase();
+    if (mode === "guest") {
+      if (!name.trim()) return fail("Type a name to play.");
       if (live) return fail(live);
+    } else {
+      if (!handle) return fail("Enter your username.");
+      if (!password) return fail("Enter your password.");
+      if (mode === "new") {
+        if (!check.ok) return fail(check.note === "Checking…" ? "Checking that username. One moment." : (check.note ?? "Pick a different username."));
+        if (password.length < PASSWORD_MIN) return fail(`Password needs at least ${PASSWORD_MIN} characters.`);
+      }
     }
-    if ((signingIn || secure) && (!username.trim() || !password)) return fail("Enter a username and password.");
     setPhase("busy");
     setError(null);
     try {
-      if (signingIn) {
-        await signIn({ username, password });
-        toast.show({
-          icon: "idcard",
-          body: <>Welcome back, {username.trim().toLowerCase()}.</>,
-          href: "/profile",
-        });
-        return;
+      if (mode === "signin") {
+        await signIn({ username: handle, password });
+        toast.show({ icon: "idcard", body: <>Welcome back, @{handle}.</>, href: "/profile" });
+      } else if (mode === "guest") {
+        await signup(name.trim(), undefined, avatar ?? undefined);
+        toast.show({ icon: "idcard", body: <>Welcome, {name.trim()}. Add a password later to keep this profile.</>, href: "/profile" });
+      } else {
+        await signup("", { username: handle, password }, avatar ?? undefined);
+        toast.show({ icon: "idcard", body: <>Welcome, @{handle}. Your account is saved.</>, href: "/profile" });
       }
-      await signup(trimmed, secure ? { username, password } : undefined, avatar ?? undefined);
-      toast.show({
-        icon: "idcard",
-        body: (
-          <>
-            Welcome, {trimmed}. {secure ? "Your account is saved." : "Your profile ID is ready."}
-          </>
-        ),
-        href: "/profile",
-      });
     } catch (err) {
       if (err instanceof ApiError && err.status < 500) {
         setPhase("edit");
-        fail(err.message);
+        fail(mode === "signin" ? signInMessage(err) : err.message);
       } else {
         setPhase("offline");
       }
     }
   };
 
-  if (phase === "busy") return <Creating name={mode === "signin" ? username.trim() : name.trim()} />;
+  if (phase === "busy") return <Creating name={mode === "guest" ? name.trim() : username.trim().replace(/^@/, "")} />;
 
   const offline = phase === "offline";
+  const toggle = (
+    <button
+      type="button"
+      onClick={() => setShow((v) => !v)}
+      className="rounded-full px-2 py-1 text-small font-semibold text-ink-2"
+      aria-pressed={show}
+    >
+      {show ? "Hide" : "Show"}
+    </button>
+  );
 
   return (
     <div className="relative -mx-4 -mt-6 min-h-[calc(100dvh-60px)] px-4 pt-2 md:-mx-6 md:px-6 md:pt-14">
@@ -106,14 +120,14 @@ export function Signup() {
               <Icon3D name="warning" size={36} />
               <div className="flex flex-col gap-0.5">
                 <b className="font-semibold text-mismatch">Can’t reach Battle Arena</b>
-                <span className="text-small">Your name is kept. Check your connection and try again.</span>
+                <span className="text-small">Your details are kept. Check your connection and try again.</span>
               </div>
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
               <span className="eyebrow">Battle Arena · live 1v1</span>
               <h1 className="text-h1">
-                Pick a name.
+                {mode === "signin" ? "Welcome back." : mode === "guest" ? "Pick a name." : "Make an account."}
                 <br />
                 Play in a minute.
               </h1>
@@ -124,32 +138,7 @@ export function Signup() {
           )}
 
           <div ref={field} key={shakes} className={`flex flex-col gap-3.5 ${shakes ? "animate-shake" : ""}`}>
-            {mode === "signin" ? (
-              <>
-                <Field
-                  label="Username"
-                  autoComplete="username"
-                  autoCapitalize="none"
-                  autoFocus
-                  value={username}
-                  onChange={(e) => {
-                    setUsername(e.target.value);
-                    setError(null);
-                  }}
-                />
-                <Field
-                  label="Password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    setError(null);
-                  }}
-                  error={error}
-                />
-              </>
-            ) : (
+            {mode === "guest" ? (
               <Field
                 label="Display name"
                 placeholder="e.g. Abebe"
@@ -160,66 +149,93 @@ export function Signup() {
                   setName(e.target.value);
                   setError(null);
                 }}
-                error={shown}
+                error={error ?? live}
                 hint={<span className="font-semibold">{count ? `${count} / ${NAME_MAX}` : `1–${NAME_MAX} characters`}</span>}
               />
-            )}
-            {mode === "new" && (
+            ) : (
               <>
-                <div className="flex flex-col gap-2">
-                  <span className="text-small font-semibold text-ink-2">Pick a picture (optional)</span>
-                  <AvatarPicker value={avatar} onChange={setAvatar} />
-                </div>
-                <label className="flex items-center gap-2.5 text-small text-ink-2">
-                  <input type="checkbox" checked={secure} onChange={(e) => setSecure(e.target.checked)} />
-                  Save my account with a password, so I can sign in on any device
-                </label>
-                {secure && (
-                  <>
-                    <Field
-                      label="Username"
-                      autoComplete="username"
-                      autoCapitalize="none"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      hint="3–20 letters, numbers or underscores"
-                    />
-                    <Field
-                      label="Password"
-                      type="password"
-                      autoComplete="new-password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      hint="At least 8 characters"
-                    />
-                  </>
-                )}
+                <Field
+                  label="Username"
+                  placeholder="e.g. abebe_k"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  autoFocus
+                  value={username}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    setError(null);
+                  }}
+                  error={mode === "signin" ? null : !check.ok && check.note && check.note !== "Checking…" ? check.note : null}
+                  hint={
+                    mode === "signin"
+                      ? undefined
+                      : check.note
+                        ? <span className={check.ok ? "font-semibold text-recorded" : ""}>{check.note}</span>
+                        : "3–20 letters, numbers or underscores. This is how friends find you."
+                  }
+                />
+                <Field
+                  label="Password"
+                  type={show ? "text" : "password"}
+                  autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setError(null);
+                  }}
+                  trailing={toggle}
+                  error={error}
+                  hint={
+                    mode === "signin" ? (
+                      "Playing as a guest before? Guests have no password. Choose “Just play as a guest” below."
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        <span className="flex gap-1" aria-hidden>
+                          {[1, 2, 3].map((i) => (
+                            <span
+                              key={i}
+                              className={`h-1.5 w-8 rounded-full ${strength.level >= i ? strength.bar : "bg-sf-3"}`}
+                            />
+                          ))}
+                        </span>
+                        {strength.label}
+                      </span>
+                    )
+                  }
+                />
               </>
+            )}
+            {mode !== "signin" && (
+              <div className="flex flex-col gap-2">
+                <span className="text-small font-semibold text-ink-2">Pick a picture (optional)</span>
+                <AvatarPicker value={avatar} onChange={setAvatar} />
+              </div>
             )}
           </div>
 
-          <Button
-            type="submit"
-            variant="act"
-            block
-            icon={offline ? "refresh" : undefined}
-            disabled={mode === "new" && (!name || Boolean(live))}
-            className="h-[58px] text-lg"
-          >
-            {offline ? "Try again" : mode === "signin" ? "Sign in" : "Play"}
+          <Button type="submit" variant="act" block icon={offline ? "refresh" : undefined} className="h-[58px] text-lg">
+            {offline ? "Try again" : mode === "signin" ? "Sign in" : mode === "guest" ? "Play" : "Create account"}
           </Button>
 
-          <button
-            type="button"
-            className="text-small font-semibold text-ink-2 underline"
-            onClick={() => {
-              setMode(mode === "new" ? "signin" : "new");
-              setError(null);
-              setPhase("edit");
-            }}
-          >
-            {mode === "new" ? "Already have an account? Sign in" : "New here? Create a profile"}
-          </button>
+          <div className="flex flex-col gap-2">
+            {mode !== "signin" && (
+              <button type="button" className="text-small font-semibold text-ink-2 underline" onClick={() => switchTo("signin")}>
+                Already have an account? Sign in
+              </button>
+            )}
+            {mode !== "new" && (
+              <button type="button" className="text-small font-semibold text-ink-2 underline" onClick={() => switchTo("new")}>
+                New here? Create an account
+              </button>
+            )}
+            {mode !== "guest" && (
+              <button type="button" className="text-small font-semibold text-ink-2 underline" onClick={() => switchTo("guest")}>
+                Just play as a guest
+              </button>
+            )}
+          </div>
 
           <div className="flex items-center gap-2.5 text-small text-ink-2">
             <Icon3D name="idcard" size={28} />
@@ -230,6 +246,24 @@ export function Signup() {
       {!offline && <GebetaPreview />}
     </div>
   );
+}
+
+type Mode = "new" | "guest" | "signin";
+
+const PASSWORD_MIN = 8;
+
+function passwordStrength(pw: string): { level: number; label: string; bar: string } {
+  if (!pw) return { level: 0, label: `${PASSWORD_MIN}+ characters`, bar: "" };
+  if (pw.length < PASSWORD_MIN) return { level: 1, label: `${PASSWORD_MIN - pw.length} more to go`, bar: "bg-mismatch" };
+  const mixed = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((r) => r.test(pw)).length;
+  return pw.length >= 12 || mixed >= 3
+    ? { level: 3, label: "Strong", bar: "bg-recorded" }
+    : { level: 2, label: "Good enough", bar: "bg-recorded" };
+}
+
+/** Wrong username and wrong password stay one message on purpose; add a nudge for guests. */
+function signInMessage(err: ApiError) {
+  return err.status === 401 || err.status === 404 ? "Wrong username or password. Guests have no password." : err.message;
 }
 
 const PLATES: { icon: Icon3DName; box: string; plate: number; img: number }[] = [
