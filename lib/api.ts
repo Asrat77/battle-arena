@@ -112,21 +112,46 @@ export interface BracketMatch {
   state: "pending" | "playing" | "done";
   winner: TournamentEntrant | null;
   decidedBy: "match" | "coin flip" | null;
+  /** Series wins, in players order (best-of-1: [1, 0] once decided by a game). */
+  score: [number, number];
+  /** Every game in order; winner is 0 or 1 (index into players), null for a draw or a game in play. */
+  games: { matchId: string; winner: 0 | 1 | null; state: "playing" | "done" }[];
+}
+
+export type TournamentSize = 4 | 8 | 16;
+
+/** What the tournament:create socket event takes. Only gameId is required. */
+export interface CreateTournamentInput {
+  gameId: string;
+  /** Up to 40 characters; defaults to "<Game> tournament". */
+  name?: string;
+  size?: TournamentSize;
+  bestOf?: 1 | 3;
+  /** "link" tournaments are left out of GET /api/tournaments. */
+  visibility?: "open" | "link";
+  /** Start at once with bots in every empty seat. */
+  fillWithBots?: boolean;
 }
 
 /** A tournament, as GET /api/tournaments/:id and the tournament:update event send it. */
 export interface TournamentState {
   id: string;
+  name: string;
   link: string;
   gameId: string;
   gameName: string;
   host: string | null;
   state: "open" | "running" | "finished";
-  size: number;
+  size: TournamentSize;
+  bestOf: 1 | 3;
+  visibility: "open" | "link";
   entrants: TournamentEntrant[];
+  /** First round first; names are "Round of 16", "Quarterfinal", "Semifinal", "Final". */
   rounds: { name: string; matches: BracketMatch[] }[];
   champion: TournamentEntrant | null;
   createdAt: number;
+  startedAt: number | null;
+  endedAt: number | null;
 }
 
 export interface Tally {

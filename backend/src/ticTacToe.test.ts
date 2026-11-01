@@ -161,7 +161,7 @@ test("tic-tac-toe: bot offer plays a complete verifiable series and bot rematch"
 
 test("tic-tac-toe: a four-bot tournament completes with recorded series", async (t) => {
   const f = await fixture(t);
-  const created = f.tournaments.create(null, ticTacToe.id, true);
+  const created = f.tournaments.create(null, { gameId: ticTacToe.id, fillWithBots: true });
   assert.equal(created.ok, true);
   if (!created.ok) throw new Error("no tournament");
   let tournament = f.tournaments.get(created.tournament.id)!;
