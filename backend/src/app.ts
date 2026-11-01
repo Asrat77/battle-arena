@@ -31,6 +31,10 @@ export function createApp(options: AppOptions = {}) {
   const ledger = new Ledger(store, options.ledger);
 
   const app = express();
+  // Behind Render's proxy every request would share one IP (and one rate limit). Set
+  // TRUST_PROXY=1 there so req.ip is the real client; leave it unset when exposed directly.
+  const hops = Number(process.env.TRUST_PROXY);
+  if (hops > 0) app.set("trust proxy", hops);
   app.use(cors({ origin, credentials: true }));
   app.use(express.json());
 

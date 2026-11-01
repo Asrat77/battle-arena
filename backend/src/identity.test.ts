@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { createApp } from "./app";
-import { Identity } from "./identity";
+import { Identity, USERNAME_CHECK_MAX, USERNAME_COOLDOWN_MS } from "./identity";
+import { RateLimiter } from "./rateLimit";
 import { FileStore, MemoryStore } from "./store";
 
 test("signup twice gives distinct addresses and tokens", () => {
@@ -58,7 +59,7 @@ test("profile endpoints never expose keys", async () => {
     const me = await fetch(`${base}/api/me`, {
       headers: { authorization: `Bearer ${token}` },
     });
-    assert.deepEqual(await me.json(), { ...profile, hasPassword: false });
+    assert.deepEqual(await me.json(), { ...profile, hasPassword: false, usernameChangeAt: null });
     assert.equal(profile.username, "hana");
     assert.equal((await fetch(`${base}/api/me`)).status, 401);
 
@@ -253,7 +254,9 @@ test("rename, password and username check over HTTP; open tabs hear profile:upda
 
     const renamed = await call("/api/me", "PATCH", token, { name: "Hana B", username: "hana_b" });
     assert.equal(renamed.status, 200);
-    assert.deepEqual(await renamed.json(), { ...profile, name: "Hana B", username: "hana_b", hasPassword: false });
+    const renamedBody = await renamed.json();
+    assert.ok(renamedBody.usernameChangeAt > Date.now());
+    assert.deepEqual(renamedBody, { ...profile, name: "Hana B", username: "hana_b", hasPassword: false, usernameChangeAt: renamedBody.usernameChangeAt });
     assert.deepEqual(await heard, { ...profile, name: "Hana B", username: "hana_b" });
     socket.close();
 
@@ -267,5 +270,55 @@ test("rename, password and username check over HTTP; open tabs hear profile:upda
     assert.equal((await call("/api/login", "POST", undefined, { username: "hana_b", password: "password2" })).status, 200);
   } finally {
     io.close();
+  }
+});
+
+test("a username can be changed once a week; the first change is free", () => {
+  let t = 1_000_000;
+  const identity = new Identity(new MemoryStore(), () => t);
+  const a = identity.signup("Abebe", { username: "abebe", password: "password1" });
+  assert.equal(identity.account(a.profile.id).usernameChangeAt, null);
+
+  assert.equal(identity.update(a.token, { username: "abe_one" }).username, "abe_one");
+  const until = identity.account(a.profile.id).usernameChangeAt;
+  assert.equal(until, t + USERNAME_COOLDOWN_MS);
+
+  // Locked: a different handle is refused with 429 and says how long; a taken one is not probed.
+  t += 2 * 86_400_000;
+  assert.throws(() => identity.update(a.token, { username: "abe_two" }), (e: any) => e.status === 429 && /5 days/.test(e.message));
+  // Name changes, and re-saving the same handle, still work while locked.
+  assert.equal(identity.update(a.token, { name: "Abe" }).name, "Abe");
+  assert.equal(identity.update(a.token, { username: "ABE_ONE" }).username, "abe_one");
+  assert.equal(identity.byUsername("abe_two"), null);
+
+  t = until!;
+  assert.equal(identity.account(a.profile.id).usernameChangeAt, null);
+  assert.equal(identity.update(a.token, { username: "abe_two" }).username, "abe_two");
+  assert.equal(identity.account(a.profile.id).usernameChangeAt, t + USERNAME_COOLDOWN_MS);
+});
+
+test("rate limiter lets a window's worth through, then recovers", () => {
+  let t = 0;
+  const limit = new RateLimiter(3, 1000, () => t);
+  assert.deepEqual([1, 2, 3, 4].map(() => limit.take("ip")), [true, true, true, false]);
+  assert.equal(limit.take("other"), true);
+  t = 1001;
+  assert.equal(limit.take("ip"), true);
+});
+
+test("username availability checks are limited per IP", async () => {
+  const { httpServer, io } = createApp({ store: new MemoryStore() });
+  await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+  const base = `http://localhost:${(httpServer.address() as AddressInfo).port}`;
+  try {
+    for (let i = 0; i < USERNAME_CHECK_MAX; i++) {
+      assert.equal((await fetch(`${base}/api/usernames/name_${i}`)).status, 200);
+    }
+    const over = await fetch(`${base}/api/usernames/one_more`);
+    assert.equal(over.status, 429);
+    assert.match((await over.json()).error, /too many checks/);
+  } finally {
+    io.close();
+    httpServer.close();
   }
 });

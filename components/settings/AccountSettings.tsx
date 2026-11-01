@@ -47,6 +47,10 @@ export function AccountSettings() {
   const trimmed = name.trim();
   const namesChanged = trimmed !== profile.name || check.username !== profile.username;
   const nameOk = trimmed.length <= 24;
+  const waitUntil = profile.usernameChangeAt ?? 0;
+  const locked = waitUntil > Date.now();
+  const days = Math.max(1, Math.ceil((waitUntil - Date.now()) / 86_400_000));
+  const lockNote = `You changed your username recently. You can change it again in ${days} ${days === 1 ? "day" : "days"}.`;
 
   const saveNames = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,9 +116,10 @@ export function AccountSettings() {
           autoCapitalize="none"
           spellCheck={false}
           value={username}
+          disabled={locked}
           maxLength={21}
           onChange={(e) => setUsername(e.target.value)}
-          hint={check.ok || checking ? (check.note ?? "Your @handle. Friends find you by it, and you sign in with it.") : undefined}
+          hint={locked ? lockNote : check.ok || checking ? (check.note ?? "Your @handle. Friends find you by it, and you sign in with it. You can change it once a week.") : undefined}
           error={check.ok || checking ? namesError : check.note}
         />
         <Button type="submit" loading={savingNames} disabled={savingNames || !namesChanged || !check.ok || !nameOk}>

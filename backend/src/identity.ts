@@ -5,6 +5,7 @@ import { bytesToHex } from "@noble/hashes/utils";
 import { Router, type Response } from "express";
 import { isAvatar } from "../../engine/avatars";
 import { sha256Hex } from "../../engine/hash";
+import { RateLimiter } from "./rateLimit";
 import type { Store } from "./store";
 
 export interface Profile {
@@ -21,6 +22,7 @@ interface StoredProfile extends Omit<Profile, "username"> {
   publicKey: string;
   privateKey: string; // custodial: the server holds the key, no wallet needed
   username?: string; // only missing on profiles saved before handles existed (backfilled on load)
+  usernameChangedAt?: number; // last rename of the @handle; absent until the first one
   passwordHash?: string; // scrypt, `salt:hash` hex; absent for a guest
 }
 
@@ -34,6 +36,11 @@ const USERNAME = /^[a-z0-9_]{3,20}$/;
 const USERNAME_MAX = 20;
 /** Handles nobody can take: they read as the system or a bot. */
 const RESERVED = new Set(["bot", "admin", "arena", "system", "guest"]);
+
+/** After changing your @username you wait this long to change it again (the first change is free). */
+export const USERNAME_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+/** Availability checks per IP per minute: enough for typing, too few for scraping every name. */
+export const USERNAME_CHECK_MAX = 30;
 
 // Failed sign-ins per username: after MAX_FAILS the account waits LOCK_MS.
 const MAX_FAILS = 5;
@@ -276,9 +283,17 @@ export class Identity {
     const next: StoredProfile = { ...me };
     if (changes.username !== undefined) {
       const username = parseUsername(changes.username);
-      const owner = this.findByUsername(username);
-      if (owner && owner.id !== me.id) throw new AuthError("that username is taken", 409);
-      next.username = username;
+      if (username !== me.username) {
+        const owner = this.findByUsername(username);
+        if (owner && owner.id !== me.id) throw new AuthError("that username is taken", 409);
+        const wait = (me.usernameChangedAt ?? -Infinity) + USERNAME_COOLDOWN_MS - this.now();
+        if (wait > 0) {
+          const days = Math.ceil(wait / 86_400_000);
+          throw new AuthError(`you changed your username recently, you can change it again in ${days} ${days === 1 ? "day" : "days"}`, 429);
+        }
+        next.username = username;
+        next.usernameChangedAt = this.now();
+      }
     }
     if (changes.name !== undefined) {
       next.name = changes.name === "" || changes.name === null ? next.username! : parseName(changes.name);
@@ -347,8 +362,10 @@ export class Identity {
   }
 
   /** Extra fields only the owner sees: whether the profile has a password (a guest does not). */
-  account(id: string): { hasPassword: boolean } {
-    return { hasPassword: Boolean(this.profiles()[id]?.passwordHash) };
+  account(id: string): { hasPassword: boolean; usernameChangeAt: number | null } {
+    const stored = this.profiles()[id];
+    const at = stored?.usernameChangedAt ? stored.usernameChangedAt + USERNAME_COOLDOWN_MS : 0;
+    return { hasPassword: Boolean(stored?.passwordHash), usernameChangeAt: at > this.now() ? at : null };
   }
 
   get(id: string): Profile | null {
@@ -436,7 +453,12 @@ export function identityRoutes(identity: Identity): Router {
     }
   });
 
+  const checkLimit = new RateLimiter(USERNAME_CHECK_MAX, 60_000);
   router.get("/api/usernames/:username", (req, res) => {
+    if (!checkLimit.take(req.ip ?? "")) {
+      res.status(429).json({ error: "too many checks, wait a minute and try again" });
+      return;
+    }
     const me = identity.byToken(bearerToken(req.headers.authorization));
     res.json(identity.usernameStatus(req.params.username, me?.id));
   });
