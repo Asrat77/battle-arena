@@ -53,7 +53,7 @@ export default function TournamentsPage() {
   if (!profile) return <Signup />;
 
   return (
-    <Page className="flex flex-col gap-3">
+    <Page width="wide" className="flex flex-col gap-3">
       <header className="flex items-center justify-between gap-3">
         <h1 className="text-h2">Tournaments</h1>
         {list?.length !== 0 && (
@@ -91,7 +91,7 @@ export default function TournamentsPage() {
           Open a four-player bracket and let bots fill the empty seats.
         </EmptyState>
       ) : (
-        <ul className="flex flex-col gap-2.5">
+        <ul className="flex flex-col gap-2.5 lg:grid lg:grid-cols-2 lg:gap-4">
           {list.map((t) => (
             <li key={t.id}>
               <Row t={t} you={profile.id} />
@@ -107,7 +107,7 @@ export default function TournamentsPage() {
 function Row({ t, you }: { t: TournamentState; you: string }) {
   const joined = t.entrants.some((e) => e.id === you);
   return (
-    <Link href={t.link} className="card flex items-center gap-3 no-underline">
+    <Link href={t.link} className="card flex h-full items-center gap-3 no-underline">
       <Icon3D name={GAME_ICONS[t.gameId] ?? "controller"} size={40} />
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex items-center gap-2">
