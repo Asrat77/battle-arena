@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { AppShell } from "@/components/shell/AppShell";
+import { PlayerSheetProvider } from "@/components/profile/PlayerSheet";
 import { ToastProvider } from "@/components/ui/Toast";
 import { SessionProvider } from "@/lib/session";
 import { THEME_SCRIPT, ThemeProvider } from "@/lib/theme";
@@ -26,7 +27,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <SessionProvider>
             <ToastProvider>
-              <AppShell>{children}</AppShell>
+              <PlayerSheetProvider>
+                <AppShell>{children}</AppShell>
+              </PlayerSheetProvider>
             </ToastProvider>
           </SessionProvider>
         </ThemeProvider>

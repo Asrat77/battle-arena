@@ -4,6 +4,7 @@
 // 10 s, each with a Watch link so anyone can spectate from the lobby.
 
 import { useEffect, useState } from "react";
+import { PlayerLink } from "@/components/profile/PlayerSheet";
 import { Avatar3D } from "@/components/ui/Avatar3D";
 import { ButtonLink } from "@/components/ui/Button";
 import { BotTag, LiveChip } from "@/components/ui/Chip";
@@ -83,8 +84,10 @@ function Player({ p }: { p?: { profileId: string; name: string } }) {
   const bot = p.profileId === "bot";
   return (
     <span className="flex min-w-0 items-center gap-1.5">
-      <Avatar3D id={p.profileId} bot={bot} size="sm" className="!h-6 !w-6 !rounded-lg" />
-      <span className="truncate">{p.name}</span>
+      <PlayerLink id={p.profileId} bot={bot} className="flex items-center gap-1.5">
+        <Avatar3D id={p.profileId} bot={bot} size="sm" className="!h-6 !w-6 !rounded-lg" />
+        <span className="truncate">{p.name}</span>
+      </PlayerLink>
       {bot && <BotTag />}
     </span>
   );

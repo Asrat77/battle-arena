@@ -6,6 +6,7 @@
 // and badges the match earned pop up as reward toasts once they are applied;
 // a match past the rematch limit says why it paid nothing.
 
+import { PlayerLink } from "@/components/profile/PlayerSheet";
 import { useEffect, useState } from "react";
 import { Avatar3D } from "@/components/ui/Avatar3D";
 import { ButtonLink } from "@/components/ui/Button";
@@ -64,16 +65,20 @@ export function ResultCard({
       {result.score && (
         <div className="relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2.5 rounded-card bg-sf px-3.5 py-3">
           <span className="flex min-w-0 flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-2">
-            <Avatar3D id={seats[left].id} bot={seats[left].bot} size="sm" seat="you" />
-            <b className="max-w-full truncate font-semibold">{seats[left].label}</b>
+            <PlayerLink id={seats[left].id} bot={seats[left].bot} className="flex max-w-full flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+              <Avatar3D id={seats[left].id} bot={seats[left].bot} size="sm" seat="you" />
+              <b className="max-w-full truncate font-semibold">{seats[left].label}</b>
+            </PlayerLink>
           </span>
           <span className="mono text-[34px] font-semibold tracking-[-.04em]" aria-label={`${result.score[left]} to ${result.score[right]}`}>
             <span className="text-you">{result.score[left]}</span> <span className="text-ink-3">–</span>{" "}
             <span className="text-opp">{result.score[right]}</span>
           </span>
           <span className="flex min-w-0 flex-col-reverse items-end gap-1.5 sm:flex-row sm:items-center sm:justify-end sm:gap-2">
-            <b className="max-w-full truncate font-semibold">{seats[right].label}</b>
-            <Avatar3D id={seats[right].id} bot={seats[right].bot} size="sm" seat="opp" />
+            <PlayerLink id={seats[right].id} bot={seats[right].bot} className="flex max-w-full flex-col-reverse items-end gap-1.5 sm:flex-row sm:items-center sm:justify-end sm:gap-2">
+              <b className="max-w-full truncate font-semibold">{seats[right].label}</b>
+              <Avatar3D id={seats[right].id} bot={seats[right].bot} size="sm" seat="opp" />
+            </PlayerLink>
           </span>
         </div>
       )}

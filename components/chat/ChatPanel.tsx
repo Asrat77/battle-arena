@@ -5,6 +5,7 @@
 // share one conversation; spectators are tagged "watching". Rooms put it under
 // the seats and the match frame puts it in a sheet or side panel.
 
+import { PlayerLink } from "@/components/profile/PlayerSheet";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Icon3D, type Icon3DName } from "@/components/ui/Icon3D";
@@ -115,7 +116,7 @@ function Bubble({ message: m, mine }: { message: ChatMessage; mine: boolean }) {
     >
       {!mine && (
         <small className="mb-px block text-[11px] font-semibold text-ink-3">
-          {m.from.name ?? "Player"}
+          <PlayerLink id={m.from.profileId}>{m.from.name ?? "Player"}</PlayerLink>
           {m.spectator && " · watching"}
         </small>
       )}

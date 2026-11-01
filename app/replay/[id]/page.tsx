@@ -5,6 +5,7 @@
 // against the ledger. Verify sits under the replay on phones and beside it on
 // desktop.
 
+import { PlayerLink } from "@/components/profile/PlayerSheet";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -193,8 +194,10 @@ function Summary({ match, labels }: { match: StoredMatch; labels: [string, strin
         {([0, 1] as const).map((s) => (
           <span key={s} className="flex min-w-0 items-center gap-2">
             {s === 1 && <span className="text-ink-3">vs</span>}
-            <Avatar3D id={record.players[s]} bot={record.players[s] === BOT_PLAYER} size="sm" />
-            <b className={`truncate font-semibold ${s === 0 ? "text-you" : "text-opp"}`}>{labels[s]}</b>
+            <PlayerLink id={record.players[s]} bot={record.players[s] === BOT_PLAYER} className="flex min-w-0 items-center gap-2">
+              <Avatar3D id={record.players[s]} bot={record.players[s] === BOT_PLAYER} size="sm" />
+              <b className={`truncate font-semibold ${s === 0 ? "text-you" : "text-opp"}`}>{labels[s]}</b>
+            </PlayerLink>
           </span>
         ))}
         <span className="flex-1" />

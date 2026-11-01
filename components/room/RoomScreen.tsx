@@ -7,6 +7,7 @@
 // and joins once you have a name. A third visitor finds the room full and can
 // watch the match from there once it starts.
 
+import { PlayerLink } from "@/components/profile/PlayerSheet";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Signup } from "@/components/home/Signup";
@@ -346,8 +347,12 @@ function Countdown({
 function CountdownSeat({ id, name, seat }: { id: string; name: string; seat: "you" | "opp" }) {
   return (
     <div className="flex w-[96px] flex-col items-center gap-1.5">
-      <Avatar3D id={id} size="lg" seat={seat} />
-      <b className="max-w-full truncate font-semibold">{name}</b>
+      <PlayerLink id={seat === "opp" ? id : null} label={`Open ${name}`}>
+        <Avatar3D id={id} size="lg" seat={seat} />
+      </PlayerLink>
+      <PlayerLink id={seat === "opp" ? id : null} className="max-w-full truncate">
+        <b className="font-semibold">{name}</b>
+      </PlayerLink>
       <Chip tone="rec">Ready</Chip>
     </div>
   );
@@ -444,9 +449,13 @@ function Seat({
         ready ? "bg-recorded-soft" : "bg-sf [.light_&]:shadow-[0_0_0_1px_rgb(var(--ln))]"
       }`}
     >
-      <Avatar3D id={id} seat={side} className={online ? "" : "opacity-60"} />
+      <PlayerLink id={side === "opp" ? id : null} label={`Open ${name}`} className="flex-none">
+        <Avatar3D id={id} seat={side} className={online ? "" : "opacity-60"} />
+      </PlayerLink>
       <div className="min-w-0 flex-1">
-        <b className="block truncate font-semibold">{name}</b>
+        <PlayerLink id={side === "opp" ? id : null} className="block max-w-full truncate">
+          <b className="font-semibold">{name}</b>
+        </PlayerLink>
         <div className={`flex items-center gap-1.5 text-small ${side === "you" ? "text-ink-2" : online ? "text-recorded" : "text-ink-3"}`}>
           {side === "opp" && (
             <i className="block h-2 w-2 rounded-full" style={{ background: online ? "rgb(var(--rec))" : "rgb(var(--ink3))" }} aria-hidden />
