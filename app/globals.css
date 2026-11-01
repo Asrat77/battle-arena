@@ -101,6 +101,26 @@
   }
 }
 
+/* Toast countdown bar. Defined here (not only in tailwind.config) because
+   Tailwind drops keyframes that no animate-* class uses. It is a progress
+   indicator, so it keeps running under reduced motion. */
+@keyframes toast-drain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+.toast-bar {
+  animation: toast-drain var(--toast-ms, 5s) linear forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast-bar {
+    animation-duration: var(--toast-ms, 5s) !important;
+  }
+}
+
 @layer components {
   .mono {
     @apply font-mono tabular-nums;
