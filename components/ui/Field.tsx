@@ -7,6 +7,7 @@ export function Field({
   hint,
   error,
   hideLabel,
+  trailing,
   className = "",
   ...input
 }: {
@@ -14,6 +15,8 @@ export function Field({
   hint?: React.ReactNode;
   error?: string | null;
   hideLabel?: boolean;
+  /** Small control inside the right edge of the input, e.g. a show/hide button. */
+  trailing?: React.ReactNode;
 } & InputHTMLAttributes<HTMLInputElement>) {
   const id = useId();
   const note = `${id}-note`;
@@ -22,13 +25,16 @@ export function Field({
       <label htmlFor={id} className={hideLabel ? "sr-only" : "text-small font-semibold"}>
         {label}
       </label>
-      <input
-        id={id}
-        className={`input ${className}`}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error || hint ? note : undefined}
-        {...input}
-      />
+      <div className="relative">
+        <input
+          id={id}
+          className={`input ${trailing ? "pr-16" : ""} ${className}`}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error || hint ? note : undefined}
+          {...input}
+        />
+        {trailing && <div className="absolute inset-y-0 right-2 flex items-center">{trailing}</div>}
+      </div>
       {error ? (
         <span id={note} className="text-small font-semibold text-mismatch">
           {error}

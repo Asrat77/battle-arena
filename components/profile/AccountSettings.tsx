@@ -7,44 +7,16 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
-import { ApiError, api } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { useUsernameCheck } from "@/lib/useUsernameCheck";
 import { useSession } from "@/lib/session";
 
-const USERNAME = /^[a-z0-9_]{3,20}$/;
 const PASSWORD_MIN = 8;
 
 function message(err: unknown) {
   if (!(err instanceof ApiError)) return "Can’t reach Battle Arena. Try again.";
   const m = err.message;
   return m.charAt(0).toUpperCase() + m.slice(1) + ".";
-}
-
-const clean = (u: string) => u.trim().replace(/^@/, "").toLowerCase();
-
-/** Live "is this handle free?" check, debounced while typing. */
-function useUsernameCheck(raw: string, current: string) {
-  const [state, setState] = useState<{ for: string; free: boolean; reason?: string } | null>(null);
-  const username = clean(raw);
-  const valid = USERNAME.test(username);
-  useEffect(() => {
-    if (!valid || username === current) return;
-    let live = true;
-    const t = setTimeout(() => {
-      api.usernameStatus(username).then(
-        (s) => live && setState({ for: username, free: s.available, reason: s.reason }),
-        () => live && setState(null),
-      );
-    }, 300);
-    return () => {
-      live = false;
-      clearTimeout(t);
-    };
-  }, [username, valid, current]);
-
-  if (!username || username === current) return { username, ok: true, note: null };
-  if (!valid) return { username, ok: false, note: "3–20 letters, numbers or underscores" };
-  if (state?.for !== username) return { username, ok: false, note: "Checking…" };
-  return state.free ? { username, ok: true, note: `@${username} is free` } : { username, ok: false, note: "That username is taken" };
 }
 
 export function AccountSettings() {
