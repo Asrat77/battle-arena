@@ -75,7 +75,7 @@ export function BingoBoard({ view, seat, names, players, sheet, disabled = false
     : `${names[view.turn]} calls first`;
 
   return (
-    <section className="mx-auto flex w-full max-w-[460px] flex-col gap-3" aria-label="BINGO board">
+    <section className="mx-auto flex w-full max-w-[460px] lg:max-w-[clamp(460px,calc(100dvh-420px),640px)] flex-col gap-3" aria-label="BINGO board">
       <div className="card flex items-center gap-2 !px-3.5 !py-3">
         {([left, right] as const).map((s, i) => (
           <Fragment key={s}>

@@ -86,8 +86,11 @@ export function MatchFrame({
   return (
     // Phones: the app header is hidden here, so the frame takes the whole
     // viewport. Desktop: a centred column under the app bar.
-    <div className="-mx-4 -mb-8 -mt-6 flex min-h-[100dvh] flex-col md:mx-auto md:mb-0 md:mt-0 md:min-h-[calc(100dvh-140px)] md:max-w-[760px]">
-      <header className="flex flex-none flex-col gap-2.5 px-3.5 pb-2.5 pt-1.5 md:px-0">
+    <div className="-mx-4 -mb-8 -mt-6 flex min-h-[100dvh] flex-col md:mx-auto md:mb-0 md:mt-0 md:min-h-[calc(100dvh-140px)] md:max-w-[760px] lg:grid lg:max-w-[1120px] lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[auto_minmax(0,1fr)_auto] lg:gap-x-8">
+      {/* From lg the frame is two columns: the board on the left, and a rail on
+          the right with the seats, chat and actions. Each piece is placed
+          explicitly so the DOM (and tab order) stay the phone layout. */}
+      <header className="flex flex-none flex-col gap-2.5 px-3.5 pb-2.5 pt-1.5 md:px-0 lg:col-start-2 lg:row-start-1 lg:pt-0">
         <div className="flex min-h-11 items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-1.5 text-[13px] font-semibold">
             <Icon3D name={icon} size={22} />
@@ -96,16 +99,18 @@ export function MatchFrame({
           </span>
           {rules && <IconButton icon="manual" label="Rules" onClick={() => setShowRules(true)} />}
         </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-y-3">
           <PlayerSeat {...you} side="you" />
-          <TurnTimer deadline={clock} over={over} />
+          <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:flex lg:items-center">
+            <TurnTimer deadline={clock} over={over} />
+          </div>
           <PlayerSeat {...opp} side="opp" align="right" />
         </div>
         <TurnBar deadline={clock} total={total} />
         {away && !over && <AwayNotice name={away.name} until={away.until} />}
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 px-3.5 md:px-0">
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 px-3.5 md:px-0 lg:col-start-1 lg:row-span-3 lg:row-start-1">
         <p
           aria-live="polite"
           className={`flex min-h-[42px] flex-none items-center justify-center rounded-[14px] px-3 text-center text-[15px] font-semibold ${TONES[tone]}`}
@@ -114,10 +119,10 @@ export function MatchFrame({
         </p>
         {covered && <div className="flex min-h-0 flex-1 flex-col">{result}</div>}
         {/* Kept mounted under the card so the board keeps its end state. */}
-        <div className={covered ? "hidden" : "flex min-h-0 flex-1 flex-col"}>{children}</div>
+        <div className={covered ? "hidden" : "flex min-h-0 flex-1 flex-col lg:justify-center"}>{children}</div>
       </div>
 
-      <footer className="sticky bottom-0 flex flex-none items-center gap-1.5 bg-bg px-3 pb-3 pt-2 md:px-0">
+      <footer className="sticky bottom-0 flex flex-none flex-wrap items-center gap-1.5 bg-bg px-3 pb-3 pt-2 md:px-0 lg:static lg:col-start-2 lg:row-start-3 lg:pb-0">
         {result && (
           <Button variant="ghost" size="sm" icon={covered ? icon : "trophy"} onClick={() => setBoardOpen(covered)}>
             {/* Phones keep just the icon so the reactions and the pill still fit. */}
@@ -127,7 +132,9 @@ export function MatchFrame({
         <ReactionBar matchId={matchId} spectating={spectating} />
         <div className="flex-1" />
         {profile && (
+          // From lg the chat lives in the rail all the time, so no toggle.
           <IconButton
+            className="lg:hidden"
             icon="chat"
             label={chatOpen ? "Close chat" : "Open chat"}
             aria-expanded={chatOpen}
@@ -170,16 +177,19 @@ export function MatchFrame({
         The match ends now and is recorded as a forfeit.
       </Dialog>
 
-      {profile && chatOpen && desktop && (
-        // Desktop: a panel beside the column, so the board never moves.
-        <aside className="fixed bottom-4 right-4 top-[88px] z-30 flex w-[320px] flex-col gap-2.5 rounded-sheet bg-sf p-4 shadow-float">
+      {profile && desktop && (
+        // md: a panel beside the column, so the board never moves. lg and up:
+        // part of the rail, always open.
+        <aside
+          className={`${chatOpen ? "fixed" : "hidden"} bottom-4 right-4 top-[88px] z-30 w-[320px] flex-col gap-2.5 rounded-sheet bg-sf p-4 shadow-float ${chatOpen ? "flex" : ""} lg:static lg:z-auto lg:col-start-2 lg:row-start-2 lg:mb-2 lg:flex lg:min-h-0 lg:w-auto lg:shadow-none`}
+        >
           <div className="flex items-center justify-between">
             <span className="eyebrow">Chat</span>
-            <button type="button" onClick={() => setChatOpen(false)} className="text-small font-semibold text-ink-2">
+            <button type="button" onClick={() => setChatOpen(false)} className="text-small font-semibold text-ink-2 lg:hidden">
               Close
             </button>
           </div>
-          <ChatPanel roomId={matchId} me={profile.id} label="Match chat" />
+          <ChatPanel roomId={matchId} me={profile.id} label="Match chat" className="flex-1" listClass="min-h-0 flex-1" />
         </aside>
       )}
       {profile && !desktop && (

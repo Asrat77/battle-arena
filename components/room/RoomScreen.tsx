@@ -149,8 +149,8 @@ function Room({ code, me }: { code: string; me: string }) {
   return (
     <Frame>
       <div className="dither" />
-      <div className="relative mx-auto flex w-full max-w-[560px] flex-1 flex-col gap-3.5 px-4 pb-8 pt-3 md:pt-6">
-        <header className="flex h-[52px] items-center gap-2.5">
+      <div className="relative mx-auto flex w-full max-w-[560px] flex-1 flex-col gap-3.5 px-4 pb-8 pt-3 md:pt-6 lg:grid lg:max-w-[1040px] lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)] lg:content-start lg:gap-x-8 lg:px-6 lg:pt-8">
+        <header className="flex h-[52px] items-center gap-2.5 lg:col-span-2">
           <button
             type="button"
             aria-label="Leave room"
@@ -179,7 +179,7 @@ function Room({ code, me }: { code: string; me: string }) {
           />
         )}
 
-        <ul className="flex flex-col gap-2.5" aria-label="Seats">
+        <ul className="flex flex-col gap-2.5 lg:col-start-1" aria-label="Seats">
           {you && (
             <Seat id={me} name={you.name ?? "You"} side="you" note={room.host === me ? "Host · you" : "You"} ready={you.ready}>
               {them ? (
@@ -224,7 +224,7 @@ function Room({ code, me }: { code: string; me: string }) {
 
         {them && you && <StatusLine youReady={you.ready} themReady={them.ready} theirName={theirName} />}
 
-        <RoomChat code={room.code} me={me} />
+        <RoomChat code={room.code} me={me} className="lg:col-start-2 lg:row-span-3 lg:row-start-2" />
       </div>
 
       <InviteSheet open={inviting && !them} onClose={() => setInviting(false)} code={room.code} friends={friends} />

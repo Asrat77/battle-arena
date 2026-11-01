@@ -84,11 +84,11 @@ function GameCard({
       <Icon3D
         name={game.art}
         size={210}
-        className="pointer-events-none absolute -right-3.5 -top-2.5 h-[150px] w-[150px] drop-shadow-[0_16px_24px_rgba(0,0,0,.5)] md:-right-5 md:-top-4 md:h-[210px] md:w-[210px]"
+        className="pointer-events-none absolute -right-3.5 -top-2.5 h-[150px] w-[150px] drop-shadow-[0_16px_24px_rgba(0,0,0,.5)] md:-right-5 md:-top-4 md:h-[210px] md:w-[210px] lg:h-[180px] lg:w-[180px] 2xl:h-[210px] 2xl:w-[210px]"
       />
-      <div className="relative flex flex-col gap-1 pr-[120px] md:gap-1.5 md:pr-[150px]">
+      <div className="relative flex flex-col gap-1 pr-[120px] md:gap-1.5 md:pr-[150px] lg:pr-[130px] 2xl:pr-[150px]">
         <span className="eyebrow">{game.kicker}</span>
-        <h2 id={`game-${game.id}`} className="text-[24px] font-semibold leading-[1.05] tracking-[-.04em] md:text-[32px] md:leading-none">
+        <h2 id={`game-${game.id}`} className="text-[24px] font-semibold leading-[1.05] tracking-[-.04em] md:text-[32px] md:leading-none lg:text-[28px] 2xl:text-[32px]">
           {game.name}
         </h2>
         <span className="text-small text-ink-2 md:text-base">{game.blurb}</span>
