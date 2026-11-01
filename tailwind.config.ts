@@ -47,6 +47,7 @@ const config: Config = {
         pop: { from: { transform: "scale(.6)", opacity: "0" } },
         slide: { from: { transform: "translateY(100%)", opacity: "0" } },
         drop: { from: { transform: "translateY(-10px)", opacity: "0" } },
+        drain: { from: { transform: "scaleX(1)" }, to: { transform: "scaleX(0)" } },
         shake: {
           "0%,100%": { transform: "none" },
           "20%": { transform: "translateX(-6px)" },

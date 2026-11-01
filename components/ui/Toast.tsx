@@ -78,10 +78,11 @@ function Toast({ toast, onDismiss }: { toast: ToastItem; onDismiss: () => void }
   ) : null;
   const body = <div className="min-w-0 flex-1">{toast.body}</div>;
   const a = toast.action;
+  const ms = toast.duration ?? 5000;
   return (
     <div
       role="status"
-      className="glass pointer-events-auto flex min-h-[60px] animate-drop items-center gap-3 rounded-[20px] py-2 pl-2.5 pr-2 text-sm"
+      className="glass pointer-events-auto relative flex overflow-hidden min-h-[60px] animate-drop items-center gap-3 rounded-[20px] py-2 pl-2.5 pr-2 text-sm"
       style={look}
     >
       {lead}
@@ -117,6 +118,16 @@ function Toast({ toast, onDismiss }: { toast: ToastItem; onDismiss: () => void }
       >
         <span aria-hidden>✕</span>
       </button>
+      {ms > 0 && (
+        <span
+          aria-hidden
+          className="absolute inset-x-0 bottom-0 h-[3px] origin-left bg-accent/70 motion-reduce:hidden"
+          style={{
+            animation: `drain ${ms}ms linear forwards`,
+            ...(toast.tone === "warn" ? { background: "rgb(240 146 141 / .8)" } : toast.tone === "reward" ? { background: "rgb(243 181 66 / .85)" } : null),
+          }}
+        />
+      )}
     </div>
   );
 }
