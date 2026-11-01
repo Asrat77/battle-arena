@@ -44,7 +44,7 @@ const REASONS: Record<string, { icon: Icon3DName; title: string; body: string; r
 export function RoomScreen({ code }: { code: string }) {
   const { ready, profile } = useSession();
   if (!ready) return <Frame />;
-  if (!profile) return <Signup />;
+  if (!profile) return <RoomInvite code={code} />;
   return <Room code={code} me={profile.id} />;
 }
 
@@ -523,4 +523,22 @@ function copy(url: string, toast: ReturnType<typeof useToast>) {
   const manual = () => toast.show({ icon: "link", body: <span className="mono select-all break-all">{url}</span>, duration: 0 });
   if (!navigator.clipboard) return manual();
   navigator.clipboard.writeText(url).then(() => toast.show({ icon: "link", body: "Room link copied" }), manual);
+}
+
+/** Signed-out visitor on /r/<code>: say who invited them before the signup form. */
+function RoomInvite({ code }: { code: string }) {
+  const [room, setRoom] = useState<RoomState | null>(null);
+  useEffect(() => {
+    let live = true;
+    api.room(code).then((r) => live && setRoom(r), () => {});
+    return () => {
+      live = false;
+    };
+  }, [code]);
+  const host = room?.members.find((m) => m.profileId === room.host)?.name;
+  const invite =
+    room && room.state === "waiting"
+      ? { title: host ? `${host} invited you to play` : "You’re invited to play", detail: `${room.gameName} · room ${room.code}. Sign up and you’re in.` }
+      : undefined;
+  return <Signup invite={invite} />;
 }
