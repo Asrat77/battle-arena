@@ -42,6 +42,13 @@ export function InboxBell() {
   const [open, setOpen] = useState(false);
   const [since, setSince] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+
+  // Desktop popover: focus moves into it on open and returns to the bell on Escape.
+  useEffect(() => {
+    if (open && desktop) panel.current?.focus();
+  }, [open, desktop]);
 
   const show = () => {
     setSince(inbox.seenAt);
@@ -55,7 +62,11 @@ export function InboxBell() {
     const away = (e: Event) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      trigger.current?.focus();
+    };
     document.addEventListener("pointerdown", away);
     document.addEventListener("keydown", esc);
     return () => {
@@ -74,6 +85,7 @@ export function InboxBell() {
     <div ref={ref} className="relative">
       <button
         type="button"
+        ref={trigger}
         aria-label={n ? `Notifications, ${n} new` : "Notifications"}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -82,16 +94,18 @@ export function InboxBell() {
       >
         <Icon3D name="notification" size={28} className="lg:h-8 lg:w-8" />
         {n > 0 && (
-          <span className="absolute right-[3px] top-[3px] flex h-[17px] min-w-[17px] items-center justify-center rounded-[9px] bg-accent px-1 font-mono text-[10px] font-bold text-accent-ink shadow-[0_0_0_2px_rgb(var(--bg))]">
+          <span aria-hidden className="absolute right-[3px] top-[3px] flex h-[17px] min-w-[17px] items-center justify-center rounded-[9px] bg-accent px-1 font-mono text-[10px] font-bold text-accent-ink shadow-[0_0_0_2px_rgb(var(--bg))]">
             {n > 9 ? "9+" : n}
           </span>
         )}
       </button>
       {open && desktop && (
         <div
+          ref={panel}
+          tabIndex={-1}
           role="dialog"
           aria-label="Notifications"
-          className="glass absolute right-0 top-[calc(100%+8px)] z-40 flex max-h-[min(70vh,560px)] w-[400px] animate-drop flex-col gap-2 overflow-y-auto rounded-[20px] p-3"
+          className="outline-none glass absolute right-0 top-[calc(100%+8px)] z-40 flex max-h-[min(70vh,560px)] w-[400px] animate-drop flex-col gap-2 overflow-y-auto rounded-[20px] p-3"
         >
           <div className="flex items-center justify-between px-1">
             <h2 className="text-[17px] font-semibold tracking-[-.02em]">Notifications</h2>

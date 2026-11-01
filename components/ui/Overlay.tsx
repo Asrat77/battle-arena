@@ -9,18 +9,23 @@ import { Icon3D, type Icon3DName } from "./Icon3D";
 
 function useModal(open: boolean, onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null);
+  // Latest onClose without re-running the effect: callers pass a new function every render, and a re-run
+  // would pull focus out of the dialog (restoring it to the opener) on every re-render.
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     if (!open) return;
     const before = document.activeElement as HTMLElement | null;
     const first = ref.current?.querySelector<HTMLElement>("button, a[href], input, [tabindex]");
-    first?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    // A sheet with nothing focusable inside (an empty inbox) takes focus itself so the keyboard isn't left behind it.
+    (first ?? ref.current)?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close.current();
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
       before?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
   return ref;
 }
 
@@ -102,7 +107,8 @@ export function Sheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="fixed inset-x-2 bottom-2 z-50 mx-auto flex max-h-[85vh] max-w-[560px] animate-slide flex-col gap-3.5 overflow-y-auto rounded-sheet bg-sf px-[18px] pb-5 pt-2.5 shadow-float"
+        tabIndex={-1}
+        className="outline-none fixed inset-x-2 bottom-2 z-50 mx-auto flex max-h-[85vh] max-w-[560px] animate-slide flex-col gap-3.5 overflow-y-auto rounded-sheet bg-sf px-[18px] pb-5 pt-2.5 shadow-float"
       >
         <span className="h-[5px] w-10 self-center rounded bg-sf-3" aria-hidden />
         {hero && <div className="-mx-[18px]">{hero}</div>}
