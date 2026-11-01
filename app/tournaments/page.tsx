@@ -1,6 +1,6 @@
 "use client";
 
-// Four-player brackets: open ones to join, running ones to watch, finished
+// Brackets of 4, 8 or 16: open ones to join, running ones to watch, finished
 // ones to look back on. Any signed-in player can open one.
 
 import Link from "next/link";
@@ -88,7 +88,7 @@ export default function TournamentsPage() {
             </Button>
           }
         >
-          Open a four-player bracket and let bots fill the empty seats.
+          Open a bracket of 4, 8 or 16 players and let bots fill the empty seats.
         </EmptyState>
       ) : (
         <ul className="flex flex-col gap-2.5 lg:grid lg:grid-cols-2 lg:gap-4">
@@ -111,12 +111,12 @@ function Row({ t, you }: { t: TournamentState; you: string }) {
       <Icon3D name={GAME_ICONS[t.gameId] ?? "controller"} size={40} />
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex items-center gap-2">
-          <b className="truncate font-semibold">{t.gameName}</b>
+          <b className="truncate font-semibold">{t.name}</b>
           <StateChip state={t.state} />
           {joined && <span className="chip bg-you-soft text-you">You’re in</span>}
         </span>
         <span className="text-small text-ink-2">
-          {t.state === "finished" && t.champion ? `Champion: ${t.champion.name}` : `${t.entrants.length}/${t.size} players`}
+          {t.gameName} · {t.state === "finished" && t.champion ? `Champion: ${t.champion.name}` : `${t.entrants.length}/${t.size} players`}{t.bestOf === 3 ? " · Bo3" : ""}
         </span>
       </span>
       <span className="flex -space-x-2">
