@@ -1,11 +1,36 @@
-# AWS deploy (single EC2 instance)
+# AWS deploy (single EC2 instance, Kamal)
 
-1. Launch Ubuntu 24.04, t3.small, 20 GB gp3, security group open on 22 (your IP), 80, 443. Attach an Elastic IP.
-2. `sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2 git`
-3. `git clone https://github.com/Asrat77/battle-arena && cd battle-arena`
-4. `cp deploy/.env.example .env`, fill in hosts and `LEDGER_PRIVATE_KEY`.
-5. `sudo docker compose up -d --build`
+`deploy/terraform` creates the server: Ubuntu 24.04 on a t3.small with a 30 GB
+gp3 disk, an Elastic IP, and a security group open on 22 (your IP), 80 and 443.
+Its state is local and gitignored. Changing the startup script no longer
+replaces the instance, because the instance's disk holds the data.
 
-Data (profiles, ledger) lives in the `arena-data` volume on the instance's EBS disk and survives restarts and rebuilds.
-Update: `git pull && sudo docker compose up -d --build`.
-Check: `https://$API_HOST/health`.
+Kamal (`config/deploy.yml`) builds the image on the server, pushes it to
+`ghcr.io/asrat77/battle-arena`, and runs two roles behind kamal-proxy, which
+terminates HTTPS:
+
+- `web`: Next.js on `https://34.252.38.138.sslip.io`
+- `api`: the Node server on `https://api.34.252.38.138.sslip.io`
+
+The proxy routes by host name, so other apps can share the server. Bunna
+Passport runs there too.
+
+## Deploy
+
+Once: copy `.kamal/secrets.example` to `.kamal/secrets` and fill in
+`LEDGER_PRIVATE_KEY`. It must never change, or the ledger's signatures stop
+verifying. Install Kamal with `gem install kamal`. Docker must run locally for
+the registry login.
+
+```sh
+export KAMAL_REGISTRY_PASSWORD=$(gh auth token)   # needs write:packages
+kamal deploy
+```
+
+Kamal builds from the last commit, so commit first. Check with
+`https://api.34.252.38.138.sslip.io/health`, and see logs with
+`kamal app logs -r api`.
+
+Data (profiles, ledger) lives in the `battle-arena_arena-data` Docker volume
+on the instance's disk, mounted at `/data`. It survives deploys and restarts,
+not a terminated instance, so copy `db.json` off the server now and then.
