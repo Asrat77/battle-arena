@@ -94,6 +94,12 @@ resource "aws_instance" "web" {
   })
   user_data_replace_on_change = false
 
+  # The running server booted from the older Compose script. Rewriting the
+  # script must not stop or rebuild it, so only new servers use the new one.
+  lifecycle {
+    ignore_changes = [user_data]
+  }
+
   tags = { Name = "battle-arena" }
 }
 
