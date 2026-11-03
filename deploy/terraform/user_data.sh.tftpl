@@ -1,16 +1,17 @@
 #!/bin/bash
+# First boot only. Kamal does the rest from the operator's machine
+# (config/deploy.yml). repo_url, repo_ref and the hosts stay as template
+# inputs so a running server's user_data is unchanged.
 set -euxo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y docker.io docker-compose-v2 git
+apt-get install -y docker.io
 systemctl enable --now docker
-
-git clone --branch ${repo_ref} ${repo_url} /opt/battle-arena
-cd /opt/battle-arena
+usermod -aG docker ubuntu
+fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo "/swapfile none swap sw 0 0" >> /etc/fstab
 umask 077
-cat > .env <<ENV
-WEB_HOST=${web_host}
-API_HOST=${api_host}
-LEDGER_PRIVATE_KEY=${ledger_key}
-ENV
-docker compose up -d --build
+mkdir -p /opt/battle-arena
+# The ledger key Terraform generated. Copy it into .kamal/secrets.
+echo "LEDGER_PRIVATE_KEY=${ledger_key}" > /opt/battle-arena/.env
+: ${repo_url} ${repo_ref} ${web_host} ${api_host}
