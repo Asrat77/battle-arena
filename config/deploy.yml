@@ -1,0 +1,59 @@
+# Kamal deploy to the single EC2 host from deploy/terraform. kamal-proxy
+# terminates HTTPS for both hosts (and for any other app on this server), so
+# there is no Caddy. Update with `kamal deploy`; see deploy/README.md.
+service: battle-arena
+image: asrat77/battle-arena
+
+servers:
+  web:
+    hosts:
+      - 34.252.38.138
+    cmd: npm run start -- -p 3000
+    proxy:
+      host: 34.252.38.138.sslip.io
+      app_port: 3000
+      ssl: true
+      healthcheck:
+        path: /
+  api:
+    hosts:
+      - 34.252.38.138
+    cmd: npm run server
+    env:
+      clear:
+        PORT: 3001
+        FRONTEND_URL: https://34.252.38.138.sslip.io
+        DATA_FILE: /data/db.json
+        # kamal-proxy sits in front, so rate limits must see the real client IP.
+        TRUST_PROXY: "1"
+      secret:
+        - LEDGER_PRIVATE_KEY
+    proxy:
+      host: api.34.252.38.138.sslip.io
+      app_port: 3001
+      ssl: true
+      healthcheck:
+        path: /health
+
+# Profiles and the ledger. The volume Docker Compose created, so data carries over.
+volumes:
+  - battle-arena_arena-data:/data
+
+registry:
+  server: ghcr.io
+  username: Asrat77
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+builder:
+  arch: amd64
+  # Build on the server itself: it is amd64, the Mac is not.
+  remote: ssh://ubuntu@34.252.38.138
+  args:
+    # NEXT_PUBLIC_* values are baked into the browser bundle at build time.
+    NEXT_PUBLIC_API_URL: https://api.34.252.38.138.sslip.io
+
+ssh:
+  user: ubuntu
+  keys:
+    - ~/.ssh/battle-arena

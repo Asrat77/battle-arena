@@ -81,7 +81,7 @@ resource "aws_instance" "web" {
   vpc_security_group_ids = [aws_security_group.web.id]
 
   root_block_device {
-    volume_size = 20
+    volume_size = 30
     volume_type = "gp3"
   }
 
@@ -92,7 +92,7 @@ resource "aws_instance" "web" {
     api_host   = local.api_host
     ledger_key = random_id.ledger_key.hex
   })
-  user_data_replace_on_change = true
+  user_data_replace_on_change = false
 
   tags = { Name = "battle-arena" }
 }
