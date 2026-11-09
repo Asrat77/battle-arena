@@ -259,7 +259,7 @@ describe("badges", () => {
     assert.deepEqual(badgeIds(rewards, "a"), ["firstBlood", "onARoll"]);
   });
 
-  test("Explorer: finish all five games", () => {
+  test("Explorer: finish all six games", () => {
     const { rewards } = setup();
     rewards.matchRecorded(stored({ players: [BOT, "a"], ...ctcWin(6) })); // a loses: finishing is enough
     assert.deepEqual(badgeIds(rewards, "a"), []);
@@ -271,6 +271,8 @@ describe("badges", () => {
     rewards.matchRecorded(stored({ gameId: "dots-and-boxes", players: ["a", BOT], log: [], outcome: { winner: 1, draw: false, reason: "forfeit" }, endedAt: T0 + 3 }));
     assert.deepEqual(badgeIds(rewards, "a"), []);
     rewards.matchRecorded(stored({ gameId: "bingo", players: ["a", BOT], log: [], outcome: { winner: 1, draw: false, reason: "forfeit" }, endedAt: T0 + 4 }));
+    assert.deepEqual(badgeIds(rewards, "a"), []);
+    rewards.matchRecorded(stored({ gameId: "battleship", players: ["a", BOT], log: [], outcome: { winner: 1, draw: false, reason: "forfeit" }, endedAt: T0 + 5 }));
     assert.deepEqual(badgeIds(rewards, "a"), ["explorer"]);
   });
 

@@ -151,7 +151,7 @@ export function Signup({ invite }: { invite?: { title: string; detail: string } 
                 Play in a minute.
               </h1>
               <p className="m-0 text-base text-ink-2">
-                Crack the Code, Gebeta, Tic-Tac-Toe, Dots and Boxes and BINGO, head to head. Every result is recorded so anyone can check it.
+                Crack the Code, Gebeta, Tic-Tac-Toe, Dots and Boxes, BINGO and Battleship, head to head. Every result is recorded so anyone can check it.
               </p>
             </div>
           )}

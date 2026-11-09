@@ -215,7 +215,7 @@ function Commitments({
               {labels[Number(s) as Seat]}: <span className="mono text-ink-3">{hash}</span>
             </li>
           ))}
-          {commit && <li className="text-xs text-ink-3">Published in block #{commit.ledgerIndex} before the first guess.</li>}
+          {commit && <li className="text-xs text-ink-3">Published in block #{commit.ledgerIndex} before play started.</li>}
         </ul>
       ) : (
         <p className="mt-2 text-ink-3">

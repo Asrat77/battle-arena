@@ -7,6 +7,7 @@ import type { GebetaView } from "@/engine/games/gebeta";
 import type { TicTacToeView } from "@/engine/games/ticTacToe";
 import type { DotsView } from "@/engine/games/dotsAndBoxes";
 import type { BingoView } from "@/engine/games/bingo";
+import type { BattleshipView } from "@/engine/games/battleship";
 import type { Outcome, Seat, Viewer } from "@/engine/types";
 
 export type ResultKind = "win" | "loss" | "draw" | "watched";
@@ -86,11 +87,23 @@ export function resultSummary(r: ResultInput): ResultSummary {
       : { ...base, headline: `${who(winner!)} ${winner === seat ? "call" : "calls"} BINGO`, detail: called };
   }
 
+  if (r.gameId === "battleship") {
+    const v = r.view as BattleshipView;
+    if (outcome.draw) return { ...base, headline: "Dead even", detail: `Both fleets sunk on the last shot · ${v.shots[0].length} shots each` };
+    const shots = v.shots[winner!], hits = shots.filter((s) => s.hit).length;
+    return { ...base, headline: `${who(winner!)} ${winner === seat ? "sink" : "sinks"} the fleet`,
+      detail: `${shots.length} shots · ${shots.length ? Math.round((hits / shots.length) * 100) : 0}% on target` };
+  }
+
   if (outcome.draw) return { ...base, headline: "Dead even", detail: outcome.reason };
   return { ...base, headline: `${who(winner!)} ${winner === seat ? "win" : "wins"}`, detail: outcome.reason };
 }
 
 function gameFacts(r: ResultInput): Pick<ResultSummary, "score" | "secrets"> {
+  if (r.gameId === "battleship") {
+    const v = r.view as BattleshipView;
+    return { score: [v.sunk[1].length, v.sunk[0].length] };
+  }
   if (r.gameId === "bingo") return { score: (r.view as BingoView).lines.map((n) => Math.min(n, 5)) as [number, number] };
   if (r.gameId === "dots-and-boxes") return { score: [...(r.view as DotsView).scores] };
   if (r.gameId === "tic-tac-toe") return { score: [...(r.view as TicTacToeView).scores] };

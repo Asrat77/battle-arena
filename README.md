@@ -18,7 +18,7 @@ Live 1v1 games in the browser where the server is the referee and every finished
 
 ### Why a platform, not one game
 
-Spectating, replay, the result hash, rewards and the leaderboard all come from one thing: a match's ordered move log. So a game only has to define its rules (`engine/types.ts`): how to set up, which moves are legal, what a move does, when the match ends, and what each seat and a spectator may see. A new game adds rules in `engine/games/`, a registry entry, a board adapter, display metadata in `lib/gameCatalog.ts`, and rules copy. The three games prove the point:
+Spectating, replay, the result hash, rewards and the leaderboard all come from one thing: a match's ordered move log. So a game only has to define its rules (`engine/types.ts`): how to set up, which moves are legal, what a move does, when the match ends, and what each seat and a spectator may see. A new game adds rules in `engine/games/`, a registry entry, a board adapter, display metadata in `lib/gameCatalog.ts`, and rules copy. The games prove the point:
 
 | Game | Proves | Hidden information | Commitment |
 | --- | --- | --- | --- |
@@ -27,6 +27,7 @@ Spectating, replay, the result hash, rewards and the leaderboard all come from o
 | Tic-Tac-Toe | three-board series, alternating openers, timed board transitions | none | none |
 | Dots and Boxes | 6×6 dots, captured boxes and extra turns | none | none |
 | BINGO | private sheets dealt from the seed, shared calls | each player's 5×5 sheet | none: sheets come from the match seed, published at the end |
+| Battleship | fleet placement, alternating shots, even-shots reply | each player's fleet | salted hash of each fleet, published before the first shot |
 
 ### Tic-Tac-Toe
 
@@ -79,7 +80,7 @@ Grid games are close to configurations of a single rules file, which is the firs
 
 ## What's in it
 
-- **Games**: Crack the Code, Gebeta, Tic-Tac-Toe, Dots and Boxes and BINGO, each with a bot so you can play alone.
+- **Games**: Crack the Code, Gebeta, Tic-Tac-Toe, Dots and Boxes, BINGO and Battleship, each with a bot so you can play alone.
 - **Play**: quick match with bot fallback, private rooms with invite links, spectating with room chat and reactions, rematches.
 - **Profiles**: wallet-free signup, points, badges, a leaderboard and token rewards, plus friends and presence.
 - **Tournaments**: 4, 8 or 16-player single elimination, best-of-1 or best-of-3, open or link-only. The host can start early and bots fill the empty seats.
