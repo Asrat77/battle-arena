@@ -234,3 +234,191 @@
     @apply flex items-center gap-3 border-t border-line py-3 first:border-t-0;
   }
 }
+
+/* Battleship sea. Plain CSS (not @layer) so the classes and keyframes survive
+   purging; colours flip with the theme like the rest of the tokens. */
+:root {
+  --sea-deep: #06182b;
+  --sea-mid: #0b3554;
+  --sea-glow: #16648c;
+  --sea-line: rgb(150 214 255 / 0.12);
+  --sea-foam: rgb(206 238 255 / 0.55);
+  --sea-crest: rgb(170 225 255 / 0.10);
+  --sea-label: rgb(150 190 220 / 0.75);
+  --sea-frame: #0a1f33;
+  --sea-shadow: rgb(0 8 20 / 0.55);
+}
+.light {
+  --sea-deep: #1c7bb0;
+  --sea-mid: #2f9fd0;
+  --sea-glow: #7fdcf2;
+  --sea-line: rgb(255 255 255 / 0.30);
+  --sea-foam: rgb(255 255 255 / 0.85);
+  --sea-crest: rgb(255 255 255 / 0.20);
+  --sea-label: rgb(32 92 130 / 0.85);
+  --sea-frame: #d4ecf5;
+  --sea-shadow: rgb(6 54 92 / 0.40);
+}
+
+@keyframes sea-drift {
+  to {
+    transform: translate(-200px, -12px);
+  }
+}
+@keyframes sea-shimmer {
+  50% {
+    opacity: 0.45;
+  }
+}
+@keyframes sea-bob {
+  50% {
+    transform: translateY(-2.5px);
+  }
+}
+@keyframes sea-flicker {
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  33% {
+    transform: scale(1.12) rotate(6deg);
+    opacity: 0.88;
+  }
+  66% {
+    transform: scale(0.94) rotate(-5deg);
+    opacity: 1;
+  }
+}
+@keyframes sea-smoke {
+  from {
+    transform: translate(0, 0) scale(0.6);
+    opacity: 0.55;
+  }
+  to {
+    transform: translate(6px, -34px) scale(1.5);
+    opacity: 0;
+  }
+}
+@keyframes sea-splash {
+  from {
+    transform: scale(0.2);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+@keyframes sea-boom {
+  0% {
+    transform: scale(0.1);
+    opacity: 1;
+  }
+  60% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+@keyframes sea-land {
+  from {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+}
+@keyframes sea-wake {
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes sea-reticle {
+  to {
+    transform: rotate(90deg);
+  }
+}
+@keyframes sea-bubble {
+  from {
+    transform: translateY(0);
+    opacity: 0.8;
+  }
+  to {
+    transform: translateY(-26px);
+    opacity: 0;
+  }
+}
+.sea-drift {
+  animation: sea-drift 14s linear infinite;
+}
+.sea-shimmer {
+  animation: sea-shimmer 5s ease-in-out infinite;
+}
+.sea-bob {
+  animation: sea-bob 3.2s ease-in-out infinite;
+}
+.sea-flicker {
+  transform-box: fill-box;
+  transform-origin: 50% 70%;
+  animation: sea-flicker 0.7s ease-in-out infinite;
+}
+.sea-smoke {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sea-smoke 2.4s ease-out infinite;
+}
+.sea-splash,
+.sea-boom,
+.sea-land,
+.sea-reticle,
+.sea-bubble {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.sea-splash {
+  animation: sea-splash 0.9s ease-out both;
+}
+.sea-boom {
+  animation: sea-boom 0.7s ease-out both;
+}
+.sea-land {
+  animation: sea-land 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.sea-wake {
+  animation: sea-wake 2.6s ease-in-out infinite;
+}
+.sea-reticle {
+  animation: sea-reticle 6s linear infinite;
+}
+.sea-bubble {
+  animation: sea-bubble 2.2s ease-out infinite;
+}
+@keyframes sea-callout {
+  0% {
+    transform: translate(-50%, 8px) scale(0.6);
+    opacity: 0;
+  }
+  14% {
+    transform: translate(-50%, 0) scale(1.08);
+    opacity: 1;
+  }
+  22%,
+  78% {
+    transform: translate(-50%, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -10px) scale(1);
+    opacity: 0;
+  }
+}
+.sea-callout {
+  animation: sea-callout 1.8s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sea-callout {
+    animation: none !important;
+    transform: translate(-50%, 0);
+  }
+}

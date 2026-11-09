@@ -12,10 +12,12 @@ import { rules as ticTacToeRules } from "@/engine/games/ticTacToe";
 import { GAME_ICONS } from "@/lib/gameCatalog";
 import { rules as dotsRules } from "@/engine/games/dotsAndBoxes";
 import { rules as bingoRules } from "@/engine/games/bingo";
+import { rules as battleshipRules } from "@/engine/games/battleship";
 
 export type Rules = GameAdapter<unknown, unknown>["rules"] & { subtitle: string };
 
 export const RULES: Record<GameId, Rules> = {
+  battleship: { title: "How to play Battleship", subtitle: "8×8 seas · four ships each · 30 seconds a shot", art: GAME_ICONS.battleship, lines: battleshipRules },
   bingo: { title: "How to play BINGO", subtitle: "Private 5×5 sheets · shared calls · 30 seconds a turn", art: GAME_ICONS.bingo, lines: bingoRules },
   "dots-and-boxes": { title: "How to play Dots and Boxes", subtitle: "6×6 dots · 25 boxes · 30 seconds a turn", art: GAME_ICONS["dots-and-boxes"], lines: dotsRules },
   "tic-tac-toe": {

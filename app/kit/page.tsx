@@ -12,6 +12,9 @@ import { TicTacToeBoard } from "@/components/tictactoe/TicTacToeBoard";
 import { DotsBoard } from "@/components/dots/DotsBoard";
 import { BingoBoard } from "@/components/bingo/BingoBoard";
 import { bingo } from "@/engine/games/bingo";
+import { BattleshipBoard } from "@/components/battleship/BattleshipBoard";
+import { battleship } from "@/engine/games/battleship";
+import { createRng } from "@/engine/rng";
 import { dotsAndBoxes } from "@/engine/games/dotsAndBoxes";
 import { ticTacToe } from "@/engine/games/ticTacToe";
 import { GAME_OPTIONS } from "@/lib/gameCatalog";
@@ -49,6 +52,7 @@ export default function KitPage() {
   const [locked, setLocked] = useState<string | null>(null);
   const [ticBoard, setTicBoard] = useState(() => ticTacToe.setup({ seed: "kit" }));
   const [bingoBoard, setBingoBoard] = useState(() => bingo.setup({ seed: "kit" }));
+  const [sea, setSea] = useState(() => battleship.onTimeout(battleship.setup({ seed: "kit" }), createRng("kit")));
 
   return (
     <div className="relative flex flex-col gap-6">
@@ -286,6 +290,14 @@ export default function KitPage() {
         <p className="text-small text-ink-2">Play either seat to preview. Crosses take the caller’s colour; completed lines are struck through.</p>
         <BingoBoard view={bingo.view(bingoBoard, bingoBoard.turn)} seat={bingoBoard.turn} names={["Abebe", "Hana"]} disabled={bingo.outcome(bingoBoard) !== null}
           onMove={(number) => setBingoBoard((s) => bingo.apply(s, s.turn, { number }))} />
+      </Spec>
+      <Spec title="Battleship board">
+        <p className="text-small text-ink-2">Fire at Hana’s waters; the bot answers each shot. Hits burn, misses splash, sunk ships are revealed as wrecks.</p>
+        <BattleshipBoard view={battleship.view(sea, 0)} seat={0} names={["Abebe", "Hana"]} disabled={battleship.outcome(sea) !== null}
+          onMove={(m) => setSea((s) => {
+            const mine = battleship.apply(s, 0, m);
+            return mine.phase === "battle" ? battleship.apply(mine, 1, battleship.bot(battleship.view(mine, 1), 1, createRng(`kit:${mine.shots[1].length}`))) : mine;
+          })} />
       </Spec>
       <Spec title="Gebeta board">
         <p className="text-small text-ink-2">

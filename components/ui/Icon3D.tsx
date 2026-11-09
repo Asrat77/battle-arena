@@ -5,7 +5,7 @@
 import type { CSSProperties } from "react";
 
 export const ICONS = [
-  "bean", "bingo", "binoculars", "blockchain", "boxing", "brokenheart", "chat", "check", "cheetah",
+  "battleship", "bean", "bingo", "binoculars", "blockchain", "boxing", "brokenheart", "chat", "check", "cheetah",
   "clap", "coffeecup", "compass", "confetti", "connect_the_dots", "controller", "crown", "elephant", "envelope",
   "err404", "fennec", "flame", "friends", "gelada", "gift", "giraffe", "handshake",
   "hedgehog", "hippo", "hourglass", "ibex", "idcard", "key", "keypad", "lightning", "link",
