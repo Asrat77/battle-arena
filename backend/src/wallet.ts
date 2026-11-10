@@ -33,7 +33,7 @@ export const DEFAULTS = {
 
 export type WalletMode = "play" | "real";
 
-export type TxnKind = "faucet" | "hold" | "release" | "win" | "fee";
+export type TxnKind = "faucet" | "deposit" | "hold" | "release" | "win" | "fee";
 
 export interface Txn {
   id: string;
@@ -92,6 +92,8 @@ export class Wallet {
   readonly faucetWindowMs: number;
   private readonly now: () => number;
   private readonly onChange: (profileId: string, balance: number) => void;
+  /** Where players can send real money; set by Deposits when deposits are on. */
+  depositAccounts: () => { bank: string; account: string }[] = () => [];
 
   constructor(
     private readonly store: Store,
@@ -247,6 +249,16 @@ export class Wallet {
     return e;
   }
 
+  /** Add verified real money (a deposit). Real mode only; `ref` is the deposit id. */
+  deposit(profileId: string, amount: number, ref: string): Result<{ balance: number }> {
+    if (this.mode !== "real") return { ok: false, reason: "real money is off" };
+    if (!Number.isInteger(amount) || amount <= 0) return { ok: false, reason: "bad amount" };
+    const d = this.data();
+    this.move(d, profileId, amount, "deposit", ref);
+    this.save(d, [profileId]);
+    return { ok: true, balance: d.balances[profileId] };
+  }
+
   private move(d: WalletData, profileId: string, amount: number, kind: TxnKind, ref: string | null) {
     const balance = (d.balances[profileId] ?? 0) + amount;
     if (balance < 0) throw new Error(`wallet ${profileId} would go negative`);
@@ -265,6 +277,7 @@ export class Wallet {
       ...this.config(),
       balance: this.balanceOf(profileId),
       faucetReadyAt: this.mode === "play" ? this.faucetReadyAt(profileId) : null,
+      depositAccounts: this.depositAccounts(),
       history: this.history(profileId),
     };
   }
