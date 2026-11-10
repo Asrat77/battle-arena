@@ -53,6 +53,10 @@ function readResult(body: any): VerifyResult {
     return { state: "failed", reason: body?.message || "transaction not found" };
   }
   const match = item.settlementAccountMatch;
+  if (!match?.matched || match?.ambiguous) {
+    // Logged so a rejected transfer that did reach us can be explained (receipts mask numbers).
+    console.warn("verify.et: settlement account not matched", JSON.stringify({ match, receiver: item.receiverAccount ?? item.receiver ?? null }));
+  }
   return {
     state: "verified",
     amount: Math.round(Number(item.amount) * BIRR),
@@ -128,6 +132,26 @@ export function depositAccountsFromEnv(env: Record<string, string | undefined> =
 
 const refKey = (bank: DepositBank, reference: string) => `${bank}:${reference}`;
 
+/**
+ * The transaction number from whatever the player pasted: the number itself,
+ * a receipt link (telebirr: transactioninfo.ethiotelecom.et/receipt/<number>,
+ * CBE: apps.cbe.com.et/?id=<FT reference><account digits>), or SMS text.
+ */
+export function parseReference(bank: DepositBank, raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  const text = raw.trim();
+  if (bank === "cbe") {
+    const ft = text.toUpperCase().match(/FT[A-Z0-9]{10}/);
+    if (ft) return ft[0];
+  } else {
+    const link = text.match(/receipt\/([A-Za-z0-9]{6,40})/i);
+    if (link) return link[1].toUpperCase();
+    const sms = text.match(/transaction number is\s*([A-Za-z0-9]{6,40})/i);
+    if (sms) return sms[1].toUpperCase();
+  }
+  return text.toUpperCase();
+}
+
 export class Deposits {
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
@@ -178,7 +202,7 @@ export class Deposits {
     const bank = DEPOSIT_BANKS.find((b) => b === rawBank);
     const account = bank && this.opts.accounts[bank];
     if (!bank || !account) return { ok: false, reason: "pick Telebirr or CBE" };
-    const reference = typeof rawReference === "string" ? rawReference.trim().toUpperCase() : "";
+    const reference = parseReference(bank, rawReference);
     if (!/^[A-Z0-9-]{6,40}$/.test(reference)) return { ok: false, reason: "that doesn't look like a transaction number" };
 
     // Reserve the reference first, so two tabs can't credit the same transfer.
