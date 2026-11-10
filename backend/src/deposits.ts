@@ -53,6 +53,10 @@ function readResult(body: any): VerifyResult {
     return { state: "failed", reason: body?.message || "transaction not found" };
   }
   const match = item.settlementAccountMatch;
+  if (!match?.matched || match?.ambiguous) {
+    // Logged so a rejected transfer that did reach us can be explained (receipts mask numbers).
+    console.warn("verify.et: settlement account not matched", JSON.stringify({ match, receiver: item.receiverAccount ?? item.receiver ?? null }));
+  }
   return {
     state: "verified",
     amount: Math.round(Number(item.amount) * BIRR),
