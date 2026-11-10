@@ -127,6 +127,21 @@ export interface WalletSummary {
   history: WalletTxn[];
 }
 
+/** A deposit checked with verify.et (backend/src/deposits.ts). */
+export interface Deposit {
+  id: string;
+  bank: "telebirr" | "cbe";
+  reference: string;
+  status: "checking" | "credited" | "rejected";
+  amount: number | null;
+  reason: string | null;
+  createdAt: number;
+}
+
+export type DepositResult = { ok: true; deposit: Deposit } | { ok: false; reason: string };
+
+export const BANK_NAMES: Record<string, string> = { telebirr: "Telebirr", cbe: "CBE" };
+
 export const SANTIM_PER_BIRR = 100;
 
 /** 12_550 santim → "125.50"; whole birr drop the decimals. */

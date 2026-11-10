@@ -1,0 +1,120 @@
+"use client";
+
+// Add real money: send birr to one of our accounts by Telebirr or CBE, then
+// paste the transaction number. The server checks it with verify.et and
+// credits the wallet only if the transfer reached our account.
+
+import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Field } from "@/components/ui/Field";
+import { Segmented } from "@/components/ui/Segmented";
+import { useToast } from "@/components/ui/Toast";
+import { BANK_NAMES, formatBirr, type DepositResult } from "@/lib/api";
+
+const HINTS: Record<string, { send: string; reference: string; example: string }> = {
+  telebirr: {
+    send: "In the telebirr app, send money to this number",
+    reference: "The transaction number from the telebirr SMS or receipt",
+    example: "e.g. CHK1A2B3C4",
+  },
+  cbe: {
+    send: "In CBE Birr or the CBE app, transfer to this account",
+    reference: "The FT reference from the CBE receipt",
+    example: "e.g. FT26314ABCDE",
+  },
+};
+
+export function DepositForm({
+  accounts,
+  minDeposit,
+  onSubmit,
+}: {
+  accounts: { bank: string; account: string }[];
+  minDeposit: number;
+  onSubmit: (bank: string, reference: string) => Promise<DepositResult>;
+}) {
+  const toast = useToast();
+  const [bank, setBank] = useState(accounts[0]?.bank ?? "telebirr");
+  const [reference, setReference] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const account = accounts.find((a) => a.bank === bank) ?? accounts[0];
+  const hint = HINTS[account.bank] ?? HINTS.telebirr;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(account.account);
+      toast.show({ icon: "check", body: `${BANK_NAMES[account.bank]} account copied`, duration: 2500 });
+    } catch {
+      toast.show({ icon: "warning", tone: "warn", body: `Couldn’t copy. It’s ${account.account}` });
+    }
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const ref = reference.trim();
+    if (!ref) return setError("Paste the transaction number from your receipt.");
+    setChecking(true);
+    setError(null);
+    const res = await onSubmit(account.bank, ref);
+    setChecking(false);
+    if (!res.ok) return setError(res.reason);
+    if (res.deposit.status === "credited") {
+      setReference("");
+      toast.show({ icon: "vault", tone: "reward", body: `+${formatBirr(res.deposit.amount ?? 0)} birr added to your wallet.` });
+    } else {
+      setError(res.deposit.reason ?? "That deposit couldn’t be confirmed.");
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="card flex flex-col gap-3.5" aria-labelledby="deposit-label" noValidate>
+      <h2 id="deposit-label" className="eyebrow">
+        Add money
+      </h2>
+      {accounts.length > 1 && (
+        <Segmented
+          label="Pay with"
+          value={account.bank}
+          onChange={(b) => {
+            setBank(b);
+            setError(null);
+          }}
+          options={accounts.map((a) => ({ value: a.bank, label: BANK_NAMES[a.bank] ?? a.bank }))}
+        />
+      )}
+      <ol className="flex flex-col gap-3 text-small text-ink-2">
+        <li className="flex flex-col gap-1.5">
+          <span>
+            <b className="text-ink">1.</b> {hint.send} (at least {formatBirr(minDeposit)} birr):
+          </span>
+          <div className="flex items-center gap-2 rounded-[14px] bg-sf-2 px-3.5 py-2.5">
+            <span className="mono flex-1 truncate text-base font-semibold text-ink">{account.account}</span>
+            <Button type="button" size="sm" variant="ghost" icon="link" onClick={copy}>
+              Copy
+            </Button>
+          </div>
+        </li>
+        <li>
+          <b className="text-ink">2.</b> Paste the transaction number below. We check it with verify.et and add the amount you sent.
+        </li>
+      </ol>
+      <Field
+        label="Transaction number"
+        hint={hint.reference}
+        placeholder={hint.example}
+        value={reference}
+        onChange={(e) => setReference(e.target.value)}
+        error={error}
+        autoComplete="off"
+        autoCapitalize="characters"
+        spellCheck={false}
+        disabled={checking}
+      />
+      <Button type="submit" variant="act" block loading={checking} icon={checking ? undefined : "verified"}>
+        {checking ? "Checking with verify.et…" : "Confirm deposit"}
+      </Button>
+      <p className="text-small text-ink-3">Each transaction can be used once. It can take up to a minute to confirm.</p>
+    </form>
+  );
+}

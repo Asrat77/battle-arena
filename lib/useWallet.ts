@@ -5,7 +5,7 @@
 // server's wallet:balance push whenever a stake is held, refunded or won.
 
 import { useCallback, useEffect, useState } from "react";
-import type { WalletSummary } from "./api";
+import type { DepositResult, WalletSummary } from "./api";
 import { useSession } from "./session";
 
 type Ack = { ok: true; wallet: WalletSummary } | { ok: false; reason: string };
@@ -44,5 +44,18 @@ export function useWallet() {
     [socket],
   );
 
-  return { wallet, busy, faucet, refresh };
+  /** Check a pasted Telebirr/CBE transaction number; resolves once verify.et answers (can take a minute). */
+  const deposit = useCallback(
+    (bank: string, reference: string) =>
+      new Promise<DepositResult>((resolve) => {
+        if (!socket) return resolve({ ok: false, reason: "Not connected" });
+        socket.emit("wallet:deposit", { bank, reference }, (res: DepositResult) => {
+          if (res.ok) refresh();
+          resolve(res);
+        });
+      }),
+    [socket, refresh],
+  );
+
+  return { wallet, busy, faucet, deposit, refresh };
 }

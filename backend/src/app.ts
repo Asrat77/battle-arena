@@ -87,7 +87,7 @@ export function createApp(options: AppOptions = {}) {
   app.use(walletRoutes(wallet, identity));
   const verifyKey = process.env.VERIFY_ET_KEY;
   const deposits = new Deposits(store, wallet, {
-    verifyEt: verifyKey ? httpVerifyEt(verifyKey) : null,
+    verifyEt: verifyKey ? httpVerifyEt(verifyKey, process.env.VERIFY_ET_URL || undefined) : null,
     accounts: depositAccountsFromEnv(),
     ...options.deposits,
     onUpdate: (deposit) => io.to(profileRoom(deposit.profileId)).emit("wallet:deposit", deposit),
