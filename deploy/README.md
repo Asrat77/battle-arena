@@ -2,8 +2,18 @@
 
 `deploy/terraform` creates the server: Ubuntu 24.04 on a t3.small with a 30 GB
 gp3 disk, an Elastic IP, and a security group open on 22 (your IP), 80 and 443.
-Its state is local and gitignored. Changing the startup script no longer
-replaces the instance, because the instance's disk holds the data.
+Its state is local and gitignored. The instance's disk holds the data of every
+app on it, so Terraform must never replace it: `aws_instance.web` ignores
+changes to the startup script and to the AMI, and has `prevent_destroy`. A plan
+that would destroy the server now fails instead of running.
+
+The AMI comes from Canonical's "current Ubuntu 24.04" SSM parameter, which
+moves with every Ubuntu release. Before the AMI was ignored, that made any
+later apply replace the server: on 2026-11-10 an apply meant only to update
+`ssh_cidr` terminated it and deleted both apps' data. To move to a newer image
+on purpose, back up first, then build a new server and restore onto it.
+
+Always read the plan before applying, and stop if it says "must be replaced".
 
 Kamal (`config/deploy.yml`) builds the image on the server, pushes it to
 `ghcr.io/asrat77/battle-arena`, and runs two roles behind kamal-proxy, which
