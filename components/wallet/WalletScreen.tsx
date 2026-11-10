@@ -14,6 +14,7 @@ import { formatBirr, type WalletTxn } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { useWallet } from "@/lib/useWallet";
 import { DepositForm } from "./DepositForm";
+import { WithdrawForm } from "./WithdrawForm";
 
 /** Mirrors MIN_DEPOSIT in backend/src/deposits.ts. */
 const MIN_DEPOSIT = 1_000;
@@ -21,6 +22,8 @@ const MIN_DEPOSIT = 1_000;
 const TXN: Record<WalletTxn["kind"], { label: string; icon: Icon3DName }> = {
   faucet: { label: "Daily top-up", icon: "gift" },
   deposit: { label: "Deposit", icon: "plus" },
+  withdrawal: { label: "Withdrawal", icon: "envelope" },
+  "withdrawal-refund": { label: "Withdrawal returned", icon: "refresh" },
   hold: { label: "Stake held", icon: "vault" },
   release: { label: "Stake returned", icon: "refresh" },
   win: { label: "Match won", icon: "trophy" },
@@ -29,7 +32,7 @@ const TXN: Record<WalletTxn["kind"], { label: string; icon: Icon3DName }> = {
 
 export function WalletScreen() {
   const { ready, profile } = useSession();
-  const { wallet, busy, faucet, deposit } = useWallet();
+  const { wallet, busy, faucet, deposit, withdraw } = useWallet();
   const toast = useToast();
 
   if (ready && !profile) {
@@ -107,6 +110,15 @@ export function WalletScreen() {
       {wallet.depositAccounts.length > 0 && <DepositForm accounts={wallet.depositAccounts} minDeposit={MIN_DEPOSIT} onSubmit={deposit} />}
       {!play && wallet.depositAccounts.length === 0 && (
         <p className="card text-small text-ink-2">Deposits aren’t open yet. Check back soon.</p>
+      )}
+
+      {wallet.withdrawals.enabled && (
+        <WithdrawForm
+          balance={wallet.balance}
+          minAmount={wallet.withdrawals.minAmount}
+          requests={wallet.withdrawals.requests}
+          onSubmit={withdraw}
+        />
       )}
 
       <section className="card flex flex-col gap-1.5 text-small text-ink-2" aria-labelledby="how-label">

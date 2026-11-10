@@ -1,0 +1,128 @@
+"use client";
+
+// Cash out to your own Telebirr or CBE account. The amount leaves the wallet
+// straight away; a moderator sends it by hand and marks it paid (or rejects
+// it, which puts it back).
+
+import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Chip } from "@/components/ui/Chip";
+import { Field } from "@/components/ui/Field";
+import { Segmented } from "@/components/ui/Segmented";
+import { useToast } from "@/components/ui/Toast";
+import { BANK_NAMES, formatBirr, SANTIM_PER_BIRR, type Withdrawal, type WithdrawalResult } from "@/lib/api";
+
+const STATUS: Record<Withdrawal["status"], { label: string; tone: "pend" | "rec" | "bad" }> = {
+  pending: { label: "Waiting", tone: "pend" },
+  paid: { label: "Paid", tone: "rec" },
+  rejected: { label: "Returned", tone: "bad" },
+};
+
+export function WithdrawForm({
+  balance,
+  minAmount,
+  requests,
+  onSubmit,
+}: {
+  balance: number;
+  minAmount: number;
+  requests: Withdrawal[];
+  onSubmit: (bank: string, account: string, amount: number) => Promise<WithdrawalResult>;
+}) {
+  const toast = useToast();
+  const [bank, setBank] = useState<"telebirr" | "cbe">("telebirr");
+  const [account, setAccount] = useState("");
+  const [amount, setAmount] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const waiting = requests.find((w) => w.status === "pending");
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const santim = Math.round(Number(amount) * SANTIM_PER_BIRR);
+    if (!account.trim()) return setError(bank === "telebirr" ? "Enter your Telebirr number." : "Enter your CBE account number.");
+    if (!Number.isFinite(santim) || santim <= 0) return setError("Enter how much to withdraw.");
+    if (santim > balance) return setError("That’s more than your balance.");
+    setSending(true);
+    setError(null);
+    const res = await onSubmit(bank, account, santim);
+    setSending(false);
+    if (!res.ok) return setError(res.reason);
+    setAmount("");
+    toast.show({ icon: "envelope", body: `Withdrawal of ${formatBirr(santim)} birr sent to the moderators.` });
+  };
+
+  return (
+    <section className="card flex flex-col gap-3.5" aria-labelledby="withdraw-label">
+      <h2 id="withdraw-label" className="eyebrow">
+        Withdraw
+      </h2>
+      {waiting ? (
+        <p className="text-small text-ink-2">
+          Your withdrawal of <b className="text-ink">{formatBirr(waiting.amount)} birr</b> to {BANK_NAMES[waiting.bank]} {waiting.account} is
+          with the moderators. You’ll see it here once it’s paid.
+        </p>
+      ) : (
+        <form onSubmit={submit} className="flex flex-col gap-3" noValidate>
+          <Segmented
+            label="Withdraw to"
+            value={bank}
+            onChange={(b) => {
+              setBank(b);
+              setError(null);
+            }}
+            options={[
+              { value: "telebirr", label: "Telebirr" },
+              { value: "cbe", label: "CBE" },
+            ]}
+          />
+          <Field
+            label={bank === "telebirr" ? "Your Telebirr number" : "Your CBE account number"}
+            placeholder={bank === "telebirr" ? "09…" : "1000…"}
+            inputMode="numeric"
+            autoComplete="off"
+            value={account}
+            onChange={(e) => setAccount(e.target.value)}
+            disabled={sending}
+          />
+          <Field
+            label="Amount (birr)"
+            hint={`At least ${formatBirr(minAmount)} birr. You have ${formatBirr(balance)}.`}
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            error={error}
+            disabled={sending}
+            trailing={
+              <button type="button" className="text-small font-semibold text-ink-2 hover:text-ink" onClick={() => setAmount(String(balance / SANTIM_PER_BIRR))}>
+                Max
+              </button>
+            }
+          />
+          <Button type="submit" variant="sec" block loading={sending} icon="envelope" disabled={balance < minAmount}>
+            Request withdrawal
+          </Button>
+          <p className="text-small text-ink-3">A moderator sends the money by hand, usually within a day. If they can’t, it comes back to your wallet.</p>
+        </form>
+      )}
+      {requests.length > 0 && (
+        <ul className="flex flex-col divide-y divide-line" aria-label="Your withdrawals">
+          {requests.map((w) => (
+            <li key={w.id} className="flex items-center gap-3 py-2.5 text-small">
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold">
+                  {formatBirr(w.amount)} birr → {BANK_NAMES[w.bank]} {w.account}
+                </div>
+                <div className="text-ink-3">
+                  {new Date(w.createdAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+                  {w.reference ? ` · ref ${w.reference}` : ""}
+                </div>
+              </div>
+              <Chip tone={STATUS[w.status].tone}>{STATUS[w.status].label}</Chip>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}

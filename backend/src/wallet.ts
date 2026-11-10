@@ -33,7 +33,7 @@ export const DEFAULTS = {
 
 export type WalletMode = "play" | "real";
 
-export type TxnKind = "faucet" | "deposit" | "hold" | "release" | "win" | "fee";
+export type TxnKind = "faucet" | "deposit" | "withdrawal" | "withdrawal-refund" | "hold" | "release" | "win" | "fee";
 
 export interface Txn {
   id: string;
@@ -94,6 +94,12 @@ export class Wallet {
   private readonly onChange: (profileId: string, balance: number) => void;
   /** Where players can send real money; set by Deposits when deposits are on. */
   depositAccounts: () => { bank: string; account: string }[] = () => [];
+  /** Withdrawal settings and this player's requests; set by Withdrawals when withdrawals are on. */
+  withdrawals: (profileId: string) => { enabled: boolean; minAmount: number; requests: unknown[] } = () => ({
+    enabled: false,
+    minAmount: 0,
+    requests: [],
+  });
 
   constructor(
     private readonly store: Store,
@@ -259,6 +265,24 @@ export class Wallet {
     return { ok: true, balance: d.balances[profileId] };
   }
 
+  /** Take money out for a withdrawal request (refunded if moderators reject it). Real mode only. */
+  withdraw(profileId: string, amount: number, ref: string): Result<{ balance: number }> {
+    if (this.mode !== "real") return { ok: false, reason: "real money is off" };
+    if (!Number.isInteger(amount) || amount <= 0) return { ok: false, reason: "bad amount" };
+    const d = this.data();
+    if ((d.balances[profileId] ?? 0) < amount) return { ok: false, reason: "insufficient balance" };
+    this.move(d, profileId, -amount, "withdrawal", ref);
+    this.save(d, [profileId]);
+    return { ok: true, balance: d.balances[profileId] };
+  }
+
+  /** Give back a withdrawal that moderators rejected. */
+  refundWithdrawal(profileId: string, amount: number, ref: string) {
+    const d = this.data();
+    this.move(d, profileId, amount, "withdrawal-refund", ref);
+    this.save(d, [profileId]);
+  }
+
   private move(d: WalletData, profileId: string, amount: number, kind: TxnKind, ref: string | null) {
     const balance = (d.balances[profileId] ?? 0) + amount;
     if (balance < 0) throw new Error(`wallet ${profileId} would go negative`);
@@ -278,6 +302,7 @@ export class Wallet {
       balance: this.balanceOf(profileId),
       faucetReadyAt: this.mode === "play" ? this.faucetReadyAt(profileId) : null,
       depositAccounts: this.depositAccounts(),
+      withdrawals: this.withdrawals(profileId),
       history: this.history(profileId),
     };
   }
