@@ -5,7 +5,7 @@
 // server's wallet:balance push whenever a stake is held, refunded or won.
 
 import { useCallback, useEffect, useState } from "react";
-import type { DepositResult, WalletSummary } from "./api";
+import type { DepositResult, WalletSummary, WithdrawalResult } from "./api";
 import { useSession } from "./session";
 
 type Ack = { ok: true; wallet: WalletSummary } | { ok: false; reason: string };
@@ -25,8 +25,10 @@ export function useWallet() {
     // A push only carries the balance; fetch again so the history row shows too.
     const onBalance = () => refresh();
     socket.on("wallet:balance", onBalance);
+    socket.on("wallet:withdrawal", onBalance);
     return () => {
       socket.off("wallet:balance", onBalance);
+      socket.off("wallet:withdrawal", onBalance);
     };
   }, [socket, connected, refresh]);
 
@@ -57,5 +59,18 @@ export function useWallet() {
     [socket, refresh],
   );
 
-  return { wallet, busy, faucet, deposit, refresh };
+  /** Ask moderators to pay out `amount` santim to the player's own account. */
+  const withdraw = useCallback(
+    (bank: string, account: string, amount: number) =>
+      new Promise<WithdrawalResult>((resolve) => {
+        if (!socket) return resolve({ ok: false, reason: "Not connected" });
+        socket.emit("wallet:withdraw", { bank, account, amount }, (res: WithdrawalResult) => {
+          if (res.ok) refresh();
+          resolve(res);
+        });
+      }),
+    [socket, refresh],
+  );
+
+  return { wallet, busy, faucet, deposit, withdraw, refresh };
 }

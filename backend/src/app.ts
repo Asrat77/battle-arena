@@ -18,6 +18,7 @@ import { Social, socialRoutes } from "./social";
 import { FileStore, type Store } from "./store";
 import { tournamentRoutes, Tournaments } from "./tournaments";
 import { depositAccountsFromEnv, Deposits, httpVerifyEt, type DepositOptions } from "./deposits";
+import { httpTelegram, Withdrawals, type WithdrawalOptions } from "./withdrawals";
 import { Wallet, walletModeFromEnv, walletRoutes, type WalletOptions } from "./wallet";
 
 export interface AppOptions {
@@ -27,6 +28,7 @@ export interface AppOptions {
   games?: LobbyOptions["games"];
   wallet?: Omit<WalletOptions, "onChange">;
   deposits?: Partial<Omit<DepositOptions, "onUpdate">>;
+  withdrawals?: Partial<Omit<WithdrawalOptions, "onUpdate">>;
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -86,13 +88,27 @@ export function createApp(options: AppOptions = {}) {
   });
   app.use(walletRoutes(wallet, identity));
   const verifyKey = process.env.VERIFY_ET_KEY;
+  const verifyEt = verifyKey ? httpVerifyEt(verifyKey, process.env.VERIFY_ET_URL || undefined) : null;
   const deposits = new Deposits(store, wallet, {
-    verifyEt: verifyKey ? httpVerifyEt(verifyKey, process.env.VERIFY_ET_URL || undefined) : null,
+    verifyEt,
     accounts: depositAccountsFromEnv(),
     ...options.deposits,
     onUpdate: (deposit) => io.to(profileRoom(deposit.profileId)).emit("wallet:deposit", deposit),
   });
   wallet.depositAccounts = () => deposits.accounts();
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const withdrawals = new Withdrawals(store, wallet, {
+    telegram: botToken ? httpTelegram(botToken, process.env.TELEGRAM_API_URL || undefined) : null,
+    moderatorChat: process.env.TELEGRAM_MODERATOR_CHAT || null,
+    verifyEt,
+    nameOf: (id) => {
+      const p = identity.get(id);
+      return p ? `${p.name} (@${p.username})` : id;
+    },
+    ...options.withdrawals,
+    onUpdate: (w) => io.to(profileRoom(w.profileId)).emit("wallet:withdrawal", w),
+  });
+  wallet.withdrawals = (id) => withdrawals.summary(id);
   const lobby = new Lobby(io, matches, identity, { clock: options.clock, games: options.games, wallet });
   app.use(lobbyRoutes(lobby));
   const rewards = new Rewards(store, ledger, {
@@ -122,7 +138,8 @@ export function createApp(options: AppOptions = {}) {
     tournaments.attach(socket, socket.data.profileId as string);
     wallet.attach(socket, socket.data.profileId as string);
     deposits.attach(socket, socket.data.profileId as string);
+    withdrawals.attach(socket, socket.data.profileId as string);
   });
 
-  return { app, httpServer, io, store, identity, ledger, matches, recorder, lobby, rewards, chat, social, tournaments, wallet, deposits };
+  return { app, httpServer, io, store, identity, ledger, matches, recorder, lobby, rewards, chat, social, tournaments, wallet, deposits, withdrawals };
 }

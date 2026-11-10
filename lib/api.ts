@@ -105,7 +105,7 @@ export interface RoomState {
 /** One balance change, as wallet:get sends it (amounts in santim). */
 export interface WalletTxn {
   id: string;
-  kind: "faucet" | "deposit" | "hold" | "release" | "win" | "fee";
+  kind: "faucet" | "deposit" | "withdrawal" | "withdrawal-refund" | "hold" | "release" | "win" | "fee";
   amount: number;
   balance: number;
   ref: string | null;
@@ -124,6 +124,7 @@ export interface WalletSummary {
   faucetReadyAt: number | null;
   /** Where to send real money; empty while deposits are off. */
   depositAccounts: { bank: string; account: string }[];
+  withdrawals: { enabled: boolean; minAmount: number; requests: Withdrawal[] };
   history: WalletTxn[];
 }
 
@@ -137,6 +138,20 @@ export interface Deposit {
   reason: string | null;
   createdAt: number;
 }
+
+/** A cash-out request; moderators pay it by hand (backend/src/withdrawals.ts). */
+export interface Withdrawal {
+  id: string;
+  bank: "telebirr" | "cbe";
+  account: string;
+  amount: number;
+  status: "pending" | "paid" | "rejected";
+  reference: string | null;
+  createdAt: number;
+  closedAt: number | null;
+}
+
+export type WithdrawalResult = { ok: true; withdrawal: Withdrawal } | { ok: false; reason: string };
 
 export type DepositResult = { ok: true; deposit: Deposit } | { ok: false; reason: string };
 
