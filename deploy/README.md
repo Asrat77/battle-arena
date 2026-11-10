@@ -32,6 +32,11 @@ Once: copy `.kamal/secrets.example` to `.kamal/secrets` and fill in
 verifying. Install Kamal with `gem install kamal`. Docker must run locally for
 the registry login.
 
+Staked-match settings (`WALLET_MODE`, `VERIFY_ET_KEY`, `DEPOSIT_*`,
+`TELEGRAM_*`) live in `.env.local`; the lines in `.kamal/secrets.example` read
+them from there at deploy time, so there is one copy. After changing one, run
+`kamal env push` and `kamal app boot -r api` (or a full `kamal deploy`).
+
 ```sh
 export KAMAL_REGISTRY_PASSWORD=$(gh auth token)   # needs write:packages
 kamal deploy

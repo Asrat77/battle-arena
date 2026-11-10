@@ -28,6 +28,13 @@ servers:
         TRUST_PROXY: "1"
       secret:
         - LEDGER_PRIVATE_KEY
+        # Staked matches (see README). WALLET_MODE=real turns on real money.
+        - WALLET_MODE
+        - VERIFY_ET_KEY
+        - DEPOSIT_TELEBIRR
+        - DEPOSIT_CBE
+        - TELEGRAM_BOT_TOKEN
+        - TELEGRAM_MODERATOR_CHAT
     proxy:
       host: api.34.252.38.138.sslip.io
       app_port: 3001
