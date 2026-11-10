@@ -12,6 +12,7 @@ import { FakeClock } from "./clock";
 import { BOT_OFFER_MS, BOT_PLAYER, REMATCH_WINDOW_MS, ROOM_COUNTDOWN_MS } from "./lobby";
 import { DISCONNECT_FORFEIT_MS } from "./matches";
 import { MemoryStore } from "./store";
+import { BIRR, DEFAULTS } from "./wallet";
 
 interface Client {
   socket: ClientSocket;
@@ -20,7 +21,7 @@ interface Client {
 
 const games: AnyGame[] = [...listGames(), firstToThree];
 const clock = new FakeClock();
-const { httpServer, io, matches, identity } = createApp({
+const { httpServer, io, matches, identity, wallet } = createApp({
   store: new MemoryStore(),
   clock,
   games: { get: (id) => games.find((g) => g.id === id), list: () => games },
@@ -507,5 +508,64 @@ describe("rematch", () => {
     assert.equal(back.state, "playing");
     finish(res.matchId);
     await waitFor(a, "room:update", (d) => d.state === "ready-check" && d.matchId === null);
+  });
+});
+
+describe("staked rooms", () => {
+  const STAKE = 100 * BIRR;
+
+  test("both stakes are held at the start and the winner is paid", async () => {
+    const [dave, erin] = ["Dave", "Erin"].map((name) => identity.signup(name));
+    wallet.faucet(dave.profile.id);
+    wallet.faucet(erin.profile.id);
+    const a = await client(dave.token);
+    const b = await client(erin.token);
+
+    const created = await send(a, "room:create", { gameId: G, stake: STAKE });
+    assert.equal(created.ok, true);
+    assert.equal(created.room.stake, STAKE);
+    assert.equal(created.room.prize, 180 * BIRR);
+    await send(b, "room:join", { code: created.room.code });
+    await send(a, "room:ready");
+    await send(b, "room:ready");
+    clock.advance(ROOM_COUNTDOWN_MS);
+    const started = await waitFor(a, "room:update", (d) => d.state === "playing");
+    assert.equal(wallet.balanceOf(dave.profile.id), DEFAULTS.faucetAmount - STAKE);
+    assert.equal(wallet.balanceOf(erin.profile.id), DEFAULTS.faucetAmount - STAKE);
+    assert.equal(wallet.escrowForMatch(started.matchId)?.status, "held");
+
+    finish(started.matchId);
+    const m = matches.get(started.matchId)!;
+    const winner = m.players[m.cur.outcome!.winner!];
+    const loser = m.players.find((p) => p !== winner)!;
+    assert.equal(wallet.balanceOf(winner), DEFAULTS.faucetAmount + 80 * BIRR);
+    assert.equal(wallet.balanceOf(loser), DEFAULTS.faucetAmount - STAKE);
+    await waitFor(a, "wallet:balance");
+
+    // No rematch button: both ready up again, which holds new stakes.
+    assert.equal((await send(a, "rematch:status", { matchId: started.matchId })).available, false);
+    await waitFor(a, "room:update", (d) => d.state === "ready-check" && d.matchId === null);
+  });
+
+  test("can't create, join or ready up without the balance, or stake tic-tac-toe", async () => {
+    const [rich, broke] = ["Rich", "Broke"].map((name) => identity.signup(name));
+    wallet.faucet(rich.profile.id);
+    const a = await client(rich.token);
+    const b = await client(broke.token);
+
+    assert.deepEqual(await send(b, "room:create", { gameId: G, stake: STAKE }), { ok: false, reason: "insufficient balance" });
+    assert.deepEqual(await send(a, "room:create", { gameId: "tic-tac-toe", stake: STAKE }), {
+      ok: false,
+      reason: "Tic-Tac-Toe can't be staked",
+    });
+    assert.equal((await send(a, "room:create", { gameId: G, stake: 1 })).ok, false);
+
+    const { room } = await send(a, "room:create", { gameId: G, stake: STAKE });
+    assert.deepEqual(await send(b, "room:join", { code: room.code }), { ok: false, reason: "insufficient balance" });
+
+    // A friendly room needs no balance.
+    const friendly = await send(a, "room:create", { gameId: G });
+    assert.equal(friendly.room.stake, null);
+    assert.equal((await send(b, "room:join", { code: friendly.room.code })).ok, true);
   });
 });

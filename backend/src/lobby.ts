@@ -11,6 +11,7 @@ import type { AnyGame, Seat } from "../../engine/types";
 import { systemClock, type Clock, type TimerHandle } from "./clock";
 import type { Identity } from "./identity";
 import { profileRoom, type Match, type MatchRuntime } from "./matches";
+import type { Wallet } from "./wallet";
 
 export const BOT_OFFER_MS = 10_000;
 /** Both players ready → 3-2-1, then the match starts. Either can un-ready to stop it. */
@@ -47,6 +48,8 @@ interface Room {
   /** Set while both are ready and the 3-2-1 runs. */
   countdown?: { endsAt: number; timer: TimerHandle };
   createdAt: number;
+  /** Santim each player puts in, or null for a friendly room. */
+  stake: number | null;
 }
 
 type RematchState = "open" | "offered" | "matched" | "declined" | "closed";
@@ -58,6 +61,8 @@ interface Rematch {
   botSeat: Seat | null;
   /** The room it was started from, so a rematch keeps the room in step. */
   room: string | null;
+  /** Staked matches have no rematch button: both ready up in the room again, which holds new stakes. */
+  staked: boolean;
   ended: boolean;
   state: RematchState;
   /** Profiles that asked for a rematch, in order. */
@@ -71,7 +76,12 @@ export interface LobbyOptions {
   clock?: Clock;
   /** Game lookup, so tests can use a test game. Defaults to the engine registry. */
   games?: { get(id: string): AnyGame | undefined; list(): AnyGame[] };
+  /** Holds stakes for staked rooms. Without it rooms can't be staked. */
+  wallet?: Wallet;
 }
+
+/** Games that can't be staked: tic-tac-toe is a draw whenever both play well. */
+export const UNSTAKED_GAMES = new Set(["tic-tac-toe"]);
 
 type Ack = (res: { ok: true; [k: string]: unknown } | { ok: false; reason: string }) => void;
 
@@ -87,6 +97,7 @@ export class Lobby {
   private matchRooms = new Map<string, string>();
   private readonly clock: Clock;
   private readonly games: NonNullable<LobbyOptions["games"]>;
+  private readonly wallet: Wallet | undefined;
 
   constructor(
     private readonly io: Server,
@@ -96,6 +107,7 @@ export class Lobby {
   ) {
     this.clock = opts.clock ?? systemClock;
     this.games = opts.games ?? { get: getGame, list: listGames };
+    this.wallet = opts.wallet;
     matches.on("end", (m: Match) => this.matchEnded(m));
   }
 
@@ -192,7 +204,9 @@ export class Lobby {
     socket.on("rematch:request", (msg: { matchId?: unknown }, ack?: Ack) => reply(ack, this.requestRematch(profileId, msg?.matchId)));
     socket.on("rematch:cancel", (msg: { matchId?: unknown }, ack?: Ack) => reply(ack, this.cancelRematch(profileId, msg?.matchId)));
 
-    socket.on("room:create", (msg: { gameId?: unknown }, ack?: Ack) => reply(ack, this.createRoom(profileId, msg?.gameId)));
+    socket.on("room:create", (msg: { gameId?: unknown; stake?: unknown }, ack?: Ack) =>
+      reply(ack, this.createRoom(profileId, msg?.gameId, msg?.stake)),
+    );
     socket.on("room:join", (msg: { code?: unknown }, ack?: Ack) => reply(ack, this.joinRoom(profileId, msg?.code)));
     socket.on("room:ready", (msg: { ready?: unknown } | Ack | undefined, ack?: Ack) => {
       if (typeof msg === "function") [ack, msg] = [msg, undefined];
@@ -316,9 +330,17 @@ export class Lobby {
 
   // ---- private rooms ----
 
-  createRoom(profileId: string, gameId: unknown) {
+  createRoom(profileId: string, gameId: unknown, rawStake?: unknown) {
     const game = typeof gameId === "string" ? this.games.get(gameId) : undefined;
     if (!game) return { ok: false as const, reason: "unknown game" };
+    const stake = rawStake == null ? null : rawStake;
+    if (stake !== null) {
+      if (!this.wallet) return { ok: false as const, reason: "staked rooms are off" };
+      if (UNSTAKED_GAMES.has(game.id)) return { ok: false as const, reason: `${game.name} can't be staked` };
+      const bad = this.wallet.checkStake(stake);
+      if (bad) return { ok: false as const, reason: bad };
+      if (this.wallet.balanceOf(profileId) < (stake as number)) return { ok: false as const, reason: "insufficient balance" };
+    }
     this.leaveQueues(profileId);
     this.leaveRoom(profileId);
 
@@ -335,6 +357,7 @@ export class Lobby {
       lastMatchId: null,
       matchIds: [],
       createdAt: this.clock.now(),
+      stake: stake as number | null,
     };
     this.rooms.set(code, room);
     this.enter(profileId, room);
@@ -347,6 +370,7 @@ export class Lobby {
     if (!room) return { ok: false as const, reason: "no room with that code" };
     if (!room.members.some((x) => x.profileId === profileId)) {
       if (room.members.length >= 2) return { ok: false as const, reason: "room is full" };
+      if (!this.canCover(room, profileId)) return { ok: false as const, reason: "insufficient balance" };
       this.leaveQueues(profileId);
       this.leaveRoom(profileId);
       room.members.push({ profileId, ready: false });
@@ -360,6 +384,7 @@ export class Lobby {
     if (!room) return { ok: false as const, reason: "not in a room" };
     if (room.matchId) return { ok: false as const, reason: "match already started" };
     if (ready && this.matches.activeFor(profileId).length) return { ok: false as const, reason: "already in a match" };
+    if (ready && !this.canCover(room, profileId)) return { ok: false as const, reason: "insufficient balance" };
     room.members.find((x) => x.profileId === profileId)!.ready = ready;
     this.syncCountdown(room);
     this.broadcastRoom(room);
@@ -388,6 +413,11 @@ export class Lobby {
     return room ? this.roomPayload(room) : null;
   }
 
+  /** Whether the profile has the balance for this room's stake (always, for a friendly room). */
+  private canCover(room: Room, profileId: string) {
+    return room.stake === null || (this.wallet?.balanceOf(profileId) ?? 0) >= room.stake;
+  }
+
   private currentRoom(profileId: string) {
     const code = this.roomOf.get(profileId);
     return code ? this.rooms.get(code) : undefined;
@@ -401,20 +431,22 @@ export class Lobby {
 
   // ---- rematch ----
 
-  private start(game: AnyGame, players: [string, string], botSeat: Seat | null, room: string | null) {
+  private start(game: AnyGame, players: [string, string], botSeat: Seat | null, room: string | null, escrowId?: string) {
     const m = this.matches.create({ game, players, botSeat });
+    if (escrowId) this.wallet?.bind(escrowId, m.id);
     if (room) {
       this.matchRooms.set(m.id, room);
       this.rooms.get(room)?.matchIds.push(m.id);
     }
-    this.rematches.set(m.id, { game, players, botSeat, room, ended: false, state: "open", wants: [], next: null });
+    const staked = escrowId !== undefined;
+    this.rematches.set(m.id, { game, players, botSeat, room, staked, ended: false, state: "open", wants: [], next: null });
     return m;
   }
 
   /** The rematch for a match the profile played, if the lobby started it. */
   private rematchFor(profileId: string, matchId: unknown) {
     const r = typeof matchId === "string" ? this.rematches.get(matchId) : undefined;
-    return r && r.players.includes(profileId) ? r : undefined;
+    return r && !r.staked && r.players.includes(profileId) ? r : undefined;
   }
 
   private rematchPayload(matchId: string, r: Rematch) {
@@ -514,7 +546,22 @@ export class Lobby {
     } else {
       // Host sits first in the room list; seats are still drawn at random.
       if (randomInt(2) === 1) players.reverse();
-      room.matchId = this.start(room.game, players, null, room.code).id;
+      let escrowId: string | undefined;
+      if (room.stake !== null) {
+        const held = this.wallet?.hold(players, room.stake);
+        if (!held?.ok) {
+          // A balance dropped since ready (another room's stake): back to the ready check.
+          for (const x of room.members) {
+            if (this.canCover(room, x.profileId)) continue;
+            x.ready = false;
+            this.emitTo(x.profileId, "room:error", { reason: "insufficient balance" });
+          }
+          this.broadcastRoom(room);
+          return;
+        }
+        escrowId = held.escrow.id;
+      }
+      room.matchId = this.start(room.game, players, null, room.code, escrowId).id;
     }
     this.broadcastRoom(room);
   }
@@ -552,6 +599,8 @@ export class Lobby {
       gameId: room.game.id,
       gameName: room.game.name,
       host: room.host,
+      stake: room.stake,
+      prize: room.stake !== null && this.wallet ? this.wallet.payout(room.stake).prize : null,
       members: room.members.map((x) => ({
         profileId: x.profileId,
         name: this.identity.get(x.profileId)?.name ?? null,

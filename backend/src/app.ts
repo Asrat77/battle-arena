@@ -69,7 +69,19 @@ export function createApp(options: AppOptions = {}) {
   const matches = new MatchRuntime(io, { clock: options.clock });
   const recorder = new Recorder(store, ledger, matches);
   app.use(matchRoutes(recorder, matches));
-  const lobby = new Lobby(io, matches, identity, { clock: options.clock, games: options.games });
+  const wallet = new Wallet(store, {
+    mode: walletModeFromEnv(),
+    ...options.wallet,
+    onChange: (id, balance) => io.to(profileRoom(id)).emit("wallet:balance", { balance }),
+  });
+  // Live matches don't survive a restart, so stakes still held belong to a match that is gone.
+  wallet.refundAllHeld();
+  matches.on("end", (m: Match, record: MatchRecord | null) => {
+    const escrow = wallet.escrowForMatch(m.id);
+    if (escrow && record) wallet.settle(escrow.id, record.outcome);
+  });
+  app.use(walletRoutes(wallet, identity));
+  const lobby = new Lobby(io, matches, identity, { clock: options.clock, games: options.games, wallet });
   app.use(lobbyRoutes(lobby));
   const rewards = new Rewards(store, ledger, {
     isPlayer: (id) => identity.get(id) !== null,
@@ -89,19 +101,6 @@ export function createApp(options: AppOptions = {}) {
     onChampion: (id, tournamentId, ts) => rewards.tournamentWon(id, tournamentId, ts),
   });
   app.use(tournamentRoutes(tournaments));
-
-  const wallet = new Wallet(store, {
-    mode: walletModeFromEnv(),
-    ...options.wallet,
-    onChange: (id, balance) => io.to(profileRoom(id)).emit("wallet:balance", { balance }),
-  });
-  // Live matches don't survive a restart, so stakes still held belong to a match that is gone.
-  wallet.refundAllHeld();
-  matches.on("end", (m: Match, record: MatchRecord | null) => {
-    const escrow = wallet.escrowForMatch(m.id);
-    if (escrow && record) wallet.settle(escrow.id, record.outcome);
-  });
-  app.use(walletRoutes(wallet, identity));
 
   io.on("connection", (socket) => {
     matches.attach(socket, socket.data.profileId as string);
