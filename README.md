@@ -116,6 +116,7 @@ The server reads `.env.local`, then `.env` (both git-ignored).
 | `DATA_FILE` | server | Where profiles and the ledger are stored, default `data/db.json` |
 | `WALLET_MODE` | server | `play` (default): staked matches use play money with a daily free top-up. `real`: real birr, with deposits checked by verify.et |
 | `VERIFY_ET_KEY` | server | verify.et API key for checking deposit receipts. Never prefix it with `NEXT_PUBLIC_` |
+| `VERIFY_ET_URL` | server | verify.et base URL, default `https://verify.et` (point it at a stub for local testing) |
 | `DEPOSIT_TELEBIRR` | server | Telebirr number players pay deposits into |
 | `DEPOSIT_CBE` | server | CBE account number players pay deposits into |
 | `NEXT_PUBLIC_API_URL` | web | Server URL, default `http://localhost:3001` |

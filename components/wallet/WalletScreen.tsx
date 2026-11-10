@@ -13,6 +13,10 @@ import { useToast } from "@/components/ui/Toast";
 import { formatBirr, type WalletTxn } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { useWallet } from "@/lib/useWallet";
+import { DepositForm } from "./DepositForm";
+
+/** Mirrors MIN_DEPOSIT in backend/src/deposits.ts. */
+const MIN_DEPOSIT = 1_000;
 
 const TXN: Record<WalletTxn["kind"], { label: string; icon: Icon3DName }> = {
   faucet: { label: "Daily top-up", icon: "gift" },
@@ -25,7 +29,7 @@ const TXN: Record<WalletTxn["kind"], { label: string; icon: Icon3DName }> = {
 
 export function WalletScreen() {
   const { ready, profile } = useSession();
-  const { wallet, busy, faucet } = useWallet();
+  const { wallet, busy, faucet, deposit } = useWallet();
   const toast = useToast();
 
   if (ready && !profile) {
@@ -99,6 +103,11 @@ export function WalletScreen() {
           </ButtonLink>
         </div>
       </section>
+
+      {wallet.depositAccounts.length > 0 && <DepositForm accounts={wallet.depositAccounts} minDeposit={MIN_DEPOSIT} onSubmit={deposit} />}
+      {!play && wallet.depositAccounts.length === 0 && (
+        <p className="card text-small text-ink-2">Deposits aren’t open yet. Check back soon.</p>
+      )}
 
       <section className="card flex flex-col gap-1.5 text-small text-ink-2" aria-labelledby="how-label">
         <h2 id="how-label" className="eyebrow">
