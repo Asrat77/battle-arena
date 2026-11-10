@@ -206,6 +206,41 @@ describe("httpVerifyEt", () => {
     });
   });
 
+  test("reads the status layout after a queued check (live shape)", async () => {
+    const done = {
+      success: true,
+      message: "Verification status.",
+      data: {
+        requestId: "r9",
+        bank: "telebirr",
+        processingStatus: "completed",
+        status: "success",
+        verified: true,
+        result: {
+          bank: "telebirr",
+          status: "success",
+          verified: true,
+          amount: 40,
+          currency: "ETB",
+          senderName: "Abebe",
+          receiverAccount: "2519****1234",
+          transactionNumber: "DKA40GSWJ4",
+          settlementAccountMatch: { matched: true, ambiguous: false, matchType: "masked_pattern", candidateCount: 1 },
+        },
+      },
+    };
+    await withFetch(200, done, async () => {
+      assert.deepEqual(await httpVerifyEt("K").status("r9"), { state: "verified", amount: 4_000, currency: "ETB", senderName: "Abebe", toUs: true });
+    });
+    await withFetch(200, { success: true, data: { requestId: "r9", processingStatus: "processing", verified: false } }, async () => {
+      assert.deepEqual(await httpVerifyEt("K").status("r9"), { state: "pending", requestId: "r9" });
+    });
+    const failed = { success: true, message: "Verification status.", data: { requestId: "r9", processingStatus: "failed", verified: false, error: { message: "The bank took too long to respond." } } };
+    await withFetch(200, failed, async () => {
+      assert.deepEqual(await httpVerifyEt("K").status("r9"), { state: "failed", reason: "The bank took too long to respond.", retry: true });
+    });
+  });
+
   test("202 is pending, 402 and not verified are failures", async () => {
     await withFetch(202, { requestId: "r2", verification: { requestId: "r2", processingStatus: "queued" } }, async () => {
       assert.deepEqual(await httpVerifyEt("K").status("r2"), { state: "pending", requestId: "r2" });
