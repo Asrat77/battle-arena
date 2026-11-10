@@ -108,6 +108,7 @@ export function createApp(options: AppOptions = {}) {
     chat.attach(socket, socket.data.profileId as string);
     social.attach(socket, socket.data.profileId as string);
     tournaments.attach(socket, socket.data.profileId as string);
+    wallet.attach(socket, socket.data.profileId as string);
   });
 
   return { app, httpServer, io, store, identity, ledger, matches, recorder, lobby, rewards, chat, social, tournaments, wallet };

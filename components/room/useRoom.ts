@@ -26,11 +26,16 @@ export function useRoom(code: string) {
   const [phase, setPhase] = useState<RoomPhase>({ kind: "joining" });
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  /** Why the last ready-up failed (a staked room checks your balance), as { reason, at } so repeats still fire. */
+  const [readyError, setReadyError] = useState<{ reason: string; at: number } | null>(null);
 
   useEffect(() => {
     if (!socket || !connected) return;
     const onUpdate = (r: RoomState) => r?.code === code && setPhase({ kind: "in", room: r });
     socket.on("room:update", onUpdate);
+    // A staked match couldn't start because a balance dropped after ready.
+    const onError = (e: { reason?: string }) => e?.reason && setReadyError({ reason: e.reason, at: Date.now() });
+    socket.on("room:error", onError);
     socket.timeout(JOIN_TIMEOUT_MS).emit("room:join", { code }, (err: Error | null, res: Ack) => {
       if (err) return setPhase({ kind: "error", reason: "timeout" });
       if (!res.ok) return setPhase({ kind: "error", reason: res.reason });
@@ -38,6 +43,7 @@ export function useRoom(code: string) {
     });
     return () => {
       socket.off("room:update", onUpdate);
+      socket.off("room:error", onError);
     };
   }, [socket, connected, code, attempt]);
 
@@ -55,6 +61,7 @@ export function useRoom(code: string) {
       socket.timeout(JOIN_TIMEOUT_MS).emit("room:ready", { ready }, (err: Error | null, res: Ack) => {
         setBusy(false);
         if (!err && res.ok && res.room) setPhase({ kind: "in", room: res.room });
+        if (!err && !res.ok) setReadyError({ reason: res.reason, at: Date.now() });
       });
     },
     [socket],
@@ -69,5 +76,5 @@ export function useRoom(code: string) {
     setAttempt((a) => a + 1);
   }, []);
 
-  return { phase, busy, setReady, leave, retry };
+  return { phase, busy, setReady, leave, retry, readyError };
 }

@@ -85,6 +85,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Icon3D name="handshake" size={28} className="lg:h-8 lg:w-8" />
                 {online > 0 && <CountDot count={online} />}
               </Link>
+              <Link
+                href="/wallet"
+                aria-label="Wallet"
+                aria-current={pathname === "/wallet" ? "page" : undefined}
+                className="relative inline-flex h-11 w-11 flex-none items-center justify-center rounded-[14px] bg-sf transition-colors md:bg-sf-2 md:hover:bg-sf-3 lg:h-12 lg:w-12"
+              >
+                <Icon3D name="vault" size={28} className="lg:h-8 lg:w-8" />
+              </Link>
               <InboxBell />
               <Link
                 href="/settings"

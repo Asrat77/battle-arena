@@ -13,5 +13,13 @@ export default function NewRoomPage() {
 }
 
 function NewRoom() {
-  return <CreateRoom gameId={useSearchParams().get("game")} />;
+  const params = useSearchParams();
+  const stake = Number(params.get("stake"));
+  return (
+    <CreateRoom
+      gameId={params.get("game")}
+      staked={params.get("staked") === "1" || stake > 0}
+      stake={Number.isInteger(stake) && stake > 0 ? stake : null}
+    />
+  );
 }
