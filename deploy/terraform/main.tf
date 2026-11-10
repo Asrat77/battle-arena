@@ -94,10 +94,16 @@ resource "aws_instance" "web" {
   })
   user_data_replace_on_change = false
 
-  # The running server booted from the older Compose script. Rewriting the
-  # script must not stop or rebuild it, so only new servers use the new one.
+  # The instance's own disk holds every app's data (Docker volumes), so nothing
+  # here may replace it. user_data: the running server booted from the older
+  # Compose script; only new servers use the new one. ami: the SSM parameter
+  # above always points at Canonical's newest image, so without this every new
+  # Ubuntu release turns the next apply into destroy-and-recreate. That is how
+  # the 2026-11-10 apply (a routine ssh_cidr change) wiped the server.
+  # prevent_destroy makes any plan that would destroy it fail instead.
   lifecycle {
-    ignore_changes = [user_data]
+    ignore_changes  = [user_data, ami]
+    prevent_destroy = true
   }
 
   tags = { Name = "battle-arena" }
