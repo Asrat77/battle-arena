@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import cors from "cors";
 import express from "express";
 import { Server } from "socket.io";
+import type { MatchRecord } from "../../engine/types";
 import type { Clock } from "./clock";
 import { Chat } from "./chat";
 import { Identity, identityRoutes, type Profile } from "./identity";
@@ -14,12 +15,14 @@ import { rewardRoutes, Rewards } from "./rewards";
 import { Social, socialRoutes } from "./social";
 import { FileStore, type Store } from "./store";
 import { tournamentRoutes, Tournaments } from "./tournaments";
+import { Wallet, walletModeFromEnv, walletRoutes, type WalletOptions } from "./wallet";
 
 export interface AppOptions {
   store?: Store;
   ledger?: LedgerOptions;
   clock?: Clock;
   games?: LobbyOptions["games"];
+  wallet?: Omit<WalletOptions, "onChange">;
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -87,6 +90,19 @@ export function createApp(options: AppOptions = {}) {
   });
   app.use(tournamentRoutes(tournaments));
 
+  const wallet = new Wallet(store, {
+    mode: walletModeFromEnv(),
+    ...options.wallet,
+    onChange: (id, balance) => io.to(profileRoom(id)).emit("wallet:balance", { balance }),
+  });
+  // Live matches don't survive a restart, so stakes still held belong to a match that is gone.
+  wallet.refundAllHeld();
+  matches.on("end", (m: Match, record: MatchRecord | null) => {
+    const escrow = wallet.escrowForMatch(m.id);
+    if (escrow && record) wallet.settle(escrow.id, record.outcome);
+  });
+  app.use(walletRoutes(wallet, identity));
+
   io.on("connection", (socket) => {
     matches.attach(socket, socket.data.profileId as string);
     lobby.attach(socket, socket.data.profileId as string);
@@ -95,5 +111,5 @@ export function createApp(options: AppOptions = {}) {
     tournaments.attach(socket, socket.data.profileId as string);
   });
 
-  return { app, httpServer, io, store, identity, ledger, matches, recorder, lobby, rewards, chat, social, tournaments };
+  return { app, httpServer, io, store, identity, ledger, matches, recorder, lobby, rewards, chat, social, tournaments, wallet };
 }
