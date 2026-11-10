@@ -19,6 +19,9 @@ export const MIN_DEPOSIT = 10 * BIRR;
 /** How long to keep asking verify.et about a check it queued. */
 export const POLL_MS = 3_000;
 export const POLL_TRIES = 20;
+/** Extra tries when the bank's receipt server is slow or verify.et is busy. */
+export const RETRY_MS = 5_000;
+export const RETRIES = 2;
 
 export type DepositBank = "telebirr" | "cbe";
 export const DEPOSIT_BANKS: DepositBank[] = ["telebirr", "cbe"];
@@ -35,7 +38,8 @@ export type VerifyResult =
       /** settlementAccountMatch.matched && !ambiguous */
       toUs: boolean;
     }
-  | { state: "failed"; reason: string };
+  /** retry: a passing problem (bank slow, verify.et busy), worth asking again. */
+  | { state: "failed"; reason: string; retry?: boolean };
 
 export interface VerifyEt {
   verify(input: { bank: DepositBank; reference: string; settlementAccount: string }): Promise<VerifyResult>;
@@ -50,7 +54,8 @@ function readResult(body: any): VerifyResult {
     return { state: "pending", requestId: String(v.requestId ?? body?.requestId ?? "") };
   }
   if (!(v?.verified ?? item?.verified) || !item) {
-    return { state: "failed", reason: body?.message || "transaction not found" };
+    const reason = String(body?.message || "transaction not found");
+    return { state: "failed", reason, retry: /too long|timed? ?out|try again/i.test(reason) };
   }
   const match = item.settlementAccountMatch;
   if (!match?.matched || match?.ambiguous) {
@@ -73,15 +78,20 @@ export function httpVerifyEt(apiKey: string, baseUrl = "https://verify.et"): Ver
     const res = await fetch(baseUrl + path, { ...init, headers: { ...headers, ...init.headers } });
     const body: any = await res.json().catch(() => ({}));
     if (res.status === 402) return { state: "failed", reason: "verification credits used up" } as const;
-    if (res.status === 429 || res.status === 503) return { state: "failed", reason: "verify.et is busy, try again shortly" } as const;
-    if (!res.ok && res.status !== 202) return { state: "failed", reason: body?.message || `verify.et error ${res.status}` } as const;
+    if (res.status === 429 || res.status === 503) return { state: "failed", reason: "verify.et is busy, try again shortly", retry: true } as const;
+    if (!res.ok && res.status !== 202) {
+      const reason = String(body?.message || `verify.et error ${res.status}`);
+      return { state: "failed", reason, retry: res.status === 408 || res.status >= 500 || /too long|timed? ?out|try again/i.test(reason) } as const;
+    }
     return readResult(body);
   };
   return {
     verify: ({ bank, reference, settlementAccount }) =>
       call("/api/verify?waitMs=8000", {
         method: "POST",
-        headers: { "Idempotency-Key": `${bank}:${reference}` },
+        // A fresh key per try, so a retry isn't answered from verify.et's cache of the
+        // failed one. Crediting twice is prevented by our own `used` map, not this key.
+        headers: { "Idempotency-Key": `${bank}:${reference}:${randomBytes(4).toString("hex")}` },
         body: JSON.stringify(
           bank === "telebirr"
             ? { bank, transactionNumber: reference, settlementAccount }
@@ -226,10 +236,14 @@ export class Deposits {
 
     let result: VerifyResult;
     try {
-      result = await this.opts.verifyEt!.verify({ bank, reference, settlementAccount: account });
-      for (let i = 0; result.state === "pending" && i < POLL_TRIES; i++) {
-        await this.sleep(POLL_MS);
-        result = await this.opts.verifyEt!.status(result.requestId);
+      for (let attempt = 0; ; attempt++) {
+        result = await this.opts.verifyEt!.verify({ bank, reference, settlementAccount: account });
+        for (let i = 0; result.state === "pending" && i < POLL_TRIES; i++) {
+          await this.sleep(POLL_MS);
+          result = await this.opts.verifyEt!.status(result.requestId);
+        }
+        if (result.state !== "failed" || !result.retry || attempt >= RETRIES) break;
+        await this.sleep(RETRY_MS);
       }
     } catch {
       result = { state: "failed", reason: "couldn't reach verify.et, try again shortly" };

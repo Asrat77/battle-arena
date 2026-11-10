@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { Deposits, depositAccountsFromEnv, parseReference, httpVerifyEt, MIN_DEPOSIT, POLL_TRIES, type VerifyEt, type VerifyResult } from "./deposits";
+import { Deposits, depositAccountsFromEnv, parseReference, httpVerifyEt, MIN_DEPOSIT, POLL_TRIES, RETRIES, type VerifyEt, type VerifyResult } from "./deposits";
 import { MemoryStore } from "./store";
 import { BIRR, Wallet } from "./wallet";
 
@@ -121,6 +121,23 @@ describe("deposits", () => {
     ]);
   });
 
+  test("a slow bank is retried before giving up", async () => {
+    const slow: VerifyResult = { state: "failed", reason: "The bank took too long to respond. Please try again shortly.", retry: true };
+    const { deposits, wallet, calls } = setup({ CH12ABC345: [slow, paid(20)] });
+    const r = await deposits.submit("a", "telebirr", "CH12ABC345");
+    assert.ok(r.ok);
+    assert.equal(r.deposit.status, "credited");
+    assert.equal(calls.length, 2);
+    assert.equal(wallet.balanceOf("a"), 20 * BIRR);
+
+    const always = setup({ CH99ABC345: slow });
+    const r2 = await always.deposits.submit("a", "telebirr", "CH99ABC345");
+    assert.ok(r2.ok);
+    assert.equal(r2.deposit.status, "rejected");
+    assert.equal(always.calls.length, 1 + RETRIES);
+    assert.equal((await always.deposits.submit("a", "telebirr", "CH99ABC345")).ok, true, "the reference is free to try again");
+  });
+
   test("reads the reference out of a pasted receipt link or SMS", () => {
     assert.equal(parseReference("telebirr", " ch12abc345 "), "CH12ABC345");
     assert.equal(parseReference("telebirr", "https://transactioninfo.ethiotelecom.et/receipt/CH12ABC345"), "CH12ABC345");
@@ -197,7 +214,13 @@ describe("httpVerifyEt", () => {
       assert.deepEqual(await httpVerifyEt("K").status("r2"), { state: "failed", reason: "verification credits used up" });
     });
     await withFetch(200, { message: "Not found", data: [{ verified: false }], verification: { processingStatus: "completed", verified: false } }, async () => {
-      assert.deepEqual(await httpVerifyEt("K").status("r3"), { state: "failed", reason: "Not found" });
+      assert.deepEqual(await httpVerifyEt("K").status("r3"), { state: "failed", reason: "Not found", retry: false });
+    });
+    await withFetch(200, { message: "The bank took too long to respond. Please try again shortly.", verification: { processingStatus: "completed", verified: false } }, async () => {
+      assert.equal(((await httpVerifyEt("K").status("r4")) as { retry?: boolean }).retry, true);
+    });
+    await withFetch(504, {}, async () => {
+      assert.equal(((await httpVerifyEt("K").status("r5")) as { retry?: boolean }).retry, true);
     });
   });
 });
