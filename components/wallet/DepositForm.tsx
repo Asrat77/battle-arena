@@ -14,12 +14,12 @@ import { BANK_NAMES, formatBirr, type DepositResult } from "@/lib/api";
 const HINTS: Record<string, { send: string; reference: string; example: string }> = {
   telebirr: {
     send: "In the telebirr app, send money to this number",
-    reference: "The transaction number from the telebirr SMS or receipt",
+    reference: "The transaction number from the telebirr SMS, or the receipt link",
     example: "e.g. CHK1A2B3C4",
   },
   cbe: {
     send: "In CBE Birr or the CBE app, transfer to this account",
-    reference: "The FT reference from the CBE receipt",
+    reference: "The FT reference from the CBE receipt, or the receipt link",
     example: "e.g. FT26314ABCDE",
   },
 };

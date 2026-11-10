@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { Deposits, depositAccountsFromEnv, httpVerifyEt, MIN_DEPOSIT, POLL_TRIES, type VerifyEt, type VerifyResult } from "./deposits";
+import { Deposits, depositAccountsFromEnv, parseReference, httpVerifyEt, MIN_DEPOSIT, POLL_TRIES, type VerifyEt, type VerifyResult } from "./deposits";
 import { MemoryStore } from "./store";
 import { BIRR, Wallet } from "./wallet";
 
@@ -119,6 +119,25 @@ describe("deposits", () => {
       { bank: "telebirr", account: ACCOUNTS.telebirr },
       { bank: "cbe", account: ACCOUNTS.cbe },
     ]);
+  });
+
+  test("reads the reference out of a pasted receipt link or SMS", () => {
+    assert.equal(parseReference("telebirr", " ch12abc345 "), "CH12ABC345");
+    assert.equal(parseReference("telebirr", "https://transactioninfo.ethiotelecom.et/receipt/CH12ABC345"), "CH12ABC345");
+    assert.equal(
+      parseReference("telebirr", "You have transferred ETB 10.00 to Abebe (2519****1234). Your transaction number is CH12ABC345. Thank you"),
+      "CH12ABC345",
+    );
+    assert.equal(parseReference("cbe", "https://apps.cbe.com.et:100/?id=FT26314ABCDE12345678"), "FT26314ABCDE");
+    assert.equal(parseReference("cbe", "ft26314abcde"), "FT26314ABCDE");
+  });
+
+  test("a pasted telebirr receipt link is checked by its transaction number", async () => {
+    const { deposits, wallet } = setup({ CH12ABC345: paid(50) });
+    const r = await deposits.submit("a", "telebirr", "https://transactioninfo.ethiotelecom.et/receipt/CH12ABC345");
+    assert.ok(r.ok);
+    assert.equal(r.deposit.status, "credited");
+    assert.equal(wallet.balanceOf("a"), 50 * BIRR);
   });
 
   test("accounts come from DEPOSIT_TELEBIRR and DEPOSIT_CBE", () => {
