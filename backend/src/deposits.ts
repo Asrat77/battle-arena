@@ -48,14 +48,21 @@ export interface VerifyEt {
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- verify.et JSON */
 function readResult(body: any): VerifyResult {
-  const v = body?.verification;
-  const item = Array.isArray(body?.data) ? body.data[0] : body?.data;
-  if (v?.processingStatus && v.processingStatus !== "completed") {
-    return { state: "pending", requestId: String(v.requestId ?? body?.requestId ?? "") };
+  // Two layouts. POST /api/verify answers with `verification` plus `data: [item]`;
+  // GET /api/verify/:id (after a queued check) answers with `data: { processingStatus, verified, result: item }`.
+  const status = Array.isArray(body?.data) ? undefined : body?.data;
+  const v = body?.verification ?? status;
+  const item = Array.isArray(body?.data) ? body.data[0] : (status?.result ?? status);
+  const processing = v?.processingStatus;
+  if (processing && processing !== "completed") {
+    if (processing !== "failed" && processing !== "error") {
+      return { state: "pending", requestId: String(v.requestId ?? body?.requestId ?? "") };
+    }
   }
-  if (!(v?.verified ?? item?.verified) || !item) {
-    const reason = String(body?.message || "transaction not found");
-    return { state: "failed", reason, retry: /too long|timed? ?out|try again/i.test(reason) };
+  if (!(v?.verified ?? item?.verified) || !item || processing === "failed" || processing === "error") {
+    const reason = String(item?.message || v?.error?.message || (typeof v?.error === "string" ? v.error : "") || v?.message || body?.message || "transaction not found");
+    console.warn("verify.et: not verified", JSON.stringify(body).slice(0, 2000));
+    return { state: "failed", reason, retry: processing === "failed" || /too long|timed? ?out|try again/i.test(reason) };
   }
   const match = item.settlementAccountMatch;
   if (!match?.matched || match?.ambiguous) {
