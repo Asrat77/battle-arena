@@ -1,4 +1,6 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+// .env.local (never committed) wins over .env, as in Next.js.
+dotenv.config({ path: [".env.local", ".env"] });
 import { createServer } from "node:http";
 import cors from "cors";
 import express from "express";
@@ -15,6 +17,7 @@ import { rewardRoutes, Rewards } from "./rewards";
 import { Social, socialRoutes } from "./social";
 import { FileStore, type Store } from "./store";
 import { tournamentRoutes, Tournaments } from "./tournaments";
+import { depositAccountsFromEnv, Deposits, httpVerifyEt, type DepositOptions } from "./deposits";
 import { Wallet, walletModeFromEnv, walletRoutes, type WalletOptions } from "./wallet";
 
 export interface AppOptions {
@@ -23,6 +26,7 @@ export interface AppOptions {
   clock?: Clock;
   games?: LobbyOptions["games"];
   wallet?: Omit<WalletOptions, "onChange">;
+  deposits?: Partial<Omit<DepositOptions, "onUpdate">>;
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -81,6 +85,14 @@ export function createApp(options: AppOptions = {}) {
     if (escrow && record) wallet.settle(escrow.id, record.outcome);
   });
   app.use(walletRoutes(wallet, identity));
+  const verifyKey = process.env.VERIFY_ET_KEY;
+  const deposits = new Deposits(store, wallet, {
+    verifyEt: verifyKey ? httpVerifyEt(verifyKey) : null,
+    accounts: depositAccountsFromEnv(),
+    ...options.deposits,
+    onUpdate: (deposit) => io.to(profileRoom(deposit.profileId)).emit("wallet:deposit", deposit),
+  });
+  wallet.depositAccounts = () => deposits.accounts();
   const lobby = new Lobby(io, matches, identity, { clock: options.clock, games: options.games, wallet });
   app.use(lobbyRoutes(lobby));
   const rewards = new Rewards(store, ledger, {
@@ -109,7 +121,8 @@ export function createApp(options: AppOptions = {}) {
     social.attach(socket, socket.data.profileId as string);
     tournaments.attach(socket, socket.data.profileId as string);
     wallet.attach(socket, socket.data.profileId as string);
+    deposits.attach(socket, socket.data.profileId as string);
   });
 
-  return { app, httpServer, io, store, identity, ledger, matches, recorder, lobby, rewards, chat, social, tournaments, wallet };
+  return { app, httpServer, io, store, identity, ledger, matches, recorder, lobby, rewards, chat, social, tournaments, wallet, deposits };
 }

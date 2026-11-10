@@ -105,7 +105,7 @@ export interface RoomState {
 /** One balance change, as wallet:get sends it (amounts in santim). */
 export interface WalletTxn {
   id: string;
-  kind: "faucet" | "hold" | "release" | "win" | "fee";
+  kind: "faucet" | "deposit" | "hold" | "release" | "win" | "fee";
   amount: number;
   balance: number;
   ref: string | null;
@@ -122,6 +122,8 @@ export interface WalletSummary {
   faucetAmount: number;
   balance: number;
   faucetReadyAt: number | null;
+  /** Where to send real money; empty while deposits are off. */
+  depositAccounts: { bank: string; account: string }[];
   history: WalletTxn[];
 }
 

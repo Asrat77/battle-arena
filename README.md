@@ -105,6 +105,8 @@ Open http://localhost:3000. With no configuration the server generates a ledger 
 
 ## Configuration
 
+The server reads `.env.local`, then `.env` (both git-ignored).
+
 | Variable | Where | Purpose |
 | --- | --- | --- |
 | `LEDGER_PRIVATE_KEY` | server | Hex secp256k1 key that signs ledger blocks. Set it in production so the key survives a lost data file. |
@@ -112,6 +114,10 @@ Open http://localhost:3000. With no configuration the server generates a ledger 
 | `FRONTEND_URL` | server | Allowed CORS origin, default `http://localhost:3000` |
 | `PORT` | server | Server port, default `3001` |
 | `DATA_FILE` | server | Where profiles and the ledger are stored, default `data/db.json` |
+| `WALLET_MODE` | server | `play` (default): staked matches use play money with a daily free top-up. `real`: real birr, with deposits checked by verify.et |
+| `VERIFY_ET_KEY` | server | verify.et API key for checking deposit receipts. Never prefix it with `NEXT_PUBLIC_` |
+| `DEPOSIT_TELEBIRR` | server | Telebirr number players pay deposits into |
+| `DEPOSIT_CBE` | server | CBE account number players pay deposits into |
 | `NEXT_PUBLIC_API_URL` | web | Server URL, default `http://localhost:3001` |
 | `NEXT_PUBLIC_SOCKET_URL` | web | Older name for `NEXT_PUBLIC_API_URL`, still read as a fallback |
 

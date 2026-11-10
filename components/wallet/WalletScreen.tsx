@@ -16,6 +16,7 @@ import { useWallet } from "@/lib/useWallet";
 
 const TXN: Record<WalletTxn["kind"], { label: string; icon: Icon3DName }> = {
   faucet: { label: "Daily top-up", icon: "gift" },
+  deposit: { label: "Deposit", icon: "plus" },
   hold: { label: "Stake held", icon: "vault" },
   release: { label: "Stake returned", icon: "refresh" },
   win: { label: "Match won", icon: "trophy" },
