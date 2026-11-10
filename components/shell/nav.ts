@@ -21,9 +21,11 @@ export function activeTab(pathname: string): Tab | undefined {
   return TABS.find((t) => (t.href === "/" ? pathname === "/" : pathname === t.href || pathname.startsWith(`${t.href}/`)));
 }
 
-/** Screens that also get the mobile dock: the tabs plus friends and settings. */
+/** Screens that also get the mobile dock: the tabs plus friends, wallet and settings. */
 export function hasDock(pathname: string): boolean {
-  return Boolean(activeTab(pathname)) || pathname.startsWith("/friends") || pathname.startsWith("/settings");
+  return (
+    Boolean(activeTab(pathname)) || pathname.startsWith("/friends") || pathname.startsWith("/wallet") || pathname.startsWith("/settings")
+  );
 }
 
 /**

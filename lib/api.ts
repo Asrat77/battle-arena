@@ -96,6 +96,41 @@ export interface RoomState {
   matchId: string | null;
   /** Milliseconds left in the 3-2-1 when the payload was sent; null outside it. */
   countdownMs: number | null;
+  /** Santim each player puts in, or null for a friendly room. */
+  stake?: number | null;
+  /** What the winner takes home (both stakes minus the fee). */
+  prize?: number | null;
+}
+
+/** One balance change, as wallet:get sends it (amounts in santim). */
+export interface WalletTxn {
+  id: string;
+  kind: "faucet" | "hold" | "release" | "win" | "fee";
+  amount: number;
+  balance: number;
+  ref: string | null;
+  ts: number;
+}
+
+/** wallet:get over the socket (backend/src/wallet.ts). Amounts are santim. */
+export interface WalletSummary {
+  mode: "play" | "real";
+  currency: string;
+  feeBps: number;
+  minStake: number;
+  maxStake: number;
+  faucetAmount: number;
+  balance: number;
+  faucetReadyAt: number | null;
+  history: WalletTxn[];
+}
+
+export const SANTIM_PER_BIRR = 100;
+
+/** 12_550 santim → "125.50"; whole birr drop the decimals. */
+export function formatBirr(santim: number): string {
+  const birr = santim / SANTIM_PER_BIRR;
+  return Number.isInteger(birr) ? birr.toLocaleString("en-US") : birr.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export interface TournamentEntrant {

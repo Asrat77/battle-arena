@@ -86,6 +86,9 @@ export function AccountMenu() {
           <Link role="menuitem" href="/profile" className={item}>
             View profile
           </Link>
+          <Link role="menuitem" href="/wallet" className={item}>
+            Wallet
+          </Link>
           <Link role="menuitem" href="/settings" className={item}>
             Settings
           </Link>

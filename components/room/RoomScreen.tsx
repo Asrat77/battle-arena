@@ -18,7 +18,7 @@ import { Chip } from "@/components/ui/Chip";
 import { Icon3D, type Icon3DName } from "@/components/ui/Icon3D";
 import { Dialog } from "@/components/ui/Overlay";
 import { useToast } from "@/components/ui/Toast";
-import { api, type RoomState } from "@/lib/api";
+import { api, formatBirr, type RoomState } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { useFriends } from "@/lib/useFriends";
 import { InviteSheet } from "./InviteSheet";
@@ -32,6 +32,11 @@ const REASONS: Record<string, { icon: Icon3DName; title: string; body: string; r
     icon: "magnifier",
     title: "No room with that code",
     body: "It may have closed when everyone left. Check the letters with whoever sent it.",
+  },
+  "insufficient balance": {
+    icon: "vault",
+    title: "Not enough in your wallet",
+    body: "This room is played for a stake you can’t cover yet. Top up, then open the link again.",
   },
   timeout: {
     icon: "satellite",
@@ -51,7 +56,7 @@ export function RoomScreen({ code }: { code: string }) {
 function Room({ code, me }: { code: string; me: string }) {
   const router = useRouter();
   const toast = useToast();
-  const { phase, busy, setReady, leave, retry } = useRoom(code);
+  const { phase, busy, setReady, leave, retry, readyError } = useRoom(code);
   const [leaving, setLeaving] = useState(false);
   const [inviting, setInviting] = useState(false);
   const friends = useFriends();
@@ -61,6 +66,15 @@ function Room({ code, me }: { code: string; me: string }) {
   useOpponentLeft(room, me, (name) =>
     toast.show({ icon: "whiteflag", body: `${name} left the room. The seat is open again.` }),
   );
+
+  useEffect(() => {
+    if (!readyError) return;
+    toast.show(
+      readyError.reason === "insufficient balance"
+        ? { icon: "vault", tone: "warn", body: "Your wallet doesn’t cover this room’s stake.", href: "/wallet" }
+        : { icon: "warning", tone: "warn", body: readyError.reason },
+    );
+  }, [readyError, toast]);
 
   useEffect(() => {
     if (!matchId) return;
@@ -83,7 +97,11 @@ function Room({ code, me }: { code: string; me: string }) {
             <p className="max-w-[300px] text-ink-2">{r.body}</p>
           </div>
           <div className="flex w-full max-w-[360px] flex-col gap-2">
-            {r.retry ? (
+            {phase.reason === "insufficient balance" ? (
+              <ButtonLink href="/wallet" variant="act" block icon="vault">
+                Open wallet
+              </ButtonLink>
+            ) : r.retry ? (
               <Button variant="act" block icon="refresh" onClick={retry}>
                 Try again
               </Button>
@@ -179,7 +197,8 @@ function Room({ code, me }: { code: string; me: string }) {
           />
         )}
 
-        <ul className="flex flex-col gap-2.5 lg:col-start-1" aria-label="Seats">
+        <div className="flex flex-col gap-2.5 lg:col-start-1">
+        <ul className="flex flex-col gap-2.5" aria-label="Seats">
           {you && (
             <Seat id={me} name={you.name ?? "You"} side="you" note={room.host === me ? "Host · you" : "You"} ready={you.ready}>
               {them ? (
@@ -221,6 +240,9 @@ function Room({ code, me }: { code: string; me: string }) {
             </li>
           )}
         </ul>
+
+        {room.stake ? <StakeBanner stake={room.stake} prize={room.prize ?? null} /> : null}
+        </div>
 
         {them && you && <StatusLine youReady={you.ready} themReady={them.ready} theirName={theirName} />}
 
@@ -541,4 +563,22 @@ function RoomInvite({ code }: { code: string }) {
       ? { title: host ? `${host} invited you to play` : "You’re invited to play", detail: `${room.gameName} · room ${room.code}. Sign up and you’re in.` }
       : undefined;
   return <Signup invite={invite} />;
+}
+
+/** A staked room says what is on the line before anyone readies up. */
+function StakeBanner({ stake, prize }: { stake: number; prize: number | null }) {
+  return (
+    <div className="flex items-center gap-3 rounded-card bg-sf p-3.5">
+      <Icon3D name="vault" size={36} />
+      <div className="min-w-0 flex-1">
+        <b className="font-semibold">Staked · {formatBirr(stake)} each</b>
+        <div className="text-small text-ink-2">
+          {prize !== null ? `Winner takes ${formatBirr(prize)}. ` : ""}A draw gives both stakes back.
+        </div>
+      </div>
+      <ButtonLink href="/wallet" variant="ghost" size="sm">
+        Wallet
+      </ButtonLink>
+    </div>
+  );
 }

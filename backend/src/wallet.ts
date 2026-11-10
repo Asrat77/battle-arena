@@ -11,6 +11,7 @@
 
 import { randomBytes } from "node:crypto";
 import { Router } from "express";
+import type { Socket } from "socket.io";
 import type { Outcome } from "../../engine/types";
 import { bearerToken, type Identity } from "./identity";
 import type { Store } from "./store";
@@ -258,6 +259,31 @@ export class Wallet {
     for (const p of new Set(changed)) if (p !== PLATFORM_ACCOUNT) this.onChange(p, d.balances[p] ?? 0);
   }
 
+  /** Everything the wallet screen shows for one profile. */
+  summary(profileId: string) {
+    return {
+      ...this.config(),
+      balance: this.balanceOf(profileId),
+      faucetReadyAt: this.mode === "play" ? this.faucetReadyAt(profileId) : null,
+      history: this.history(profileId),
+    };
+  }
+
+  /** wallet:get and wallet:faucet over the signed-in socket. */
+  attach(socket: Socket, profileId: string) {
+    type Ack = (res: { ok: boolean; [k: string]: unknown }) => void;
+    socket.on("wallet:get", (_msg: unknown, ack?: Ack) => {
+      if (typeof _msg === "function") ack = _msg as Ack;
+      if (typeof ack === "function") ack({ ok: true, wallet: this.summary(profileId) });
+    });
+    socket.on("wallet:faucet", (_msg: unknown, ack?: Ack) => {
+      if (typeof _msg === "function") ack = _msg as Ack;
+      const r = this.faucet(profileId);
+      if (typeof ack !== "function") return;
+      ack(r.ok ? { ok: true, wallet: this.summary(profileId) } : { ok: false, reason: r.reason });
+    });
+  }
+
   /** Public settings the client needs to show the wallet and stake picker. */
   config() {
     return {
@@ -285,12 +311,7 @@ export function walletRoutes(wallet: Wallet, identity: Identity): Router {
   router.get("/api/wallet", (req, res) => {
     const me = identity.byToken(bearerToken(req.headers.authorization));
     if (!me) return res.status(401).json({ error: "sign in first" });
-    res.json({
-      ...wallet.config(),
-      balance: wallet.balanceOf(me.id),
-      faucetReadyAt: wallet.mode === "play" ? wallet.faucetReadyAt(me.id) : null,
-      history: wallet.history(me.id),
-    });
+    res.json(wallet.summary(me.id));
   });
 
   router.post("/api/wallet/faucet", (req, res) => {

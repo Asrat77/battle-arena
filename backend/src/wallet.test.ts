@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import { describe, test } from "node:test";
+import { io as connect } from "socket.io-client";
 import { ticTacToe } from "../../engine/games/ticTacToe";
 import { createApp } from "./app";
 import { FakeClock } from "./clock";
@@ -182,6 +183,32 @@ describe("app", () => {
       assert.equal(after.history.length, 1);
       assert.ok(after.faucetReadyAt > Date.now());
     } finally {
+      io.close();
+      httpServer.close();
+    }
+  });
+
+  test("socket: wallet:get and wallet:faucet", async () => {
+    const { httpServer, io, identity } = createApp({ store: new MemoryStore() });
+    const { token } = identity.signup("Dana");
+    await new Promise<void>((r) => httpServer.listen(0, r));
+    const socket = connect(`http://localhost:${(httpServer.address() as AddressInfo).port}`, {
+      auth: { token },
+      transports: ["websocket"],
+      forceNew: true,
+      reconnection: false,
+    });
+    const call = (event: string): Promise<any> => new Promise((r) => socket.emit(event, r));
+    const pushed = new Promise<any>((r) => socket.once("wallet:balance", r));
+    try {
+      assert.equal((await call("wallet:get")).wallet.balance, 0);
+      const topped = await call("wallet:faucet");
+      assert.equal(topped.ok, true);
+      assert.equal(topped.wallet.balance, DEFAULTS.faucetAmount);
+      assert.deepEqual(await pushed, { balance: DEFAULTS.faucetAmount });
+      assert.deepEqual(await call("wallet:faucet"), { ok: false, reason: "already topped up today" });
+    } finally {
+      socket.disconnect();
       io.close();
       httpServer.close();
     }
