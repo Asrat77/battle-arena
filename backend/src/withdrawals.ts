@@ -42,6 +42,8 @@ export interface Withdrawal {
   bank: DepositBank;
   /** The player's own Telebirr number or CBE account. */
   account: string;
+  /** The account must be in this name: the one the player deposits from. */
+  payToName?: string | null;
   amount: number;
   status: WithdrawalStatus;
   /** Transaction number of the moderator's transfer, once paid. */
@@ -107,6 +109,17 @@ export interface WithdrawalOptions {
   nameOf?: (profileId: string) => string;
   now?: () => number;
   onUpdate?: (w: Withdrawal) => void;
+  /**
+   * Re-checks the player's password on every request, so a stolen session token
+   * alone can't cash out (audit H7). Unset: no password asked (tests).
+   */
+  confirmPassword?: (profileId: string, password: unknown) => { ok: true } | { ok: false; reason: string };
+  /**
+   * The name this player deposits from (locked after their first credited deposit).
+   * When set, a player who never deposited can't withdraw, and the payout must go to
+   * an account in that name (audit H7).
+   */
+  payer?: (profileId: string) => { name: string; locked: boolean } | null;
   /** Other handlers for the same moderators' chat (deposit reviews); given every update from it. */
   alsoHandle?: (update: unknown) => Promise<void>;
 }
@@ -263,7 +276,7 @@ export class Withdrawals {
 
   async request(
     profileId: string,
-    input: { bank?: unknown; account?: unknown; amount?: unknown },
+    input: { bank?: unknown; account?: unknown; amount?: unknown; password?: unknown },
   ): Promise<{ ok: true; withdrawal: WithdrawalView } | { ok: false; reason: string }> {
     if (!this.enabled) return { ok: false, reason: "withdrawals are off" };
     const bank = (["telebirr", "cbe"] as const).find((b) => b === input.bank);
@@ -277,10 +290,21 @@ export class Withdrawals {
     if (this.list().some((w) => w.profileId === profileId && w.status === "pending")) {
       return { ok: false, reason: "you already have a withdrawal waiting" };
     }
+    let payToName: string | null = null;
+    if (this.opts.payer) {
+      const payer = this.opts.payer(profileId);
+      if (!payer?.locked) return { ok: false, reason: "make a deposit first: withdrawals are paid to the name you deposit from" };
+      payToName = payer.name;
+    }
     const today = this.withdrawnToday(profileId);
     if (today + amount > this.limits.perDay) {
       const left = Math.max(0, this.limits.perDay - today);
       return { ok: false, reason: `you can withdraw up to ${birr(this.limits.perDay)} birr a day; ${birr(left)} birr left for now` };
+    }
+    // Last, so a typo in the amount doesn't use up password attempts.
+    if (this.opts.confirmPassword) {
+      const checked = this.opts.confirmPassword(profileId, input.password);
+      if (!checked.ok) return { ok: false, reason: checked.reason };
     }
 
     const w: Withdrawal = {
@@ -288,6 +312,7 @@ export class Withdrawals {
       profileId,
       bank,
       account,
+      ...(payToName && { payToName }),
       amount,
       status: "pending",
       reference: null,
@@ -329,6 +354,7 @@ export class Withdrawals {
       `Amount: ${birr(w.amount)} birr`,
       `Send to: ${BANKS[w.bank]} ${w.account}`,
     ];
+    if (w.payToName) lines.push(`Account holder must be: ${w.payToName} (the name they deposit from). Don't pay any other name.`);
     if (w.status === "paid") lines.push(`✅ Paid by ${w.closedBy} · ref ${w.reference}`);
     if (w.status === "paid" && w.forced) lines.push(`⚠️ Not checked by verify.et. ${w.forced.by}: "${w.forced.reason}"`);
     else if (w.status === "rejected") lines.push(`❌ Rejected by ${w.closedBy} · refunded`);
@@ -526,6 +552,10 @@ export class Withdrawals {
     if (r.itemStatus && !/^(success|successful|completed)$/i.test(r.itemStatus)) return `the receipt says "${r.itemStatus}"`;
     if (r.paidAt == null) return "the receipt has no date";
     if (r.paidAt < w.createdAt - CLOCK_SKEW_MS) return "it was made before the player asked for this withdrawal";
+    if (w.payToName) {
+      if (!r.receiverName) return `the receipt doesn't show who received it (must be ${w.payToName})`;
+      if (!namesMatch(w.payToName, r.receiverName)) return `it was paid to "${r.receiverName}", not ${w.payToName} (the name this player deposits from)`;
+    }
     const ours = this.opts.payoutSenderName;
     if (ours && !namesMatch(ours, r.senderName)) return `it was sent by "${r.senderName ?? "?"}", not our account`;
     return null;
@@ -582,9 +612,9 @@ export class Withdrawals {
       .reduce((sum, w) => sum + w.amount, 0);
   }
 
-  /** wallet:withdraw { bank, account, amount } over the signed-in socket. */
+  /** wallet:withdraw { bank, account, amount, password } over the signed-in socket. */
   attach(socket: Socket, profileId: string) {
-    socket.on("wallet:withdraw", async (msg: { bank?: unknown; account?: unknown; amount?: unknown }, ack?: (res: unknown) => void) => {
+    socket.on("wallet:withdraw", async (msg: { bank?: unknown; account?: unknown; amount?: unknown; password?: unknown }, ack?: (res: unknown) => void) => {
       const res = await this.request(profileId, msg ?? {});
       if (typeof ack === "function") ack(res);
     });

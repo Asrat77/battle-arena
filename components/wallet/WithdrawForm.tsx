@@ -3,6 +3,8 @@
 // Cash out to your own Telebirr or CBE account. The amount leaves the wallet
 // straight away; a moderator sends it by hand and marks it paid (or rejects
 // it, which puts it back). Until a moderator picks it up the player can cancel.
+// Each request asks for the password again, and money only goes to an account
+// in the name the player deposits from, so a stolen session can't cash out.
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
@@ -26,6 +28,7 @@ export function WithdrawForm({
   held = 0,
   heldUntil = null,
   requests,
+  payerName,
   onSubmit,
   onCancel,
 }: {
@@ -36,13 +39,16 @@ export function WithdrawForm({
   held?: number;
   heldUntil?: number | null;
   requests: Withdrawal[];
-  onSubmit: (bank: string, account: string, amount: number) => Promise<WithdrawalResult>;
+  /** The name the player deposits from; payouts only go to an account in this name. Null before a first deposit. */
+  payerName: string | null;
+  onSubmit: (bank: string, account: string, amount: number, password: string) => Promise<WithdrawalResult>;
   onCancel: (id: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
 }) {
   const toast = useToast();
   const [bank, setBank] = useState<"telebirr" | "cbe">("telebirr");
   const [account, setAccount] = useState("");
   const [amount, setAmount] = useState("");
+  const [password, setPassword] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const waiting = requests.find((w) => w.status === "pending");
@@ -63,10 +69,12 @@ export function WithdrawForm({
     if (!Number.isFinite(santim) || santim <= 0) return setError("Enter how much to withdraw.");
     if (santim > balance) return setError("That’s more than your balance.");
     if (santim > maxAmount) return setError(`You can withdraw up to ${formatBirr(maxAmount)} birr right now.`);
+    if (!password) return setError("Enter your password.");
     setSending(true);
     setError(null);
-    const res = await onSubmit(bank, account, santim);
+    const res = await onSubmit(bank, account, santim, password);
     setSending(false);
+    setPassword("");
     if (!res.ok) return setError(res.reason);
     setAmount("");
     toast.show({ icon: "envelope", body: `Withdrawal of ${formatBirr(santim)} birr sent to the moderators.` });
@@ -91,6 +99,8 @@ export function WithdrawForm({
             </Button>
           )}
         </div>
+      ) : !payerName ? (
+        <p className="text-small text-ink-2">Make a deposit first. Withdrawals are paid only to an account in the name you deposit from.</p>
       ) : (
         <form onSubmit={submit} className="flex flex-col gap-3" noValidate>
           <Segmented
@@ -107,6 +117,7 @@ export function WithdrawForm({
           />
           <Field
             label={bank === "telebirr" ? "Your Telebirr number" : "Your CBE account number"}
+            hint={`It must be in the name ${payerName}, the name you deposit from.`}
             placeholder={bank === "telebirr" ? "09…" : "1000…"}
             inputMode="numeric"
             autoComplete="off"
@@ -131,6 +142,14 @@ export function WithdrawForm({
                 Max
               </button>
             }
+          />
+          <Field
+            label="Your password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={sending}
           />
           <Button type="submit" variant="sec" block loading={sending} icon="envelope" disabled={balance < minAmount || maxAmount < minAmount}>
             Request withdrawal

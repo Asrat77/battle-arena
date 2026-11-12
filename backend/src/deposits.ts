@@ -199,6 +199,8 @@ export interface DepositOptions {
   receiverName?: string | null;
   /** When the player's account was made; a transfer from before then isn't theirs to claim. */
   accountCreatedAt?: (profileId: string) => number | null;
+  /** Only an account with a password may put in real money (guests can't sign back in to get it out; audit H7). */
+  hasPassword?: (profileId: string) => boolean;
   /** Where deposits needing a human go. Without it they wait in review (logged). */
   moderators?: ModeratorChat | null;
   nameOf?: (profileId: string) => string;
@@ -376,6 +378,7 @@ export class Deposits {
     ip?: string,
   ): Promise<{ ok: true; deposit: Deposit } | { ok: false; reason: string }> {
     if (!this.enabled) return { ok: false, reason: "deposits are off" };
+    if (this.opts.hasPassword && !this.opts.hasPassword(profileId)) return { ok: false, reason: "add a password to your account (Settings) before depositing" };
     const bank = DEPOSIT_BANKS.find((b) => b === rawBank);
     const account = bank && this.opts.accounts[bank];
     if (!bank || !account) return { ok: false, reason: "pick Telebirr or CBE" };

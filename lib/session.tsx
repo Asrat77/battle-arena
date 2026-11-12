@@ -1,7 +1,9 @@
 "use client";
 
 // The signed-in profile and its authenticated socket. The session token from
-// signup lives in localStorage; there is no wallet.
+// signup lives in localStorage; there is no wallet. Tokens expire on the
+// server after 30 days, and signing out or changing the password elsewhere
+// ends them: the server then drops the socket and this device signs out.
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { io, type Socket } from "socket.io-client";
@@ -81,6 +83,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     const s = io(API_URL, { auth: { token }, transports: ["websocket"] });
     s.on("connect", () => setConnected(true));
     s.on("disconnect", () => setConnected(false));
+    // The session ended on the server (expired, signed out, password changed on another device).
+    const ended = () => {
+      writeToken(null);
+      setToken(null);
+      setProfile(null);
+    };
+    s.on("session:ended", ended);
+    s.on("connect_error", (err) => {
+      if (err.message === "unauthorized") ended();
+    });
     // A rename or new picture from another tab or device.
     s.on("profile:update", (p: Profile) => {
       rememberAvatar(p.id, p.avatar);

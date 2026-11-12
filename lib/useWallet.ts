@@ -63,10 +63,10 @@ export function useWallet() {
 
   /** Ask moderators to pay out `amount` santim to the player's own account. */
   const withdraw = useCallback(
-    (bank: string, account: string, amount: number) =>
+    (bank: string, account: string, amount: number, password: string) =>
       new Promise<WithdrawalResult>((resolve) => {
         if (!socket) return resolve({ ok: false, reason: "Not connected" });
-        socket.emit("wallet:withdraw", { bank, account, amount }, (res: WithdrawalResult) => {
+        socket.emit("wallet:withdraw", { bank, account, amount, password }, (res: WithdrawalResult) => {
           if (res.ok) refresh();
           resolve(res);
         });

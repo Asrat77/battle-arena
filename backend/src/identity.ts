@@ -28,7 +28,16 @@ interface StoredProfile extends Omit<Profile, "username"> {
 }
 
 const PROFILES = "profiles";
-const SESSIONS = "sessions"; // sha256(token) -> profile id
+const SESSIONS = "sessions"; // sha256(token) -> { id, at } (a bare id on sessions saved before expiry existed)
+
+/** A session token stops working this long after sign-in; the player signs in again (audit H7). */
+export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+interface StoredSession {
+  id: string;
+  /** When the token was issued. */
+  at: number;
+}
 
 export const NAME_MAX = 24;
 export const PASSWORD_MIN = 8;
@@ -110,7 +119,8 @@ export function addressFromPublicKey(publicKey: Uint8Array): string {
   return `0x${bytesToHex(keccak_256(uncompressed.slice(1)).slice(-20))}`;
 }
 
-function hashToken(token: string): string {
+/** The key a session is stored under; sockets keep it to be dropped when the session ends. */
+export function hashToken(token: string): string {
   return sha256Hex(token);
 }
 
@@ -121,6 +131,8 @@ function toProfile({ id, name, username, createdAt, avatar }: StoredProfile): Pr
 export interface IdentityOptions {
   /** Called after a profile's public fields change (rename, new picture). */
   onChange?: (profile: Profile) => void;
+  /** Called with the hashed tokens of sessions that just ended (sign-out, password change), so open sockets can be dropped. */
+  onSessionsEnded?: (tokenHashes: string[]) => void;
 }
 
 export class Identity {
@@ -130,6 +142,21 @@ export class Identity {
     private readonly opts: IdentityOptions = {},
   ) {
     this.backfillUsernames();
+    this.migrateSessions();
+  }
+
+  /**
+   * Sessions saved as a bare profile id (before tokens expired) get "issued now",
+   * so they last one more SESSION_TTL_MS instead of signing everyone out at once.
+   */
+  private migrateSessions() {
+    const raw = this.store.read<Record<string, string | StoredSession>>(SESSIONS, {});
+    if (!Object.values(raw).some((v) => typeof v === "string")) return;
+    const at = this.now();
+    this.store.write(
+      SESSIONS,
+      Object.fromEntries(Object.entries(raw).map(([hash, v]) => [hash, typeof v === "string" ? { id: v, at } : v])),
+    );
   }
 
   /** Profiles saved before everyone had a handle get one from their name. Idempotent. */
@@ -176,15 +203,34 @@ export class Identity {
   }
 
   private sessions() {
-    return this.store.read<Record<string, string>>(SESSIONS, {});
+    return this.store.read<Record<string, StoredSession>>(SESSIONS, {});
+  }
+
+  private live(session: StoredSession | undefined): session is StoredSession {
+    return !!session && typeof session === "object" && this.now() - session.at < SESSION_TTL_MS;
   }
 
   private fails = new Map<string, { count: number; until: number }>();
 
   private newSession(id: string): string {
     const token = randomBytes(32).toString("hex");
-    this.store.write(SESSIONS, { ...this.sessions(), [hashToken(token)]: id });
+    // Expired sessions are dropped whenever a new one is made, so the list doesn't grow forever.
+    const kept = Object.fromEntries(Object.entries(this.sessions()).filter(([, v]) => this.live(v)));
+    this.store.write(SESSIONS, { ...kept, [hashToken(token)]: { id, at: this.now() } });
     return token;
+  }
+
+  /** End sessions matching `drop` and tell open sockets. */
+  private endSessions(drop: (hash: string, session: StoredSession) => boolean) {
+    const ended: string[] = [];
+    const kept: Record<string, StoredSession> = {};
+    for (const [hash, session] of Object.entries(this.sessions())) {
+      if (drop(hash, session)) ended.push(hash);
+      else kept[hash] = session;
+    }
+    if (!ended.length) return;
+    this.store.write(SESSIONS, kept);
+    this.opts.onSessionsEnded?.(ended);
   }
 
   private findByUsername(username: string): StoredProfile | undefined {
@@ -320,8 +366,7 @@ export class Identity {
     profiles[me.id] = { ...me, passwordHash: hashPassword(next) };
     this.store.write(PROFILES, profiles);
     const keep = hashToken(token as string);
-    const sessions = Object.fromEntries(Object.entries(this.sessions()).filter(([hash, id]) => id !== me.id || hash === keep));
-    this.store.write(SESSIONS, sessions);
+    this.endSessions((hash, s) => s.id === me.id && hash !== keep);
     return toProfile(profiles[me.id]);
   }
 
@@ -358,8 +403,34 @@ export class Identity {
 
   logout(token: unknown): void {
     if (typeof token !== "string" || !token) return;
-    const { [hashToken(token)]: _gone, ...rest } = this.sessions();
-    this.store.write(SESSIONS, rest);
+    const gone = hashToken(token);
+    this.endSessions((hash) => hash === gone);
+  }
+
+  /**
+   * Re-check a signed-in player's password before a money action (withdrawal).
+   * Wrong answers count towards the same lockout as sign-in.
+   */
+  confirmPassword(id: string, rawPassword: unknown): { ok: true } | { ok: false; reason: string } {
+    const stored = own(this.profiles(), id);
+    if (!stored?.passwordHash) return { ok: false, reason: "add a password to your account first (Settings)" };
+    const key = stored.username!;
+    const fail = this.fails.get(key);
+    if (fail && fail.count >= MAX_FAILS && fail.until > this.now()) return { ok: false, reason: "too many attempts, wait a minute and try again" };
+    const password = typeof rawPassword === "string" ? rawPassword : "";
+    if (!checkPassword(password, stored.passwordHash)) {
+      this.fails.set(key, { count: (fail && fail.until > this.now() ? fail.count : 0) + 1, until: this.now() + LOCK_MS });
+      return { ok: false, reason: "wrong password" };
+    }
+    this.fails.delete(key);
+    return { ok: true };
+  }
+
+  /** The profile a hashed session token belongs to, while it is still valid. */
+  sessionOwner(tokenHash: unknown): string | null {
+    if (typeof tokenHash !== "string") return null;
+    const session = own(this.sessions(), tokenHash);
+    return this.live(session) ? session.id : null;
   }
 
   /** Extra fields only the owner sees: whether the profile has a password (a guest does not). */
@@ -376,7 +447,7 @@ export class Identity {
 
   byToken(token: unknown): Profile | null {
     if (typeof token !== "string" || !token) return null;
-    const id = own(this.sessions(), hashToken(token));
+    const id = this.sessionOwner(hashToken(token));
     return id ? this.get(id) : null;
   }
 }

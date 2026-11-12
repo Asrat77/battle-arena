@@ -442,3 +442,70 @@ test("the withdraw form's limit leaves out deposits still on hold (audit M5)", a
   assert.deepEqual(withdrawals.summary("p").requests, [], "the refused request is not kept");
   assert.equal(wallet.balanceOf("p"), 300 * BIRR);
 });
+
+// Audit H7: a stolen session alone can't cash out.
+describe("withdrawals need the password and go to the depositor's name", () => {
+  function guarded(verify?: VerifyResult, payer: { name: string; locked: boolean } | null = { name: "Abebe Bikila", locked: true }) {
+    const store = new MemoryStore();
+    const wallet = new Wallet(store, { mode: "real", depositHoldMs: 0 });
+    const tg = fakeTelegram();
+    const withdrawals = new Withdrawals(store, wallet, {
+      telegram: tg.api,
+      moderatorChat: CHAT,
+      verifyEt: verify ? { verify: async () => verify, status: async () => verify } : null,
+      moderators: moderatorList("1,2", CHAT),
+      secondApprovalAbove: null,
+      now: () => T0,
+      confirmPassword: (_id, pw) => (pw === "right pass" ? { ok: true } : { ok: false, reason: "wrong password" }),
+      payer: () => payer,
+    });
+    wallet.deposit("p", 300 * BIRR, "dep1");
+    return { withdrawals, wallet, tg };
+  }
+  const ask = { bank: "telebirr", account: "0911223344", amount: 100 * BIRR };
+
+  test("wrong or missing password: refused, nothing taken", async () => {
+    const { withdrawals, wallet } = guarded();
+    assert.deepEqual(await withdrawals.request("p", ask), { ok: false, reason: "wrong password" });
+    assert.deepEqual(await withdrawals.request("p", { ...ask, password: "nope" }), { ok: false, reason: "wrong password" });
+    assert.equal(wallet.balanceOf("p"), 300 * BIRR);
+    assert.ok((await withdrawals.request("p", { ...ask, password: "right pass" })).ok);
+  });
+
+  test("no credited deposit yet (no locked payer name): refused", async () => {
+    for (const payer of [null, { name: "Abebe Bikila", locked: false }]) {
+      const { withdrawals } = guarded(undefined, payer);
+      const r = await withdrawals.request("p", { ...ask, password: "right pass" });
+      assert.equal(r.ok, false);
+      assert.match((r as { reason: string }).reason, /make a deposit first/);
+    }
+  });
+
+  test("the alert names the account holder, and a payout to another name isn't confirmed", async () => {
+    const { withdrawals, tg } = guarded(ok({ receiverName: "Kebede Thief" }));
+    const r = await withdrawals.request("p", { ...ask, password: "right pass" });
+    assert.ok(r.ok);
+    assert.match(tg.sent()[0], /Account holder must be: Abebe Bikila/);
+    await withdrawals.handleUpdate(tap(`paid:${r.withdrawal.id}`));
+    const prompt = tg.calls.filter((c) => c.method === "sendMessage").length + 99;
+    await withdrawals.handleUpdate(reply(prompt, "CH12ABC345"));
+    assert.equal(withdrawals.get(r.withdrawal.id)!.status, "pending");
+    assert.match(tg.sent().at(-1)!, /paid to "Kebede Thief", not Abebe Bikila/);
+  });
+
+  test("a receipt without a receiver name isn't confirmed; the right name is", async () => {
+    const missing = guarded(ok({ receiverName: null }));
+    const r1 = await missing.withdrawals.request("p", { ...ask, password: "right pass" });
+    assert.ok(r1.ok);
+    await missing.withdrawals.handleUpdate(tap(`paid:${r1.withdrawal.id}`));
+    await missing.withdrawals.handleUpdate(reply(101, "CH12ABC345"));
+    assert.match(missing.tg.sent().at(-1)!, /doesn't show who received it/);
+
+    const right = guarded(ok({ receiverName: "ABEBE BIKILA TESFAYE" }));
+    const r2 = await right.withdrawals.request("p", { ...ask, password: "right pass" });
+    assert.ok(r2.ok);
+    await right.withdrawals.handleUpdate(tap(`paid:${r2.withdrawal.id}`));
+    await right.withdrawals.handleUpdate(reply(101, "CH12ABC345"));
+    assert.equal(right.withdrawals.get(r2.withdrawal.id)!.status, "paid");
+  });
+});

@@ -543,4 +543,21 @@ describe("httpVerifyEt", () => {
       assert.equal(((await httpVerifyEt("K").status("r5")) as { retry?: boolean }).retry, true);
     });
   });
+
+  test("a guest (no password) can't deposit real money (audit H7)", async () => {
+    const store = new MemoryStore();
+    const wallet = new Wallet(store, { mode: "real" });
+    const fake = fakeVerifyEt({ CH12ABC345: paid(150) });
+    const deposits = new Deposits(store, wallet, {
+      verifyEt: fake.api,
+      accounts: ACCOUNTS,
+      sleep: async () => {},
+      hasPassword: (id) => id === "member",
+    });
+    const r = await deposits.submit("guest", "telebirr", "CH12ABC345", PAYER);
+    assert.equal(r.ok, false);
+    assert.match((r as { reason: string }).reason, /add a password/);
+    assert.equal(fake.calls.length, 0);
+    assert.ok((await deposits.submit("member", "telebirr", "CH12ABC345", PAYER)).ok);
+  });
 });

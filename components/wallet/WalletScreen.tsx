@@ -107,24 +107,39 @@ export function WalletScreen() {
         </div>
       </section>
 
-      {wallet.depositAccounts.length > 0 && (
-        <DepositForm accounts={wallet.depositAccounts} payer={wallet.depositPayer ?? null} minDeposit={MIN_DEPOSIT} onSubmit={deposit} />
-      )}
-      {!play && wallet.depositAccounts.length === 0 && (
-        <p className="card text-small text-ink-2">Deposits aren’t open yet. Check back soon.</p>
-      )}
+      {!play && profile && !profile.hasPassword && (wallet.depositAccounts.length > 0 || wallet.withdrawals.enabled) ? (
+        <section className="card flex flex-col gap-3 text-small text-ink-2" aria-labelledby="need-pass-label">
+          <h2 id="need-pass-label" className="eyebrow">
+            Real money
+          </h2>
+          <p>Add a password to your account before you deposit or withdraw. A guest profile can’t be signed back into, so its money could be lost.</p>
+          <ButtonLink href="/settings" variant="sec" icon="padlock">
+            Add a password
+          </ButtonLink>
+        </section>
+      ) : (
+        <>
+          {wallet.depositAccounts.length > 0 && (
+            <DepositForm accounts={wallet.depositAccounts} payer={wallet.depositPayer ?? null} minDeposit={MIN_DEPOSIT} onSubmit={deposit} />
+          )}
+          {!play && wallet.depositAccounts.length === 0 && (
+            <p className="card text-small text-ink-2">Deposits aren’t open yet. Check back soon.</p>
+          )}
 
-      {wallet.withdrawals.enabled && (
-        <WithdrawForm
-          balance={wallet.balance}
-          minAmount={wallet.withdrawals.minAmount}
-          maxAmount={wallet.withdrawals.maxAmount ?? Infinity}
-          held={wallet.withdrawals.held ?? 0}
-          heldUntil={wallet.withdrawals.heldUntil ?? null}
-          requests={wallet.withdrawals.requests}
-          onSubmit={withdraw}
-          onCancel={cancelWithdrawal}
-        />
+          {wallet.withdrawals.enabled && (
+            <WithdrawForm
+              balance={wallet.balance}
+              minAmount={wallet.withdrawals.minAmount}
+              maxAmount={wallet.withdrawals.maxAmount ?? Infinity}
+              held={wallet.withdrawals.held ?? 0}
+              heldUntil={wallet.withdrawals.heldUntil ?? null}
+              requests={wallet.withdrawals.requests}
+              payerName={wallet.depositPayer?.locked ? wallet.depositPayer.name : null}
+              onSubmit={withdraw}
+              onCancel={cancelWithdrawal}
+            />
+          )}
+        </>
       )}
 
       <section className="card flex flex-col gap-1.5 text-small text-ink-2" aria-labelledby="how-label">
