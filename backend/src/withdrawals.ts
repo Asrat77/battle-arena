@@ -562,7 +562,16 @@ export class Withdrawals {
   /** What the wallet screen needs. */
   summary(profileId: string) {
     const left = Math.max(0, this.limits.perDay - this.withdrawnToday(profileId));
-    return { enabled: this.enabled, minAmount: MIN_WITHDRAWAL, maxAmount: Math.min(this.limits.perRequest, left), requests: this.forPlayer(profileId) };
+    // Fresh deposits can't be withdrawn yet (audit M5).
+    const free = this.wallet.withdrawable(profileId);
+    return {
+      enabled: this.enabled,
+      minAmount: MIN_WITHDRAWAL,
+      maxAmount: Math.min(this.limits.perRequest, left, free.amount),
+      held: free.held,
+      heldUntil: free.heldUntil,
+      requests: this.forPlayer(profileId),
+    };
   }
 
   /** Santim this player asked for in the last 24 hours (not counting returned or cancelled requests). */

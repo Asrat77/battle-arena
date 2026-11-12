@@ -47,7 +47,7 @@ function setup(
   opts: { verify?: VerifyResult; mode?: "play" | "real"; payoutSenderName?: string; secondApprovalAbove?: number | null; mods?: string; limits?: Partial<typeof WITHDRAWAL_LIMITS>; store?: MemoryStore; now?: () => number } = {},
 ) {
   const store = opts.store ?? new MemoryStore();
-  const wallet = new Wallet(store, { mode: opts.mode ?? "real" });
+  const wallet = new Wallet(store, { mode: opts.mode ?? "real", depositHoldMs: 0 });
   const tg = fakeTelegram();
   const verifyCalls: any[] = [];
   const verifyEt: VerifyEt | null = opts.verify
@@ -287,7 +287,7 @@ describe("withdrawals", () => {
   });
   test("other moderator buttons (deposit reviews) are passed on, not taken as withdrawal taps", async () => {
     const store = new MemoryStore();
-    const wallet = new Wallet(store, { mode: "real" });
+    const wallet = new Wallet(store, { mode: "real", depositHoldMs: 0 });
     const seen: any[] = [];
     const withdrawals = new Withdrawals(store, wallet, {
       telegram: fakeTelegram().api,
@@ -419,4 +419,26 @@ describe("withdrawals", () => {
     assert.equal(after.wallet.txnFor("withdrawal-refund", a.withdrawal.id)!.amount, 100 * BIRR);
     assert.equal(store.read<any>("wallet:real", {}).txns.filter((t: any) => t.kind === "withdrawal-refund").length, 1, "recover is idempotent");
   });
+});
+
+test("the withdraw form's limit leaves out deposits still on hold (audit M5)", async () => {
+  const store = new MemoryStore();
+  const wallet = new Wallet(store, { mode: "real", now: () => T0 });
+  const withdrawals = new Withdrawals(store, wallet, {
+    telegram: fakeTelegram().api,
+    moderatorChat: CHAT,
+    verifyEt: null,
+    moderators: moderatorList("1", CHAT),
+    now: () => T0,
+    nameOf: (id) => id,
+  });
+  wallet.deposit("p", 300 * BIRR, "dep1");
+  const s = withdrawals.summary("p");
+  assert.equal(s.maxAmount, 0);
+  assert.equal(s.held, 300 * BIRR);
+  const r = await withdrawals.request("p", { bank: "telebirr", account: "0911223344", amount: 100 * BIRR });
+  assert.equal(r.ok, false);
+  assert.match((r as { reason: string }).reason, /24 hours after they arrive/);
+  assert.deepEqual(withdrawals.summary("p").requests, [], "the refused request is not kept");
+  assert.equal(wallet.balanceOf("p"), 300 * BIRR);
 });

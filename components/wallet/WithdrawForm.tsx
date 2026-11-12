@@ -23,6 +23,8 @@ export function WithdrawForm({
   balance,
   minAmount,
   maxAmount,
+  held = 0,
+  heldUntil = null,
   requests,
   onSubmit,
   onCancel,
@@ -30,6 +32,9 @@ export function WithdrawForm({
   balance: number;
   minAmount: number;
   maxAmount: number;
+  /** Santim from recent deposits that can't be withdrawn until heldUntil. */
+  held?: number;
+  heldUntil?: number | null;
   requests: Withdrawal[];
   onSubmit: (bank: string, account: string, amount: number) => Promise<WithdrawalResult>;
   onCancel: (id: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
@@ -111,7 +116,11 @@ export function WithdrawForm({
           />
           <Field
             label="Amount (birr)"
-            hint={`At least ${formatBirr(minAmount)} birr${Number.isFinite(maxAmount) ? `, at most ${formatBirr(maxAmount)} right now` : ""}. You have ${formatBirr(balance)}.`}
+            hint={`At least ${formatBirr(minAmount)} birr${Number.isFinite(maxAmount) ? `, at most ${formatBirr(maxAmount)} right now` : ""}. You have ${formatBirr(balance)}.${
+              held > 0 && heldUntil
+                ? ` ${formatBirr(held)} from recent deposits can be played now and withdrawn from ${new Date(heldUntil).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}.`
+                : ""
+            }`}
             inputMode="decimal"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
