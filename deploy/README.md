@@ -42,6 +42,22 @@ export KAMAL_REGISTRY_PASSWORD=$(gh auth token)   # needs write:packages
 kamal deploy
 ```
 
+### Real money stays off by default
+
+`WALLET_MODE=real` alone does nothing: the server also needs
+`REAL_MONEY_LEGAL_OK=1`, which should be set only once real-money play is
+legally cleared (betting licence, age/KYC checks, terms). Without it the api
+logs a warning and runs play money. `REAL_MONEY_LEGAL_OK` is deliberately not in
+`config/deploy.yml` yet; to turn real money on, add it to `.env.local`, to
+`.kamal/secrets` (same `$(grep ...)` line as the others) and to the `secret:`
+list in `config/deploy.yml`, then deploy.
+
+Play and real balances live in separate books (`wallet:play`, `wallet:real` in
+`db.json`). The first boot after this change moves the old shared book to play
+money, because it mixed faucet birr with real deposits. Real money it held is
+listed under `walletLegacyReport` in `db.json` (and in the boot log) so those
+players can be refunded by hand.
+
 Kamal builds from the last commit, so commit first. Check with
 `https://api.34.252.38.138.sslip.io/health`, and see logs with
 `kamal app logs -r api`.

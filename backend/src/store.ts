@@ -5,6 +5,7 @@ import { dirname } from "node:path";
 export interface Store {
   read<T>(key: string, fallback: T): T;
   write<T>(key: string, value: T): void;
+  remove(key: string): void;
 }
 
 export class MemoryStore implements Store {
@@ -16,6 +17,10 @@ export class MemoryStore implements Store {
 
   write<T>(key: string, value: T): void {
     this.data[key] = value;
+  }
+
+  remove(key: string): void {
+    delete this.data[key];
   }
 }
 
@@ -31,6 +36,15 @@ export class FileStore extends MemoryStore {
 
   write<T>(key: string, value: T): void {
     super.write(key, value);
+    this.flush();
+  }
+
+  remove(key: string): void {
+    super.remove(key);
+    this.flush();
+  }
+
+  private flush(): void {
     mkdirSync(dirname(this.path), { recursive: true });
     const tmp = `${this.path}.tmp`;
     writeFileSync(tmp, JSON.stringify(this.data));

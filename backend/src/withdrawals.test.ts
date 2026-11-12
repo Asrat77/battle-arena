@@ -417,6 +417,6 @@ describe("withdrawals", () => {
     assert.equal(after.wallet.balanceOf("p"), 600 * BIRR);
     after.withdrawals.recover();
     assert.equal(after.wallet.txnFor("withdrawal-refund", a.withdrawal.id)!.amount, 100 * BIRR);
-    assert.equal(store.read<any>("wallet", {}).txns.filter((t: any) => t.kind === "withdrawal-refund").length, 1, "recover is idempotent");
+    assert.equal(store.read<any>("wallet:real", {}).txns.filter((t: any) => t.kind === "withdrawal-refund").length, 1, "recover is idempotent");
   });
 });
