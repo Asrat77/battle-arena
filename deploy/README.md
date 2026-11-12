@@ -73,5 +73,24 @@ one off the server now and then:
 ssh ubuntu@34.252.38.138 'sudo sh -c "ls -t /var/lib/docker/volumes/battle-arena_arena-data/_data/backups/*.json | head -1 | xargs cat"' > db-backup.json
 ```
 
+### Wallet records
+
+Every balance change is also appended to `/data/wallet-log.jsonl`, each line
+hash-linked to the one before, so a changed or deleted line is detectable. Back
+it up with `db.json` and never edit it. With `ADMIN_TOKEN` set (not in
+`config/deploy.yml` yet; add it like `REAL_MONEY_LEGAL_OK` above):
+
+```sh
+H="X-Admin-Token: $ADMIN_TOKEN"; API=https://api.34.252.38.138.sslip.io
+curl -H "$H" $API/api/admin/wallet/reconcile        # ok:false lists balances that differ from the log
+curl -H "$H" "$API/api/admin/wallet/fees?book=real"  # platform fees per day and what was taken out
+# A manual credit (or a debit with a negative amount; "platform" takes fees out). Amounts in santim.
+curl -H "$H" -H 'content-type: application/json' -d '{"book":"real","profileId":"0x...","amount":10000,"reason":"deposit 123 approved by hand","by":"asrat"}' $API/api/admin/wallet/adjust
+```
+
+Use the adjust route instead of editing `db.json` by hand: a hand edit shows up
+as a mismatch in reconcile. The wallet keeps only each player's newest 200 game
+transactions in `db.json`; the log keeps them all.
+
 If writing `db.json` ever fails (disk full), the change is undone in memory
 and the request fails, so balances never drift from what is on disk.

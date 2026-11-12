@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 // .env.local (never committed) wins over .env, as in Next.js.
 dotenv.config({ path: [".env.local", ".env"] });
 import { createServer } from "node:http";
+import { dirname, join } from "node:path";
 import cors from "cors";
 import express from "express";
 import { Server } from "socket.io";
@@ -22,7 +23,8 @@ import { FileStore, type Store } from "./store";
 import { tournamentRoutes, Tournaments } from "./tournaments";
 import { depositAccountsFromEnv, Deposits, httpVerifyEt, type DepositOptions } from "./deposits";
 import { httpTelegram, secondApprovalFromEnv, withdrawalLimitsFromEnv, Withdrawals, type WithdrawalOptions } from "./withdrawals";
-import { Wallet, walletModeFromEnv, walletRoutes, type WalletOptions } from "./wallet";
+import { Wallet, walletAdminRoutes, walletModeFromEnv, walletRoutes, type WalletOptions } from "./wallet";
+import { FileTxnLog, MemoryTxnLog } from "./walletLog";
 
 export interface AppOptions {
   store?: Store;
@@ -36,7 +38,8 @@ export interface AppOptions {
 
 export function createApp(options: AppOptions = {}) {
   const origin = process.env.FRONTEND_URL || "http://localhost:3000";
-  const store = options.store ?? new FileStore(process.env.DATA_FILE || "data/db.json");
+  const dataFile = process.env.DATA_FILE || "data/db.json";
+  const store = options.store ?? new FileStore(dataFile);
   // Bound once the socket server exists: a rename or new picture reaches the owner's open tabs.
   let onProfileChange: (profile: Profile) => void = () => {};
   const identity = new Identity(store, Date.now, { onChange: (p) => onProfileChange(p) });
@@ -80,6 +83,8 @@ export function createApp(options: AppOptions = {}) {
   // stake is settled before recording, rewards or tournaments run.
   const wallet = new Wallet(store, {
     mode: walletModeFromEnv(),
+    // Every balance change, hash-chained, beside db.json (tests keep it in memory).
+    log: options.store ? new MemoryTxnLog() : new FileTxnLog(process.env.WALLET_LOG_FILE || join(dirname(dataFile), "wallet-log.jsonl")),
     ...options.wallet,
     onChange: (id, balance) => io.to(profileRoom(id)).emit("wallet:balance", { balance }),
   });
@@ -90,6 +95,7 @@ export function createApp(options: AppOptions = {}) {
   const recorder = new Recorder(store, ledger, matches);
   app.use(matchRoutes(recorder, matches));
   app.use(walletRoutes(wallet, identity));
+  app.use(walletAdminRoutes(wallet));
   const verifyKey = process.env.VERIFY_ET_KEY;
   const verifyEt = verifyKey ? httpVerifyEt(verifyKey, process.env.VERIFY_ET_URL || undefined) : null;
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
