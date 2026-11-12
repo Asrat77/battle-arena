@@ -62,6 +62,16 @@ Kamal builds from the last commit, so commit first. Check with
 `https://api.34.252.38.138.sslip.io/health`, and see logs with
 `kamal app logs -r api`.
 
-Data (profiles, ledger) lives in the `battle-arena_arena-data` Docker volume
-on the instance's disk, mounted at `/data`. It survives deploys and restarts,
-not a terminated instance, so copy `db.json` off the server now and then.
+Data (profiles, ledger, wallets) lives in the `battle-arena_arena-data` Docker
+volume on the instance's disk, mounted at `/data`. It survives deploys and
+restarts, not a terminated instance. The api copies `db.json` into
+`/data/backups/` on every boot and then hourly, keeping the newest 72 copies
+(three days). Those copies share the server's disk, so also copy the newest
+one off the server now and then:
+
+```sh
+ssh ubuntu@34.252.38.138 'sudo sh -c "ls -t /var/lib/docker/volumes/battle-arena_arena-data/_data/backups/*.json | head -1 | xargs cat"' > db-backup.json
+```
+
+If writing `db.json` ever fails (disk full), the change is undone in memory
+and the request fails, so balances never drift from what is on disk.
