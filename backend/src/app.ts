@@ -10,7 +10,7 @@ import { getGame, listGames } from "../../engine/registry";
 import type { MatchRecord } from "../../engine/types";
 import type { Clock } from "./clock";
 import { Chat } from "./chat";
-import { Identity, identityRoutes, type Profile } from "./identity";
+import { hashToken, Identity, identityRoutes, type Profile } from "./identity";
 import { Ledger, ledgerRoutes, type LedgerOptions } from "./ledger";
 import { Lobby, lobbyRoutes, type LobbyOptions } from "./lobby";
 import { MatchRuntime, profileRoom, type Match } from "./matches";
@@ -42,7 +42,8 @@ export function createApp(options: AppOptions = {}) {
   const store = options.store ?? new FileStore(dataFile);
   // Bound once the socket server exists: a rename or new picture reaches the owner's open tabs.
   let onProfileChange: (profile: Profile) => void = () => {};
-  const identity = new Identity(store, Date.now, { onChange: (p) => onProfileChange(p) });
+  let onSessionsEnded: (hashes: string[]) => void = () => {};
+  const identity = new Identity(store, Date.now, { onChange: (p) => onProfileChange(p), onSessionsEnded: (h) => onSessionsEnded(h) });
   const ledger = new Ledger(store, options.ledger);
 
   const app = express();
@@ -73,10 +74,20 @@ export function createApp(options: AppOptions = {}) {
     const profile = identity.byToken(socket.handshake.auth?.token);
     if (!profile) return next(new Error("unauthorized"));
     socket.data.profileId = profile.id;
+    socket.data.tokenHash = hashToken(socket.handshake.auth.token);
     next();
   });
 
   onProfileChange = (profile) => io.to(profileRoom(profile.id)).emit("profile:update", profile);
+  // Sign-out or a password change ends sessions: their open sockets go at once (audit H7).
+  const endSocket = (socket: { emit: (e: string) => void; disconnect: (close: boolean) => void }) => {
+    socket.emit("session:ended");
+    socket.disconnect(true);
+  };
+  onSessionsEnded = (hashes) => {
+    const ended = new Set(hashes);
+    for (const socket of io.of("/").sockets.values()) if (ended.has(socket.data.tokenHash)) endSocket(socket);
+  };
 
   const matches = new MatchRuntime(io, { clock: options.clock, store });
   // Money first: the wallet's "end" listener is attached before any other, so the
@@ -113,6 +124,7 @@ export function createApp(options: AppOptions = {}) {
     accounts: depositAccountsFromEnv(),
     receiverName: process.env.DEPOSIT_RECEIVER_NAME?.trim() || null,
     accountCreatedAt: (id) => identity.get(id)?.createdAt ?? null,
+    hasPassword: (id) => identity.account(id).hasPassword,
     moderators: telegram && moderatorChat ? { call: (m, p) => telegram.call(m, p), chatId: moderatorChat, allowed: moderators } : null,
     nameOf,
     // Behind TRUST_PROXY hops, the client is that many entries from the end of X-Forwarded-For.
@@ -140,6 +152,9 @@ export function createApp(options: AppOptions = {}) {
     limits: withdrawalLimitsFromEnv(),
     secondApprovalAbove: secondApprovalFromEnv(process.env.SECOND_APPROVAL_ABOVE_BIRR),
     alsoHandle: (update) => deposits.handleUpdate(update),
+    // A stolen session can't cash out: password on every withdrawal, paid only to the name the player deposits from (audit H7).
+    confirmPassword: (id, password) => identity.confirmPassword(id, password),
+    payer: (id) => deposits.payer(id),
     ...options.withdrawals,
     onUpdate: (w) => io.to(profileRoom(w.profileId)).emit("wallet:withdrawal", withdrawals.view(w)),
   });
@@ -176,6 +191,11 @@ export function createApp(options: AppOptions = {}) {
   io.on("connection", (socket) => {
     // One bad message must never crash the process: a crash refunds every live stake.
     guardSocket(socket);
+    // A session that ended or expired while this socket was open can't act any more.
+    socket.use((_packet, next) => {
+      if (identity.sessionOwner(socket.data.tokenHash) === socket.data.profileId) return next();
+      endSocket(socket);
+    });
     matches.attach(socket, socket.data.profileId as string);
     lobby.attach(socket, socket.data.profileId as string);
     chat.attach(socket, socket.data.profileId as string);

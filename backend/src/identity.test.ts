@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { createApp } from "./app";
-import { Identity, USERNAME_CHECK_MAX, USERNAME_COOLDOWN_MS } from "./identity";
+import { Identity, SESSION_TTL_MS, USERNAME_CHECK_MAX, USERNAME_COOLDOWN_MS } from "./identity";
 import { RateLimiter } from "./rateLimit";
 import { FileStore, MemoryStore } from "./store";
 
@@ -320,5 +320,111 @@ test("username availability checks are limited per IP", async () => {
   } finally {
     io.close();
     httpServer.close();
+  }
+});
+
+// Audit H7: a stolen token must not work forever, and ending a session must reach open sockets.
+test("session tokens expire after SESSION_TTL_MS; old bare-id sessions get a fresh 30 days", () => {
+  let now = 1_000;
+  const store = new MemoryStore();
+  const identity = new Identity(store, () => now);
+  const a = identity.signup("Abebe");
+  now += SESSION_TTL_MS - 1;
+  assert.equal(identity.byToken(a.token)?.id, a.profile.id);
+  now += 1;
+  assert.equal(identity.byToken(a.token), null);
+  // A new sign-in prunes the expired session.
+  identity.signup("Other");
+  assert.equal(Object.keys(store.read<Record<string, unknown>>("sessions", {})).length, 1);
+
+  // Sessions saved before expiry existed (hash -> id) keep working, for one more TTL.
+  const legacy = new MemoryStore();
+  const old = new Identity(legacy, () => 0).signup("Lily");
+  const sessions = legacy.read<Record<string, { id: string }>>("sessions", {});
+  legacy.write("sessions", Object.fromEntries(Object.entries(sessions).map(([h, s]) => [h, s.id])));
+  now = 5_000_000;
+  const reopened = new Identity(legacy, () => now);
+  assert.equal(reopened.byToken(old.token)?.id, old.profile.id);
+  now += SESSION_TTL_MS;
+  assert.equal(reopened.byToken(old.token), null);
+});
+
+test("sign-out and password change report the ended sessions", () => {
+  const ended: string[][] = [];
+  const identity = new Identity(new MemoryStore(), Date.now, { onSessionsEnded: (h) => ended.push(h) });
+  const here = identity.signup("Sara", { username: "sara", password: "first pass" });
+  const there = identity.login("sara", "first pass");
+  const third = identity.login("sara", "first pass");
+  identity.logout(third.token);
+  assert.equal(ended.length, 1);
+  assert.equal(identity.sessionOwner(ended[0][0]), null);
+  identity.changePassword(here.token, "first pass", "second pass");
+  assert.equal(ended.length, 2);
+  assert.equal(ended[1].length, 1);
+  assert.equal(identity.byToken(there.token), null);
+  identity.logout("not a token");
+  assert.equal(ended.length, 2);
+});
+
+test("confirmPassword checks the password and locks after repeated misses", () => {
+  const identity = new Identity(new MemoryStore());
+  const sara = identity.signup("Sara", { username: "sara", password: "first pass" });
+  const guest = identity.signup("Guest");
+  assert.deepEqual(identity.confirmPassword(sara.profile.id, "first pass"), { ok: true });
+  assert.equal(identity.confirmPassword(guest.profile.id, "anything").ok, false);
+  for (let i = 0; i < 5; i++) assert.deepEqual(identity.confirmPassword(sara.profile.id, "nope"), { ok: false, reason: "wrong password" });
+  assert.deepEqual(identity.confirmPassword(sara.profile.id, "first pass"), { ok: false, reason: "too many attempts, wait a minute and try again" });
+});
+
+test("signing out or changing the password drops that session's open sockets", async () => {
+  const { httpServer, io } = createApp({ store: new MemoryStore() });
+  await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+  const base = `http://localhost:${(httpServer.address() as AddressInfo).port}`;
+  const call = (path: string, token: string, body?: unknown) =>
+    fetch(`${base}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      ...(body !== undefined && { body: JSON.stringify(body) }),
+    });
+  const { io: connect } = await import("socket.io-client");
+  const open = async (token: string) => {
+    const s = connect(base, { auth: { token }, transports: ["websocket"], forceNew: true, reconnection: false });
+    await new Promise<void>((resolve) => s.on("connect", () => resolve()));
+    return s;
+  };
+  try {
+    const signup = await fetch(`${base}/api/signup`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Hana", username: "hana", password: "password1" }),
+    });
+    const { token } = await signup.json();
+    const login = await fetch(`${base}/api/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: "hana", password: "password1" }),
+    });
+    const other = (await login.json()).token;
+
+    const mine = await open(token);
+    const theirs = await open(other);
+    const theirsEnded = new Promise<void>((resolve) => theirs.on("session:ended", () => resolve()));
+    const theirsGone = new Promise<string>((resolve) => theirs.on("disconnect", (r) => resolve(r)));
+    assert.equal((await call("/api/me/password", token, { current: "password1", next: "password2" })).status, 200);
+    await theirsEnded;
+    assert.equal(await theirsGone, "io server disconnect");
+    assert.ok(mine.connected);
+
+    const mineGone = new Promise<string>((resolve) => mine.on("disconnect", (r) => resolve(r)));
+    assert.equal((await call("/api/logout", token)).status, 204);
+    assert.equal(await mineGone, "io server disconnect");
+
+    // The ended token can't reconnect.
+    const retry = connect(base, { auth: { token }, transports: ["websocket"], forceNew: true, reconnection: false });
+    const err = await new Promise<Error>((resolve) => retry.on("connect_error", resolve));
+    assert.equal(err.message, "unauthorized");
+    retry.close();
+  } finally {
+    io.close();
   }
 });
