@@ -208,7 +208,8 @@ describe("deposits: who paid and when (audit H1, M4, M10)", () => {
     const thief = await deposits.submit("thief", "telebirr", "CH12THEFT1", "Kebede Alemu");
     assert.ok(thief.ok);
     assert.equal(thief.deposit.status, "review");
-    assert.match(thief.deposit.reason!, /isn't the name you pay from/);
+    assert.match(thief.deposit.reviewWhy!, /isn't the name you pay from/);
+    assert.equal(thief.deposit.reason, "A moderator will check this transfer.", "the player isn't shown the receipt's sender (review R2)");
     assert.equal(wallet.balanceOf("thief"), 0);
     // The moderators got the details and two buttons.
     const alert = tg.sent.find((m) => m.method === "sendMessage")!;
@@ -240,7 +241,7 @@ describe("deposits: who paid and when (audit H1, M4, M10)", () => {
     const r = await deposits.submit("a", "telebirr", "CH12OLDONE", PAYER);
     assert.ok(r.ok);
     assert.equal(r.deposit.status, "review");
-    assert.match(r.deposit.reason!, /more than a day old/);
+    assert.match(r.deposit.reviewWhy!, /more than a day old/);
     await tap(`dep-ok:${r.deposit.id}`);
     await tap(`dep-ok:${r.deposit.id}`);
     assert.equal(deposits.get(r.deposit.id)!.status, "credited");
@@ -283,7 +284,10 @@ describe("deposits: who paid and when (audit H1, M4, M10)", () => {
       },
       { receiverName: "Acme Trading" },
     );
-    const status = async (ref: string) => ((await deposits.submit("a", "telebirr", ref, PAYER)) as { deposit: { status: string; reason: string } }).deposit;
+    const status = async (ref: string) => {
+      const x = ((await deposits.submit("a", "telebirr", ref, PAYER)) as { deposit: { status: string; reason: string; reviewWhy?: string } }).deposit;
+      return { ...x, reason: x.reviewWhy ?? x.reason };
+    };
     assert.match((await status("CH12OTHER1")).reason, /not our account name/);
     assert.equal((await status("CH12OURS01")).status, "credited");
     const pending = await status("CH12PENDNG");

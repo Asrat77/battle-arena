@@ -26,6 +26,7 @@ import { httpTelegram, secondApprovalFromEnv, withdrawalLimitsFromEnv, Withdrawa
 import { depositHoldFromEnv, Wallet, walletAdminRoutes, walletModeFromEnv, walletRoutes, type WalletOptions } from "./wallet";
 import { FileTxnLog, MemoryTxnLog } from "./walletLog";
 import { StakeLimits, stakeLimitsFromEnv, type StakeLimitOptions } from "./stakeLimits";
+import { VerifyBudget, verifyBudgetFromEnv } from "./verifyBudget";
 
 export interface AppOptions {
   store?: Store;
@@ -111,7 +112,9 @@ export function createApp(options: AppOptions = {}) {
   app.use(walletRoutes(wallet, identity));
   app.use(walletAdminRoutes(wallet));
   const verifyKey = process.env.VERIFY_ET_KEY;
-  const verifyEt = verifyKey ? httpVerifyEt(verifyKey, process.env.VERIFY_ET_URL || undefined) : null;
+  // Every verify.et check is counted against a shared daily/monthly budget (review R3).
+  const verifyBudget = new VerifyBudget(store, verifyBudgetFromEnv());
+  const verifyEt = verifyKey ? verifyBudget.wrap(httpVerifyEt(verifyKey, process.env.VERIFY_ET_URL || undefined)) : null;
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const telegram = botToken ? httpTelegram(botToken, process.env.TELEGRAM_API_URL || undefined) : null;
   const moderatorChat = process.env.TELEGRAM_MODERATOR_CHAT || null;
@@ -125,6 +128,7 @@ export function createApp(options: AppOptions = {}) {
     verifyEt,
     accounts: depositAccountsFromEnv(),
     receiverName: process.env.DEPOSIT_RECEIVER_NAME?.trim() || null,
+    budget: verifyBudget,
     accountCreatedAt: (id) => identity.get(id)?.createdAt ?? null,
     hasPassword: (id) => identity.account(id).hasPassword,
     moderators: telegram && moderatorChat ? { call: (m, p) => telegram.call(m, p), chatId: moderatorChat, allowed: moderators } : null,
@@ -138,7 +142,7 @@ export function createApp(options: AppOptions = {}) {
       return hops > 0 && fwd.length >= hops ? fwd[fwd.length - hops] : socket.handshake.address;
     },
     ...options.deposits,
-    onUpdate: (deposit) => io.to(profileRoom(deposit.profileId)).emit("wallet:deposit", deposit),
+    onUpdate: (deposit) => io.to(profileRoom(deposit.profileId)).emit("wallet:deposit", Deposits.view(deposit)),
   });
   // A deposit check that was running when the last process died: finish or release it.
   deposits.recover();

@@ -120,7 +120,7 @@ export function DepositForm({
       ) : (
         <Field
           label="Name on your account"
-          hint="As your Telebirr or CBE account shows it. Deposits are matched to this name, and it can’t be changed after your first deposit."
+          hint="As your Telebirr or CBE account shows it. Deposits are matched to this name, and it can’t be changed once a deposit is credited or sent to a moderator."
           placeholder="e.g. Abebe Bikila"
           value={payerName}
           onChange={(e) => setPayerName(e.target.value)}
