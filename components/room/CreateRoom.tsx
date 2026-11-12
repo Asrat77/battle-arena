@@ -17,7 +17,7 @@ import { useWallet } from "@/lib/useWallet";
 
 const CREATE_TIMEOUT_MS = 8000;
 /** Mirrors UNSTAKED_GAMES in backend/src/lobby.ts. */
-const UNSTAKED = new Set(["tic-tac-toe"]);
+const UNSTAKED = new Set(["tic-tac-toe", "bingo"]);
 const STAKE_PRESETS_BIRR = [10, 50, 100, 250, 500];
 
 type Ack = { ok: true; room: RoomState } | { ok: false; reason: string };

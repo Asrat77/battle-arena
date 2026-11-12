@@ -78,10 +78,15 @@ export interface LobbyOptions {
   games?: { get(id: string): AnyGame | undefined; list(): AnyGame[] };
   /** Holds stakes for staked rooms. Without it rooms can't be staked. */
   wallet?: Wallet;
+  /** Anti-collusion limits (stakeLimits.ts): why these players can't stake together, or null. */
+  stakeLimits?: { check(players: string[], stake: number): string | null };
 }
 
-/** Games that can't be staked: tic-tac-toe is a draw whenever both play well. */
-export const UNSTAKED_GAMES = new Set(["tic-tac-toe"]);
+/**
+ * Games that can't be staked: tic-tac-toe is a draw whenever both play well, and
+ * bingo is mostly luck (audit M8), which makes it betting on chance, not skill.
+ */
+export const UNSTAKED_GAMES = new Set(["tic-tac-toe", "bingo"]);
 
 type Ack = (res: { ok: true; [k: string]: unknown } | { ok: false; reason: string }) => void;
 
@@ -98,6 +103,7 @@ export class Lobby {
   private readonly clock: Clock;
   private readonly games: NonNullable<LobbyOptions["games"]>;
   private readonly wallet: Wallet | undefined;
+  private readonly stakeLimits: LobbyOptions["stakeLimits"];
 
   constructor(
     private readonly io: Server,
@@ -108,6 +114,7 @@ export class Lobby {
     this.clock = opts.clock ?? systemClock;
     this.games = opts.games ?? { get: getGame, list: listGames };
     this.wallet = opts.wallet;
+    this.stakeLimits = opts.stakeLimits;
     matches.on("end", (m: Match) => this.matchEnded(m));
   }
 
@@ -340,6 +347,8 @@ export class Lobby {
       const bad = this.wallet.checkStake(stake);
       if (bad) return { ok: false as const, reason: bad };
       if (this.wallet.balanceOf(profileId) < (stake as number)) return { ok: false as const, reason: "insufficient balance" };
+      const limited = this.stakeLimits?.check([profileId], stake as number);
+      if (limited) return { ok: false as const, reason: limited };
     }
     this.leaveQueues(profileId);
     this.leaveRoom(profileId);
@@ -371,6 +380,8 @@ export class Lobby {
     if (!room.members.some((x) => x.profileId === profileId)) {
       if (room.members.length >= 2) return { ok: false as const, reason: "room is full" };
       if (!this.canCover(room, profileId)) return { ok: false as const, reason: "insufficient balance" };
+      const limited = this.stakeBlock(room, profileId);
+      if (limited) return { ok: false as const, reason: limited };
       this.leaveQueues(profileId);
       this.leaveRoom(profileId);
       room.members.push({ profileId, ready: false });
@@ -385,6 +396,8 @@ export class Lobby {
     if (room.matchId) return { ok: false as const, reason: "match already started" };
     if (ready && this.matches.activeFor(profileId).length) return { ok: false as const, reason: "already in a match" };
     if (ready && !this.canCover(room, profileId)) return { ok: false as const, reason: "insufficient balance" };
+    const limited = ready ? this.stakeBlock(room, profileId) : null;
+    if (limited) return { ok: false as const, reason: limited };
     room.members.find((x) => x.profileId === profileId)!.ready = ready;
     this.syncCountdown(room);
     this.broadcastRoom(room);
@@ -416,6 +429,13 @@ export class Lobby {
   /** Whether the profile has the balance for this room's stake (always, for a friendly room). */
   private canCover(room: Room, profileId: string) {
     return room.stake === null || (this.wallet?.balanceOf(profileId) ?? 0) >= room.stake;
+  }
+
+  /** Why this player can't stake in this room now (with whoever else is in it), or null. */
+  private stakeBlock(room: Room, profileId: string): string | null {
+    if (room.stake === null || !this.stakeLimits) return null;
+    const others = room.members.map((x) => x.profileId).filter((p) => p !== profileId);
+    return this.stakeLimits.check([profileId, ...others.slice(0, 1)], room.stake);
   }
 
   private currentRoom(profileId: string) {
@@ -548,6 +568,16 @@ export class Lobby {
       if (randomInt(2) === 1) players.reverse();
       let escrowId: string | undefined;
       if (room.stake !== null) {
+        // Limits again at the last moment: another room may have used up a daily limit.
+        const blocked = room.members.map((x) => [x, this.stakeBlock(room, x.profileId)] as const).filter(([, why]) => why);
+        if (blocked.length) {
+          for (const [x, why] of blocked) {
+            x.ready = false;
+            this.emitTo(x.profileId, "room:error", { reason: why });
+          }
+          this.broadcastRoom(room);
+          return;
+        }
         const held = this.wallet?.hold(players, room.stake);
         if (!held?.ok) {
           // A balance dropped since ready (another room's stake): back to the ready check.

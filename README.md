@@ -129,6 +129,7 @@ The server reads `.env.local`, then `.env` (both git-ignored).
 | `TELEGRAM_MODERATORS` | server | Telegram user ids (comma-separated) allowed to tap Paid / Reject / Approve and answer prompts in the moderator chat. Unset: only the owner of a one-to-one chat (positive chat id); in a group nobody, so set it |
 | `SECOND_APPROVAL_ABOVE_BIRR` | server | Withdrawals above this need a second moderator from the list to approve (default 1000; `off` turns it off) |
 | `WITHDRAWAL_MAX_BIRR` / `WITHDRAWAL_DAILY_MAX_BIRR` | server | Ceilings for one withdrawal and for one player's withdrawals in 24 hours (defaults 2000 and 5000 birr) |
+| `STAKE_PAIR_DAILY_MAX` / `STAKE_DAILY_MAX_BIRR` / `STAKE_MIN_ACCOUNT_AGE_HOURS` | server | Real-money anti-collusion limits: staked matches the same two players may start in 24 hours (default 3), birr one player may stake in 24 hours (default 1000), account age before staking (default 24). Accounts also need a password; a pair whose stakes all flow one way (4+ in 7 days) is reported to the Telegram moderators |
 | `PAYOUT_SENDER_NAME` | server | Optional. Name on the account moderators pay withdrawals from; when set, a payout receipt must show this sender before the request closes as paid |
 | `TELEGRAM_API_URL` | server | Telegram Bot API base URL, default `https://api.telegram.org` (point it at a stub for local testing) |
 | `NEXT_PUBLIC_API_URL` | web | Server URL, default `http://localhost:3001` |

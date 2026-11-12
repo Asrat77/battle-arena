@@ -25,6 +25,7 @@ import { depositAccountsFromEnv, Deposits, httpVerifyEt, type DepositOptions } f
 import { httpTelegram, secondApprovalFromEnv, withdrawalLimitsFromEnv, Withdrawals, type WithdrawalOptions } from "./withdrawals";
 import { depositHoldFromEnv, Wallet, walletAdminRoutes, walletModeFromEnv, walletRoutes, type WalletOptions } from "./wallet";
 import { FileTxnLog, MemoryTxnLog } from "./walletLog";
+import { StakeLimits, stakeLimitsFromEnv, type StakeLimitOptions } from "./stakeLimits";
 
 export interface AppOptions {
   store?: Store;
@@ -34,6 +35,7 @@ export interface AppOptions {
   wallet?: Omit<WalletOptions, "onChange">;
   deposits?: Partial<Omit<DepositOptions, "onUpdate">>;
   withdrawals?: Partial<Omit<WithdrawalOptions, "onUpdate">>;
+  stakeLimits?: Partial<StakeLimitOptions>;
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -161,7 +163,20 @@ export function createApp(options: AppOptions = {}) {
   // A withdrawal the last process saved but never debited, or closed but never refunded.
   withdrawals.recover();
   wallet.withdrawals = (id) => withdrawals.summary(id);
-  const lobby = new Lobby(io, matches, identity, { clock: options.clock, games: options.games, wallet });
+  // Anti-collusion limits on real-money stakes, and a moderator alert for one-way flows (audit H8).
+  const stakeLimits = new StakeLimits(wallet, {
+    limits: stakeLimitsFromEnv(),
+    createdAt: (id) => identity.get(id)?.createdAt ?? null,
+    hasPassword: (id) => identity.account(id).hasPassword,
+    nameOf,
+    alert: telegram && moderatorChat ? (text) => void telegram.call("sendMessage", { chat_id: moderatorChat, text }).catch(() => {}) : undefined,
+    ...options.stakeLimits,
+  });
+  matches.on("end", (m: Match) => {
+    const escrow = wallet.escrows("real").find((e) => e.matchId === m.id);
+    if (escrow) stakeLimits.afterSettle(escrow);
+  });
+  const lobby = new Lobby(io, matches, identity, { clock: options.clock, games: options.games, wallet, stakeLimits });
   app.use(lobbyRoutes(lobby));
   const rewards = new Rewards(store, ledger, {
     isPlayer: (id) => identity.get(id) !== null,
