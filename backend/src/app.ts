@@ -13,6 +13,7 @@ import { Identity, identityRoutes, type Profile } from "./identity";
 import { Ledger, ledgerRoutes, type LedgerOptions } from "./ledger";
 import { Lobby, lobbyRoutes, type LobbyOptions } from "./lobby";
 import { MatchRuntime, profileRoom, type Match } from "./matches";
+import { moderatorList } from "./moderators";
 import { matchRoutes, Recorder, type StoredMatch } from "./recorder";
 import { rewardRoutes, Rewards } from "./rewards";
 import { Social, socialRoutes } from "./social";
@@ -20,7 +21,7 @@ import { guardSocket } from "./safe";
 import { FileStore, type Store } from "./store";
 import { tournamentRoutes, Tournaments } from "./tournaments";
 import { depositAccountsFromEnv, Deposits, httpVerifyEt, type DepositOptions } from "./deposits";
-import { httpTelegram, Withdrawals, type WithdrawalOptions } from "./withdrawals";
+import { httpTelegram, secondApprovalFromEnv, Withdrawals, type WithdrawalOptions } from "./withdrawals";
 import { Wallet, walletModeFromEnv, walletRoutes, type WalletOptions } from "./wallet";
 
 export interface AppOptions {
@@ -94,6 +95,8 @@ export function createApp(options: AppOptions = {}) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const telegram = botToken ? httpTelegram(botToken, process.env.TELEGRAM_API_URL || undefined) : null;
   const moderatorChat = process.env.TELEGRAM_MODERATOR_CHAT || null;
+  const moderators = moderatorList(process.env.TELEGRAM_MODERATORS, moderatorChat);
+  if (telegram && moderatorChat && moderators.count === 0) console.warn("TELEGRAM_MODERATORS is empty: nobody can act on withdrawals or deposit reviews");
   const nameOf = (id: string) => {
     const p = identity.get(id);
     return p ? `${p.name} (@${p.username})` : id;
@@ -103,7 +106,7 @@ export function createApp(options: AppOptions = {}) {
     accounts: depositAccountsFromEnv(),
     receiverName: process.env.DEPOSIT_RECEIVER_NAME?.trim() || null,
     accountCreatedAt: (id) => identity.get(id)?.createdAt ?? null,
-    moderators: telegram && moderatorChat ? { call: (m, p) => telegram.call(m, p), chatId: moderatorChat } : null,
+    moderators: telegram && moderatorChat ? { call: (m, p) => telegram.call(m, p), chatId: moderatorChat, allowed: moderators } : null,
     nameOf,
     // Behind TRUST_PROXY hops, the client is that many entries from the end of X-Forwarded-For.
     ipOf: (socket) => {
@@ -126,6 +129,8 @@ export function createApp(options: AppOptions = {}) {
     verifyEt,
     nameOf,
     payoutSenderName: process.env.PAYOUT_SENDER_NAME?.trim() || null,
+    moderators,
+    secondApprovalAbove: secondApprovalFromEnv(process.env.SECOND_APPROVAL_ABOVE_BIRR),
     alsoHandle: (update) => deposits.handleUpdate(update),
     ...options.withdrawals,
     onUpdate: (w) => io.to(profileRoom(w.profileId)).emit("wallet:withdrawal", withdrawals.view(w)),

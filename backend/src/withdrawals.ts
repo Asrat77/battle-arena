@@ -19,6 +19,7 @@
 import { randomBytes } from "node:crypto";
 import type { Socket } from "socket.io";
 import { type DepositBank, namesMatch, normalizeReference, type VerifyEt } from "./deposits";
+import { type Moderators, moderatorList, telegramName } from "./moderators";
 import type { Store } from "./store";
 import { BIRR, type Wallet } from "./wallet";
 
@@ -27,6 +28,8 @@ export const MIN_WITHDRAWAL = 50 * BIRR;
 const BANKS: Record<DepositBank, string> = { telebirr: "Telebirr", cbe: "CBE" };
 /** Clock difference we allow between verify.et's receipt time and ours. */
 export const CLOCK_SKEW_MS = 5 * 60_000;
+/** Payouts above this need a second moderator's approval (SECOND_APPROVAL_ABOVE_BIRR). */
+export const SECOND_APPROVAL_ABOVE = 1_000 * BIRR;
 
 export type WithdrawalStatus = "pending" | "paid" | "rejected" | "cancelled";
 
@@ -48,6 +51,8 @@ export interface Withdrawal {
   unverified?: { reference: string; why: string } | null;
   /** Set when a moderator confirmed the payout without verify.et's check. */
   forced?: { by: string; reason: string } | null;
+  /** A large payout one moderator has confirmed, waiting for a second one. */
+  approval?: { reference: string; by: string; byId: string; forced: { by: string; reason: string } | null } | null;
   /** The "reply with why you're sure" prompt for a forced confirmation. */
   forcePromptMessageId?: number | null;
   createdAt: number;
@@ -88,6 +93,10 @@ export interface WithdrawalOptions {
   /** Chat id of the moderators' group (a negative number for groups). */
   moderatorChat: string | null;
   verifyEt?: VerifyEt | null;
+  /** Telegram user ids allowed to act (TELEGRAM_MODERATORS). Default: the owner of a one-to-one moderator chat. */
+  moderators?: Moderators;
+  /** Payouts above this many santim need a second moderator; null turns that off. */
+  secondApprovalAbove?: number | null;
   /** Name on our payout account; when set, the payout receipt's sender must match it. */
   payoutSenderName?: string | null;
   nameOf?: (profileId: string) => string;
@@ -108,12 +117,21 @@ export function normalizeAccount(bank: DepositBank, raw: unknown): string | null
   return /^\d{10,16}$/.test(digits) ? digits : null;
 }
 
+/** SECOND_APPROVAL_ABOVE_BIRR: a number of birr, or "off". Unset or unreadable: the default. */
+export function secondApprovalFromEnv(raw: string | undefined): number | null {
+  if (raw?.trim().toLowerCase() === "off") return null;
+  const n = Number(raw);
+  return raw && Number.isFinite(n) && n >= 0 ? Math.round(n * BIRR) : SECOND_APPROVAL_ABOVE;
+}
+
 const birr = (santim: number) => (santim / BIRR).toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 export class Withdrawals {
   private readonly now: () => number;
   private readonly onUpdate: (w: Withdrawal) => void;
   private readonly nameOf: (profileId: string) => string;
+  private readonly moderators: Moderators;
+  private readonly secondApprovalAbove: number | null;
   private polling = false;
   private offset = 0;
 
@@ -125,6 +143,8 @@ export class Withdrawals {
     this.now = opts.now ?? Date.now;
     this.onUpdate = opts.onUpdate ?? (() => {});
     this.nameOf = opts.nameOf ?? ((id) => id);
+    this.moderators = opts.moderators ?? moderatorList(null, opts.moderatorChat);
+    this.secondApprovalAbove = opts.secondApprovalAbove === undefined ? SECOND_APPROVAL_ABOVE : opts.secondApprovalAbove;
   }
 
   get enabled(): boolean {
@@ -169,7 +189,13 @@ export class Withdrawals {
 
   /** The withdrawal that already used payout number `reference`, if any. */
   private usedBy(reference: string, except: string): Withdrawal | null {
-    return this.list().find((x) => x.id !== except && x.status === "paid" && x.reference && normalizeReference(x.reference) === reference) ?? null;
+    return (
+      this.list().find(
+        (x) =>
+          x.id !== except &&
+          ((x.status === "paid" && x.reference && normalizeReference(x.reference) === reference) || (x.status === "pending" && x.approval?.reference === reference)),
+      ) ?? null
+    );
   }
 
   /** The player takes back a request no moderator has picked up yet. */
@@ -244,6 +270,7 @@ export class Withdrawals {
     if (w.status === "paid" && w.forced) lines.push(`⚠️ Not checked by verify.et. ${w.forced.by}: "${w.forced.reason}"`);
     else if (w.status === "rejected") lines.push(`❌ Rejected by ${w.closedBy} · refunded`);
     else if (w.status === "cancelled") lines.push("🚫 Cancelled by the player · refunded");
+    else if (w.approval) lines.push("", `${w.approval.by} confirmed ${w.approval.reference}. Waiting for a second moderator to approve.`);
     else if (w.pickedUpBy) lines.push("", `${w.pickedUpBy} is sending it. Reply to the prompt with the transaction number.`);
     else lines.push("", "Tap Paid BEFORE you send (so the player can't cancel), send the money, then reply with the transaction number.");
     return lines.join("\n");
@@ -299,23 +326,31 @@ export class Withdrawals {
     if (!this.enabled) return;
     const chat = String(update?.callback_query?.message?.chat?.id ?? update?.message?.chat?.id ?? "");
     if (chat !== String(this.opts.moderatorChat)) return;
+    const from = update?.callback_query?.from ?? update?.message?.from;
+    if (!this.moderators.allows(from?.id)) {
+      console.warn(`moderator chat: ignored an update from ${from?.id}, who isn't on TELEGRAM_MODERATORS`);
+      const cbId = update?.callback_query?.id;
+      if (cbId) await this.opts.telegram!.call("answerCallbackQuery", { callback_query_id: cbId, text: "You're not on the moderator list." }).catch(() => {});
+      return;
+    }
     if (this.opts.alsoHandle) await this.opts.alsoHandle(update).catch((err) => console.warn("moderator update failed", err));
 
     const cb = update.callback_query;
     if (cb) {
       const [action, id] = String(cb.data ?? "").split(":");
-      if (!["paid", "reject", "reject!", "force"].includes(action)) return;
+      if (!["paid", "reject", "reject!", "force", "approve"].includes(action)) return;
       const w = this.get(id);
-      const who = cb.from?.username ? `@${cb.from.username}` : (cb.from?.first_name ?? "a moderator");
+      const who = telegramName(cb.from);
       await this.opts.telegram!.call("answerCallbackQuery", { callback_query_id: cb.id }).catch(() => {});
       if (!w) return;
       if (w.status !== "pending") {
         await this.say(`Withdrawal ${w.id} is already ${w.status === "cancelled" ? "cancelled by the player" : w.status}.`);
         return;
       }
-      if (action === "reject" && w.unverified) {
+      const given = w.approval?.reference ?? w.unverified?.reference;
+      if (action === "reject" && given) {
         // A payout number was given: maybe money went out. A refund now would pay twice.
-        await this.say(`Withdrawal ${w.id}: ${w.unverified.reference} was given as its payout. Reject only if NO money was sent; the player gets ${birr(w.amount)} birr back.`, {
+        await this.say(`Withdrawal ${w.id}: ${given} was given as its payout. Reject only if NO money was sent; the player gets ${birr(w.amount)} birr back.`, {
           reply_markup: { inline_keyboard: [[{ text: "❌ Nothing was sent, refund", callback_data: `reject!:${w.id}` }]] },
         });
       } else if (action === "reject" || action === "reject!") {
@@ -328,6 +363,15 @@ export class Withdrawals {
         });
         if (prompt?.message_id) this.patch(w.id, { promptMessageId: prompt.message_id });
         await this.refreshAlert(this.get(w.id)!);
+      } else if (action === "approve") {
+        const a = w.approval;
+        if (!a) return;
+        if (a.byId === String(cb.from?.id)) {
+          await this.say(`Withdrawal ${w.id} needs a different moderator to approve it.`);
+          return;
+        }
+        await this.close(w, { status: "paid", reference: a.reference, closedBy: `${a.by} + ${who}`, forced: a.forced, approval: null });
+        await this.say(`✅ Withdrawal ${w.id} approved by ${who} and marked paid (${a.reference}).`);
       } else if (action === "force") {
         if (!w.unverified) return;
         const prompt = await this.say(
@@ -347,7 +391,8 @@ export class Withdrawals {
       return;
     }
     if (!repliedTo || typeof msg.text !== "string") return;
-    const who = msg.from?.username ? `@${msg.from.username}` : (msg.from?.first_name ?? "a moderator");
+    const who = telegramName(msg.from);
+    const whoId = String(msg.from?.id);
 
     const forcing = this.list().find((x) => x.forcePromptMessageId === repliedTo && x.status === "pending");
     if (forcing?.unverified) {
@@ -361,13 +406,12 @@ export class Withdrawals {
         await this.say(`${forcing.unverified.reference} was already used for withdrawal ${used.id}.`);
         return;
       }
-      await this.close(forcing, { status: "paid", reference: forcing.unverified.reference, closedBy: who, forced: { by: who, reason } });
-      await this.say(`⚠️ Withdrawal ${forcing.id} marked paid (${forcing.unverified.reference}) without verify.et's check.`);
+      await this.markPaid(forcing, forcing.unverified.reference, who, whoId, { by: who, reason });
       return;
     }
 
     const w = this.list().find((x) => x.promptMessageId === repliedTo && x.status === "pending");
-    if (!w) return;
+    if (!w || w.approval) return;
     const reference = normalizeReference(msg.text.trim());
     if (!/^[A-Z0-9]{6,40}$/.test(reference)) {
       await this.say("That doesn't look like a transaction number. Reply to the prompt again.");
@@ -386,8 +430,22 @@ export class Withdrawals {
       });
       return;
     }
-    await this.close(w, { status: "paid", reference, closedBy: who, unverified: null });
-    await this.say(`✅ Withdrawal ${w.id} marked paid (${reference}).`);
+    await this.markPaid(w, reference, who, whoId, null);
+  }
+
+  /** Close as paid, or, above the second-approval limit, wait for another moderator. */
+  private async markPaid(w: Withdrawal, reference: string, who: string, whoId: string, forced: { by: string; reason: string } | null) {
+    if (this.secondApprovalAbove !== null && w.amount > this.secondApprovalAbove) {
+      const updated = this.patch(w.id, { approval: { reference, by: who, byId: whoId, forced }, unverified: null })!;
+      await this.refreshAlert(updated);
+      const lonely = this.moderators.count < 2 ? " Only one moderator is on TELEGRAM_MODERATORS: add another, or Reject it if nothing was sent." : "";
+      await this.say(`Withdrawal ${w.id} is ${birr(w.amount)} birr, so a second moderator must approve ${reference}${forced ? " (not checked by verify.et)" : ""}.${lonely}`, {
+        reply_markup: { inline_keyboard: [[{ text: "✅ Approve payout", callback_data: `approve:${w.id}` }]] },
+      });
+      return;
+    }
+    await this.close(w, { status: "paid", reference, closedBy: who, forced, unverified: null });
+    await this.say(forced ? `⚠️ Withdrawal ${w.id} marked paid (${reference}) without verify.et's check.` : `✅ Withdrawal ${w.id} marked paid (${reference}).`);
   }
 
   /** Why verify.et doesn't show `reference` as this payout, or null when it does. */
