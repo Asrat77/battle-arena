@@ -417,10 +417,14 @@ export class MatchRuntime extends EventEmitter {
       m.timers.disconnect[seat] = undefined;
       m.away[seat] = null;
       if (this.isOnline(m.players[seat])) return;
-      // Both gone: nobody showed up to win it, so it is a draw rather than a loss for
-      // whoever happened to drop first.
+      // The first to leave forfeits, even if the other player has dropped since: their
+      // own clock is still running, so they still win. Only when both clocks run out
+      // together (both were away from the start, or nobody came back after a restart)
+      // is it an abandoned draw (audit M6, review R1).
       const other: Seat = seat === 0 ? 1 : 0;
-      const otherGone = !m.bots.includes(other) && !this.isOnline(m.players[other]);
+      const otherUntil = m.away[other];
+      const otherGone =
+        !m.bots.includes(other) && !this.isOnline(m.players[other]) && otherUntil !== null && otherUntil <= this.clock.now();
       const move = otherGone ? ({ type: "abandon" } as const) : ({ type: "forfeit", seat } as const);
       this.append(m, { t: this.clock.now(), seat: "system", move });
     }, ms);
