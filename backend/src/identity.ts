@@ -6,6 +6,7 @@ import { Router, type Response } from "express";
 import { isAvatar } from "../../engine/avatars";
 import { sha256Hex } from "../../engine/hash";
 import { RateLimiter } from "./rateLimit";
+import { own } from "./safe";
 import type { Store } from "./store";
 
 export interface Profile {
@@ -363,19 +364,19 @@ export class Identity {
 
   /** Extra fields only the owner sees: whether the profile has a password (a guest does not). */
   account(id: string): { hasPassword: boolean; usernameChangeAt: number | null } {
-    const stored = this.profiles()[id];
+    const stored = own(this.profiles(), id);
     const at = stored?.usernameChangedAt ? stored.usernameChangedAt + USERNAME_COOLDOWN_MS : 0;
     return { hasPassword: Boolean(stored?.passwordHash), usernameChangeAt: at > this.now() ? at : null };
   }
 
   get(id: string): Profile | null {
-    const stored = this.profiles()[id.toLowerCase()];
+    const stored = typeof id === "string" ? own(this.profiles(), id.toLowerCase()) : undefined;
     return stored ? toProfile(stored) : null;
   }
 
   byToken(token: unknown): Profile | null {
     if (typeof token !== "string" || !token) return null;
-    const id = this.sessions()[hashToken(token)];
+    const id = own(this.sessions(), hashToken(token));
     return id ? this.get(id) : null;
   }
 }

@@ -15,6 +15,7 @@ import { MatchRuntime, profileRoom, type Match } from "./matches";
 import { matchRoutes, Recorder, type StoredMatch } from "./recorder";
 import { rewardRoutes, Rewards } from "./rewards";
 import { Social, socialRoutes } from "./social";
+import { guardSocket } from "./safe";
 import { FileStore, type Store } from "./store";
 import { tournamentRoutes, Tournaments } from "./tournaments";
 import { depositAccountsFromEnv, Deposits, httpVerifyEt, type DepositOptions } from "./deposits";
@@ -131,6 +132,8 @@ export function createApp(options: AppOptions = {}) {
   app.use(tournamentRoutes(tournaments));
 
   io.on("connection", (socket) => {
+    // One bad message must never crash the process: a crash refunds every live stake.
+    guardSocket(socket);
     matches.attach(socket, socket.data.profileId as string);
     lobby.attach(socket, socket.data.profileId as string);
     chat.attach(socket, socket.data.profileId as string);

@@ -9,6 +9,7 @@ import type { CommitPayload, ResultPayload } from "../../engine/verify";
 import type { MatchRecord } from "../../engine/types";
 import type { Ledger } from "./ledger";
 import type { Match, MatchRuntime } from "./matches";
+import { own } from "./safe";
 import type { Store } from "./store";
 
 const MATCHES = "matches";
@@ -42,7 +43,7 @@ export class Recorder extends EventEmitter {
   }
 
   get(matchId: string): StoredMatch | null {
-    return this.all()[matchId] ?? null;
+    return own(this.all(), matchId) ?? null;
   }
 
   forPlayer(profileId: string): StoredMatch[] {

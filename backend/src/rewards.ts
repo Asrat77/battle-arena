@@ -10,6 +10,7 @@ import { replay } from "../../engine/replay";
 import type { MatchRecord, Seat } from "../../engine/types";
 import type { Ledger } from "./ledger";
 import type { StoredMatch } from "./recorder";
+import { own } from "./safe";
 import type { Store } from "./store";
 
 const REWARDS = "rewards";
@@ -195,7 +196,7 @@ export class Rewards {
   }
 
   player(profileId: string): PlayerRewards {
-    return this.state().players[profileId] ?? newPlayer();
+    return own(this.state().players, profileId) ?? newPlayer();
   }
 
   /** Apply the points table, ratings and badges for one recorded match. Idempotent per match. */
