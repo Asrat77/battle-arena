@@ -70,6 +70,8 @@ export interface WithdrawalOptions {
   nameOf?: (profileId: string) => string;
   now?: () => number;
   onUpdate?: (w: Withdrawal) => void;
+  /** Other handlers for the same moderators' chat (deposit reviews); given every update from it. */
+  alsoHandle?: (update: unknown) => Promise<void>;
 }
 
 /** Telebirr: an Ethiopian mobile number, kept as 09XXXXXXXX. CBE: 10 to 16 digits. */
@@ -238,10 +240,12 @@ export class Withdrawals {
     if (!this.enabled) return;
     const chat = String(update?.callback_query?.message?.chat?.id ?? update?.message?.chat?.id ?? "");
     if (chat !== String(this.opts.moderatorChat)) return;
+    if (this.opts.alsoHandle) await this.opts.alsoHandle(update).catch((err) => console.warn("moderator update failed", err));
 
     const cb = update.callback_query;
     if (cb) {
       const [action, id] = String(cb.data ?? "").split(":");
+      if (action !== "paid" && action !== "reject") return;
       const w = this.get(id);
       const who = cb.from?.username ? `@${cb.from.username}` : (cb.from?.first_name ?? "a moderator");
       await this.opts.telegram!.call("answerCallbackQuery", { callback_query_id: cb.id }).catch(() => {});

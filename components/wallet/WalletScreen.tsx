@@ -107,7 +107,9 @@ export function WalletScreen() {
         </div>
       </section>
 
-      {wallet.depositAccounts.length > 0 && <DepositForm accounts={wallet.depositAccounts} minDeposit={MIN_DEPOSIT} onSubmit={deposit} />}
+      {wallet.depositAccounts.length > 0 && (
+        <DepositForm accounts={wallet.depositAccounts} payer={wallet.depositPayer ?? null} minDeposit={MIN_DEPOSIT} onSubmit={deposit} />
+      )}
       {!play && wallet.depositAccounts.length === 0 && (
         <p className="card text-small text-ink-2">Deposits aren’t open yet. Check back soon.</p>
       )}

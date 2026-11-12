@@ -119,8 +119,9 @@ The server reads `.env.local`, then `.env` (both git-ignored).
 | `VERIFY_ET_URL` | server | verify.et base URL, default `https://verify.et` (point it at a stub for local testing) |
 | `DEPOSIT_TELEBIRR` | server | Telebirr number players pay deposits into |
 | `DEPOSIT_CBE` | server | CBE account number players pay deposits into |
+| `DEPOSIT_RECEIVER_NAME` | server | Optional. The account holder's name as receipts print it. When set, a receipt paid to a different name goes to moderators instead of being credited |
 | `TELEGRAM_BOT_TOKEN` | server | Bot (from @BotFather) that alerts moderators about withdrawals. Withdrawals are on when this, `TELEGRAM_MODERATOR_CHAT` and `WALLET_MODE=real` are set |
-| `TELEGRAM_MODERATOR_CHAT` | server | Chat id of the moderators' group (add the bot to the group; group ids start with `-`). Only this chat can mark withdrawals paid or rejected |
+| `TELEGRAM_MODERATOR_CHAT` | server | Chat id of the moderators' group (add the bot to the group; group ids start with `-`). Only this chat can mark withdrawals paid or rejected, and approve or reject deposits held for review |
 | `TELEGRAM_API_URL` | server | Telegram Bot API base URL, default `https://api.telegram.org` (point it at a stub for local testing) |
 | `NEXT_PUBLIC_API_URL` | web | Server URL, default `http://localhost:3001` |
 | `NEXT_PUBLIC_SOCKET_URL` | web | Older name for `NEXT_PUBLIC_API_URL`, still read as a fallback |

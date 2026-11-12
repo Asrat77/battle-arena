@@ -91,22 +91,31 @@ export function createApp(options: AppOptions = {}) {
   app.use(walletRoutes(wallet, identity));
   const verifyKey = process.env.VERIFY_ET_KEY;
   const verifyEt = verifyKey ? httpVerifyEt(verifyKey, process.env.VERIFY_ET_URL || undefined) : null;
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const telegram = botToken ? httpTelegram(botToken, process.env.TELEGRAM_API_URL || undefined) : null;
+  const moderatorChat = process.env.TELEGRAM_MODERATOR_CHAT || null;
+  const nameOf = (id: string) => {
+    const p = identity.get(id);
+    return p ? `${p.name} (@${p.username})` : id;
+  };
   const deposits = new Deposits(store, wallet, {
     verifyEt,
     accounts: depositAccountsFromEnv(),
+    receiverName: process.env.DEPOSIT_RECEIVER_NAME?.trim() || null,
+    accountCreatedAt: (id) => identity.get(id)?.createdAt ?? null,
+    moderators: telegram && moderatorChat ? { call: (m, p) => telegram.call(m, p), chatId: moderatorChat } : null,
+    nameOf,
     ...options.deposits,
     onUpdate: (deposit) => io.to(profileRoom(deposit.profileId)).emit("wallet:deposit", deposit),
   });
   wallet.depositAccounts = () => deposits.accounts();
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  wallet.depositPayer = (id) => deposits.payer(id);
   const withdrawals = new Withdrawals(store, wallet, {
-    telegram: botToken ? httpTelegram(botToken, process.env.TELEGRAM_API_URL || undefined) : null,
-    moderatorChat: process.env.TELEGRAM_MODERATOR_CHAT || null,
+    telegram,
+    moderatorChat,
     verifyEt,
-    nameOf: (id) => {
-      const p = identity.get(id);
-      return p ? `${p.name} (@${p.username})` : id;
-    },
+    nameOf,
+    alsoHandle: (update) => deposits.handleUpdate(update),
     ...options.withdrawals,
     onUpdate: (w) => io.to(profileRoom(w.profileId)).emit("wallet:withdrawal", w),
   });
