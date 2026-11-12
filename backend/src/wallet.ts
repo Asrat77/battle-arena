@@ -98,7 +98,7 @@ export class Wallet {
   /** The name this player pays deposits from (locked once one is credited); set by Deposits. */
   depositPayer: (profileId: string) => { name: string; locked: boolean } | null = () => null;
   /** Withdrawal settings and this player's requests; set by Withdrawals when withdrawals are on. */
-  withdrawals: (profileId: string) => { enabled: boolean; minAmount: number; requests: unknown[] } = () => ({
+  withdrawals: (profileId: string) => { enabled: boolean; minAmount: number; maxAmount?: number; requests: unknown[] } = () => ({
     enabled: false,
     minAmount: 0,
     requests: [],
@@ -272,6 +272,11 @@ export class Wallet {
   /** The credit for deposit `ref`, if the wallet has one (used after a restart). */
   depositTxn(ref: string): Txn | null {
     return this.data().txns.find((t) => t.kind === "deposit" && t.ref === ref) ?? null;
+  }
+
+  /** The first transaction of this kind for `ref`, if any (used after a restart). */
+  txnFor(kind: TxnKind, ref: string): Txn | null {
+    return this.data().txns.find((t) => t.kind === kind && t.ref === ref) ?? null;
   }
 
   /** Take money out for a withdrawal request (refunded if moderators reject it). Real mode only. */

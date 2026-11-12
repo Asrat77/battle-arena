@@ -6,7 +6,16 @@ import type { VerifyEt, VerifyResult } from "./deposits";
 import { moderatorList } from "./moderators";
 import { MemoryStore } from "./store";
 import { BIRR, Wallet } from "./wallet";
-import { MIN_WITHDRAWAL, normalizeAccount, SECOND_APPROVAL_ABOVE, secondApprovalFromEnv, Withdrawals, type TelegramApi } from "./withdrawals";
+import {
+  MIN_WITHDRAWAL,
+  normalizeAccount,
+  SECOND_APPROVAL_ABOVE,
+  secondApprovalFromEnv,
+  WITHDRAWAL_LIMITS,
+  withdrawalLimitsFromEnv,
+  Withdrawals,
+  type TelegramApi,
+} from "./withdrawals";
 
 const CHAT = "-100123";
 
@@ -34,8 +43,10 @@ const ok = (over: Partial<Extract<VerifyResult, { state: "verified" }>> = {}): V
   ...over,
 });
 
-function setup(opts: { verify?: VerifyResult; mode?: "play" | "real"; payoutSenderName?: string; secondApprovalAbove?: number | null; mods?: string } = {}) {
-  const store = new MemoryStore();
+function setup(
+  opts: { verify?: VerifyResult; mode?: "play" | "real"; payoutSenderName?: string; secondApprovalAbove?: number | null; mods?: string; limits?: Partial<typeof WITHDRAWAL_LIMITS>; store?: MemoryStore; now?: () => number } = {},
+) {
+  const store = opts.store ?? new MemoryStore();
   const wallet = new Wallet(store, { mode: opts.mode ?? "real" });
   const tg = fakeTelegram();
   const verifyCalls: any[] = [];
@@ -50,12 +61,13 @@ function setup(opts: { verify?: VerifyResult; mode?: "play" | "real"; payoutSend
     payoutSenderName: opts.payoutSenderName ?? null,
     moderators: moderatorList(opts.mods ?? "1,2", CHAT),
     secondApprovalAbove: opts.secondApprovalAbove === undefined ? null : opts.secondApprovalAbove,
-    now: () => T0,
+    now: opts.now ?? (() => T0),
+    limits: opts.limits,
     nameOf: (id) => `Player ${id}`,
     onUpdate: (w) => updates.push(w.status),
   });
   if (wallet.mode === "real") wallet.deposit("p", 300 * BIRR, "dep1");
-  return { wallet, withdrawals, tg, verifyCalls, updates };
+  return { wallet, withdrawals, tg, verifyCalls, updates, store };
 }
 
 const tap = (data: string, chat = CHAT, from = 1) => ({ update_id: 1, callback_query: { id: "cb", data, from: { id: from, username: from === 1 ? "mod" : `mod${from}` }, message: { chat: { id: chat } } } });
@@ -354,5 +366,57 @@ describe("withdrawals", () => {
     assert.equal(secondApprovalFromEnv("off"), null);
     assert.equal(secondApprovalFromEnv("2500"), 2500 * BIRR);
     assert.equal(secondApprovalFromEnv("nonsense"), SECOND_APPROVAL_ABOVE);
+  });
+
+  // L3: ceilings.
+  test("one request and one day's requests have ceilings", async () => {
+    let t = T0;
+    const s = setup({ limits: { perRequest: 150 * BIRR, perDay: 250 * BIRR }, now: () => t });
+    s.wallet.deposit("p", 1_000 * BIRR, "dep2");
+    assert.match((await s.withdrawals.request("p", { bank: "telebirr", account: "0911223344", amount: 200 * BIRR }) as any).reason, /at once is 150 birr/);
+    const a = await s.withdrawals.request("p", { bank: "telebirr", account: "0911223344", amount: 150 * BIRR });
+    assert.ok(a.ok);
+    await s.withdrawals.handleUpdate(tap(`paid:${a.withdrawal.id}`));
+    // Rejected (refunded), so a second request is allowed.
+    await s.withdrawals.handleUpdate(tap(`reject:${a.withdrawal.id}`));
+    const b = await s.withdrawals.request("p", { bank: "telebirr", account: "0911223344", amount: 150 * BIRR });
+    assert.ok(b.ok, "a returned request doesn't count toward the day");
+    await s.withdrawals.cancel("p", b.withdrawal.id);
+    assert.ok(s.withdrawals.summary("p").maxAmount === 150 * BIRR);
+    const c = await s.withdrawals.request("p", { bank: "telebirr", account: "0911223344", amount: 150 * BIRR });
+    assert.ok(c.ok);
+    // c is still open, so it counts: 150 of 250 used today. Once paid it still counts until 24 hours have passed.
+    assert.equal(s.withdrawals.summary("p").maxAmount, 100 * BIRR);
+    s.store.write("withdrawals", s.store.read<any[]>("withdrawals", []).map((w) => (w.id === c.withdrawal.id ? { ...w, status: "paid" } : w)));
+    assert.match((await s.withdrawals.request("p", { bank: "telebirr", account: "0911223344", amount: 150 * BIRR }) as any).reason, /250 birr a day; 100 birr left/);
+    t += 24 * 60 * 60_000 + 1;
+    assert.ok((await s.withdrawals.request("p", { bank: "telebirr", account: "0911223344", amount: 150 * BIRR })).ok, "a day later it's open again");
+    assert.deepEqual(withdrawalLimitsFromEnv({ WITHDRAWAL_MAX_BIRR: "300", WITHDRAWAL_DAILY_MAX_BIRR: "x" }), { perRequest: 300 * BIRR });
+  });
+
+  // L4: a crash between the two writes loses nothing and pays nothing twice.
+  test("recover drops a request that was never debited and refunds a closed one that wasn't", async () => {
+    const store = new MemoryStore();
+    const s = setup({ store });
+    const a = await s.withdrawals.request("p", { bank: "telebirr", account: "0911223344", amount: 100 * BIRR });
+    const b = await s.withdrawals.request("q", { bank: "telebirr", account: "0911223344", amount: 100 * BIRR });
+    assert.ok(a.ok);
+    assert.equal(b.ok, false, "q has no money");
+    assert.equal(s.withdrawals.forPlayer("q").length, 0, "a refused debit leaves no request behind");
+    const list = store.read<any[]>("withdrawals", []);
+    // Simulate the two crashes: a saved request with no debit, and a cancel with no refund.
+    list.push({ ...list[0], id: "nodebit1", profileId: "q" });
+    list[0].status = "cancelled";
+    store.write("withdrawals", list);
+    assert.equal(s.wallet.balanceOf("p"), 200 * BIRR);
+
+    const after = setup({ store });
+    after.withdrawals.recover();
+    assert.equal(after.withdrawals.get("nodebit1"), null);
+    // 200 left after the request, +300 from the second setup's deposit, +100 missing refund.
+    assert.equal(after.wallet.balanceOf("p"), 600 * BIRR);
+    after.withdrawals.recover();
+    assert.equal(after.wallet.txnFor("withdrawal-refund", a.withdrawal.id)!.amount, 100 * BIRR);
+    assert.equal(store.read<any>("wallet", {}).txns.filter((t: any) => t.kind === "withdrawal-refund").length, 1, "recover is idempotent");
   });
 });
