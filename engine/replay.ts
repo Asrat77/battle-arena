@@ -32,6 +32,7 @@ export function checkEntry<S>(
     const move = entry.move;
     if (move.type === "timeout") return null;
     if (move.type === "forfeit") return move.seat === 0 || move.seat === 1 ? null : "bad forfeit seat";
+    if (move.type === "abandon") return null;
     return "unknown system move";
   }
   if (entry.seat !== 0 && entry.seat !== 1) return "bad seat";
@@ -59,6 +60,7 @@ export function step<S>(
       const winner: Seat = move.seat === 0 ? 1 : 0;
       return { state: cur.state, outcome: { winner, draw: false, reason: "forfeit" } };
     }
+    if (move.type === "abandon") return { state: cur.state, outcome: { winner: null, draw: true, reason: "abandoned" } };
     const state = game.onTimeout(cur.state, rngForEntry(seed, index));
     return { state, outcome: game.outcome(state) };
   }

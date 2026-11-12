@@ -66,6 +66,9 @@ export function resultSummary(r: ResultInput): ResultSummary {
 
   const base = { kind, icon, eyebrow, ...gameFacts(r) };
 
+  if (outcome.reason === "abandoned")
+    return { ...base, headline: "Match abandoned", detail: "Both players dropped out, so nobody wins" };
+
   if (outcome.reason === "forfeit" && winner !== null)
     return {
       ...base,

@@ -3,7 +3,8 @@
 export type Seat = 0 | 1;
 export type Viewer = Seat | "spectator";
 
-export type SystemMove = { type: "timeout" } | { type: "forfeit"; seat: Seat };
+/** "abandon": both players dropped out, so the match ends as a draw (stakes go back). */
+export type SystemMove = { type: "timeout" } | { type: "forfeit"; seat: Seat } | { type: "abandon" };
 
 export type LogEntry =
   | { t: number; seat: Seat; move: unknown }

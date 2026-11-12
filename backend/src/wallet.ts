@@ -238,13 +238,14 @@ export class Wallet {
   }
 
   /**
-   * Refund every escrow still held. Live matches only exist in memory, so on
-   * boot any held escrow belongs to a match that died with the old process.
+   * Refund every escrow still held, except those whose match was resumed after a
+   * restart (`resumed` match ids). Anything else held at boot belongs to a match that
+   * died with the old process.
    */
-  refundAllHeld(): Escrow[] {
+  refundAllHeld(resumed: ReadonlySet<string> = new Set()): Escrow[] {
     const d = this.data();
     return Object.values(d.escrows)
-      .filter((e) => e.status === "held")
+      .filter((e) => e.status === "held" && !(e.matchId && resumed.has(e.matchId)))
       .map((e) => this.refundIn(d, e));
   }
 
