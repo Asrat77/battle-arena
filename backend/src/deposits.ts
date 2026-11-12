@@ -15,7 +15,8 @@
 // sender matches it, it was made in the last day and after the account was
 // created, and it reached our account (and our name, with DEPOSIT_RECEIVER_NAME).
 // Anything doubtful goes to the moderators on Telegram to approve or reject;
-// a rejected one frees its reference for whoever really paid it.
+// a rejected one frees its reference for whoever really paid it (but not for the
+// player it was rejected for). The player never sees what the receipt says.
 
 import { randomBytes } from "node:crypto";
 import type { Socket } from "socket.io";
@@ -76,6 +77,41 @@ export interface VerifyEt {
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- verify.et JSON */
+
+/**
+ * Receipt fields that may say when the money moved, most explicit first. verify.et's
+ * docs don't say whether `timestamp` is the transfer time or the time of the check
+ * (audit review R4), so a named transfer date wins over it when both are there.
+ */
+const DATE_FIELDS = ["transactionDate", "transferDate", "paymentDate", "paidAt", "date", "timestamp"] as const;
+
+/** Ethiopian banks print local time (UTC+3); a date without a zone is read as that. */
+const EAT_OFFSET = "+03:00";
+
+/** A receipt date as ms, or null when it is missing or can't be read. */
+export function parseReceiptDate(raw: unknown): number | null {
+  if (typeof raw === "number") {
+    if (!Number.isFinite(raw) || raw <= 0) return null;
+    return raw < 1e12 ? raw * 1000 : raw; // seconds or ms since 1970
+  }
+  if (typeof raw !== "string" || raw.trim() === "") return null;
+  let text = raw.trim();
+  if (/^\d{9,13}$/.test(text)) return parseReceiptDate(Number(text));
+  // "2026-11-12 10:30:00" or "2026-11-12T10:30" with no zone: bank local time.
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(text)) text = text.replace(" ", "T") + EAT_OFFSET;
+  const ms = Date.parse(text);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/** When the transfer was made, from the first readable date field, and which field it was. */
+export function receiptDate(item: any): { paidAt: number | null; field: string | null } {
+  for (const field of DATE_FIELDS) {
+    const paidAt = parseReceiptDate(item?.[field]);
+    if (paidAt !== null) return { paidAt, field };
+  }
+  return { paidAt: null, field: null };
+}
+
 function readResult(body: any): VerifyResult {
   // Two layouts. POST /api/verify answers with `verification` plus `data: [item]`;
   // GET /api/verify/:id (after a queued check) answers with `data: { processingStatus, verified, result: item }`.
@@ -98,7 +134,10 @@ function readResult(body: any): VerifyResult {
     // Logged so a rejected transfer that did reach us can be explained (receipts mask numbers).
     console.warn("verify.et: settlement account not matched", JSON.stringify({ match, receiver: item.receiverAccount ?? item.receiver ?? null }));
   }
-  const paidAt = Date.parse(String(item.timestamp ?? item.transactionDate ?? item.date ?? ""));
+  const { paidAt, field } = receiptDate(item);
+  // Raw date fields only (no names or numbers), so the meaning of each can be checked on real receipts.
+  const dates = Object.fromEntries(DATE_FIELDS.filter((f) => item[f] !== undefined).map((f) => [f, item[f]]));
+  console.info("verify.et receipt dates", JSON.stringify({ dates, used: field }));
   return {
     state: "verified",
     amount: Math.round(Number(item.amount) * BIRR),
@@ -106,7 +145,7 @@ function readResult(body: any): VerifyResult {
     senderName: item.senderName ?? null,
     receiverName: item.receiverName ?? null,
     itemStatus: item.status == null ? null : String(item.status),
-    paidAt: Number.isFinite(paidAt) ? paidAt : null,
+    paidAt,
     toUs: Boolean(match?.matched) && !match?.ambiguous,
     ambiguous: Boolean(match?.ambiguous),
   };
@@ -168,14 +207,21 @@ export interface Deposit {
   alertMessageId?: number | null;
   /** Telegram name of the moderator who approved or rejected it. */
   closedBy?: string | null;
+  /** Why it went to review, for the moderators only (it may quote the receipt). */
+  reviewWhy?: string | null;
 }
+
+/** What the player sees of a deposit: nothing from the receipt they didn't type themselves (review R2). */
+export type DepositView = Pick<Deposit, "id" | "bank" | "reference" | "status" | "amount" | "reason" | "createdAt" | "closedAt" | "payerName">;
 
 interface DepositData {
   list: Deposit[];
   /** "bank:REFERENCE" → deposit id, for every reference credited, in review or being checked. */
   used: Record<string, string>;
-  /** profileId → the name on the account they pay from. Fixed once a deposit is credited. */
+  /** profileId → the name on the account they pay from. Fixed once a deposit is credited or goes to review. */
   payers?: Record<string, { name: string; locked: boolean }>;
+  /** "bank:REFERENCE" → profiles whose claim on it a moderator rejected; they can't claim it again (review R2). */
+  rejected?: Record<string, string[]>;
 }
 
 /** Telegram, for deposits a moderator has to look at. Same bot and chat as withdrawals. */
@@ -207,6 +253,8 @@ export interface DepositOptions {
   limits?: Partial<typeof DEPOSIT_LIMITS>;
   /** The caller's IP for a socket (real client IP behind a proxy). */
   ipOf?: (socket: Socket) => string;
+  /** Checks left across all players (verifyBudget.ts); deposits pause when it is spent. */
+  budget?: { spent(): "day" | "month" | null } | null;
 }
 
 export function depositAccountsFromEnv(env: Record<string, string | undefined> = process.env): Partial<Record<DepositBank, string>> {
@@ -279,6 +327,8 @@ export class Deposits {
   /** Accounts with a check running now. */
   private readonly inFlight = new Set<string>();
   private creditsAlertAt = -Infinity;
+  /** The day or month whose spent budget the moderators were told about. */
+  private budgetAlerted: string | null = null;
 
   constructor(
     private readonly store: Store,
@@ -355,6 +405,12 @@ export class Deposits {
     return Object.hasOwn(p, profileId) ? p[profileId] : null;
   }
 
+  /** A deposit as its player may see it. */
+  static view(x: Deposit): DepositView {
+    const { id, bank, reference, status, amount, reason, createdAt, closedAt, payerName } = x;
+    return { id, bank, reference, status, amount, reason, createdAt, closedAt, payerName };
+  }
+
   get(id: string): Deposit | null {
     return this.data().list.find((x) => x.id === id) ?? null;
   }
@@ -389,6 +445,9 @@ export class Deposits {
     const d = this.data();
     const key = refKey(bank, reference);
     if (d.used[key]) return { ok: false, reason: "this transaction was already used" };
+    if (d.rejected && Object.hasOwn(d.rejected, key) && d.rejected[key].includes(profileId)) {
+      return { ok: false, reason: "a moderator already checked this transaction and couldn't match it to you" };
+    }
 
     // Who the player pays from. Once a deposit is credited the name is fixed.
     d.payers ??= {};
@@ -403,6 +462,11 @@ export class Deposits {
 
     // Every check below spends verify.et credits: one at a time, and only so many an hour.
     if (this.inFlight.has(profileId)) return { ok: false, reason: "a deposit is already being checked, wait for it to finish" };
+    const spent = this.opts.budget?.spent() ?? null;
+    if (spent) {
+      await this.budgetSpent(spent);
+      return { ok: false, reason: `deposits are paused for ${spent === "day" ? "today" : "this month"}, try again later` };
+    }
     if (!this.accountLimit.take(profileId) || (ip !== undefined && !this.ipLimit.take(ip))) {
       console.warn(`deposit rate limit hit by ${profileId} from ${ip ?? "?"}`);
       return { ok: false, reason: "too many deposit checks, try again in an hour" };
@@ -433,6 +497,7 @@ export class Deposits {
           result = await this.opts.verifyEt!.status(result.requestId);
         }
         if (result.state !== "failed" || !result.retry || attempt >= RETRIES) break;
+        if (this.opts.budget?.spent()) break;
         await this.sleep(RETRY_MS);
       }
     } catch {
@@ -450,6 +515,21 @@ export class Deposits {
     if (now - this.creditsAlertAt < CREDITS_ALERT_EVERY_MS) return;
     this.creditsAlertAt = now;
     const text = "⚠️ verify.et credits are used up (HTTP 402). Deposits can't be checked until the plan is topped up or the month resets.";
+    console.error(text);
+    const mods = this.opts.moderators;
+    if (mods) await mods.call("sendMessage", { chat_id: mods.chatId, text }).catch((err) => console.warn("telegram alert failed", err));
+  }
+
+  /** The shared verify.et budget is used up: tell the moderators once per day or month. */
+  private async budgetSpent(which: "day" | "month") {
+    const iso = new Date(this.now()).toISOString();
+    const period = which === "day" ? iso.slice(0, 10) : iso.slice(0, 7);
+    if (this.budgetAlerted === period) return;
+    this.budgetAlerted = period;
+    const text =
+      which === "day"
+        ? `⚠️ Today's verify.et budget (VERIFY_DAILY_BUDGET) is used up, so deposits are paused until midnight UTC.`
+        : `⚠️ This month's verify.et budget (VERIFY_MONTHLY_BUDGET) is used up, so deposits are paused until next month. Raise it once the verify.et plan allows more.`;
     console.error(text);
     const mods = this.opts.moderators;
     if (mods) await mods.call("sendMessage", { chat_id: mods.chatId, text }).catch((err) => console.warn("telegram alert failed", err));
@@ -497,8 +577,12 @@ export class Deposits {
       reject("this transfer was made before your account existed", true);
     } else if ((review = this.doubt(deposit, result))) {
       deposit.status = "review";
-      deposit.reason = `A moderator will check this transfer: ${review}.`;
+      // The player sees no reason: it could quote the receipt's sender name (review R2).
+      deposit.reason = "A moderator will check this transfer.";
+      deposit.reviewWhy = review;
       deposit.reviewAmount = result.amount;
+      // The payer name can't be swapped for the one on the receipt while (or after) it is looked at.
+      if (deposit.payerName) (d.payers ??= {})[deposit.profileId] = { name: deposit.payerName, locked: true };
     } else this.credit(d, deposit, result.amount);
     if (deposit.status !== "review") deposit.closedAt = this.now();
     this.store.write(DEPOSITS, d);
@@ -533,8 +617,13 @@ export class Deposits {
     ];
     if (why) lines.push(`Why: ${why}`);
     if (x.status === "credited") lines.push(`✅ Approved by ${x.closedBy} · credited`);
-    else if (x.status === "rejected") lines.push(`❌ Rejected by ${x.closedBy} · reference freed`);
-    else lines.push("", "Approve only if this money reached our account from this player.");
+    else if (x.status === "rejected") lines.push(`❌ Rejected by ${x.closedBy} · reference freed for others (not this player)`);
+    else
+      lines.push(
+        "",
+        "Approve only if this money reached our account from this player.",
+        "Reject frees the reference: anyone else can then claim it with a new check (this player can't).",
+      );
     return lines.join("\n");
   }
 
@@ -577,7 +666,11 @@ export class Deposits {
     else {
       x.status = "rejected";
       x.reason = "A moderator couldn't match this transfer to you.";
-      delete d.used[refKey(x.bank, x.reference)];
+      const key = refKey(x.bank, x.reference);
+      delete d.used[key];
+      d.rejected ??= {};
+      const who = Object.hasOwn(d.rejected, key) ? d.rejected[key] : (d.rejected[key] = []);
+      if (!who.includes(x.profileId)) who.push(x.profileId);
     }
     x.closedBy = by;
     x.closedAt = this.now();
@@ -605,7 +698,7 @@ export class Deposits {
     const x = this.resolve(id, action === "dep-ok", who);
     if (x?.alertMessageId) {
       await mods
-        .call("editMessageText", { chat_id: mods.chatId, message_id: x.alertMessageId, text: this.alertText(x), reply_markup: { inline_keyboard: [] } })
+        .call("editMessageText", { chat_id: mods.chatId, message_id: x.alertMessageId, text: this.alertText(x, x.reviewWhy ?? undefined), reply_markup: { inline_keyboard: [] } })
         .catch(() => {});
     }
   }
@@ -615,7 +708,7 @@ export class Deposits {
     socket.on("wallet:deposit", async (msg: { bank?: unknown; reference?: unknown; payerName?: unknown }, ack?: (res: unknown) => void) => {
       const ip = this.opts.ipOf ? this.opts.ipOf(socket) : socket.handshake.address;
       const res = await this.submit(profileId, msg?.bank, msg?.reference, msg?.payerName, ip);
-      if (typeof ack === "function") ack(res);
+      if (typeof ack === "function") ack(res.ok ? { ok: true, deposit: Deposits.view(res.deposit) } : res);
     });
   }
 }
