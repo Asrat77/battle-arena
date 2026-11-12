@@ -145,7 +145,7 @@ export class MatchRuntime extends EventEmitter {
       this.io.in(profileRoom(players[seat])).socketsJoin(seatRoom(id, seat));
       this.io.to(profileRoom(players[seat])).emit("match:start", this.startPayload(m, seat));
     }
-    this.emit("start", m);
+    this.notify("start", m);
     this.advanced(m, true);
     // A seated player who is not connected right now starts the forfeit clock.
     for (const seat of [0, 1] as const) {
@@ -376,7 +376,7 @@ export class MatchRuntime extends EventEmitter {
     m.commitments = m.game.commitments(m.cur.state);
     if ((["0", "1"] as const).every((seat) => seat in m.commitments)) {
       m.committed = true;
-      this.emit("commit", m);
+      this.notify("commit", m);
     }
   }
 
@@ -438,9 +438,9 @@ export class MatchRuntime extends EventEmitter {
 
     this.pushViews(m);
     this.io.to(this.allRooms(m)).emit("match:end", this.endPayload(m));
-    this.emit("end", m, this.record(m));
+    this.notify("end", m, this.record(m));
     const watchers = this.spectators(m);
-    if (watchers.length) this.emit("spectated", m, watchers);
+    if (watchers.length) this.notify("spectated", m, watchers);
   }
 
   /** Distinct profiles watching a match (players' own sockets never count). */
@@ -545,6 +545,21 @@ export class MatchRuntime extends EventEmitter {
   private seatOf(m: Match, profileId: string): Seat | null {
     const seat = m.players.indexOf(profileId);
     return seat === 0 || seat === 1 ? (m.bots.includes(seat) ? null : seat) : null;
+  }
+
+  /**
+   * Call every listener even if one throws. With a plain emit, a throw in the
+   * recorder's "end" listener skipped the wallet's, so a stake was never settled
+   * and the next boot refunded it (audit M7).
+   */
+  private notify(event: string, ...args: unknown[]) {
+    for (const listener of this.listeners(event)) {
+      try {
+        (listener as (...a: unknown[]) => void)(...args);
+      } catch (err) {
+        console.error(`match "${event}" listener failed`, err);
+      }
+    }
   }
 
   private saved(): Record<string, SavedMatch> {

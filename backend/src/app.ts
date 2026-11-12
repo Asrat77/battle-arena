@@ -75,8 +75,8 @@ export function createApp(options: AppOptions = {}) {
   onProfileChange = (profile) => io.to(profileRoom(profile.id)).emit("profile:update", profile);
 
   const matches = new MatchRuntime(io, { clock: options.clock, store });
-  const recorder = new Recorder(store, ledger, matches);
-  app.use(matchRoutes(recorder, matches));
+  // Money first: the wallet's "end" listener is attached before any other, so the
+  // stake is settled before recording, rewards or tournaments run.
   const wallet = new Wallet(store, {
     mode: walletModeFromEnv(),
     ...options.wallet,
@@ -86,6 +86,8 @@ export function createApp(options: AppOptions = {}) {
     const escrow = wallet.escrowForMatch(m.id);
     if (escrow && record) wallet.settle(escrow.id, record.outcome);
   });
+  const recorder = new Recorder(store, ledger, matches);
+  app.use(matchRoutes(recorder, matches));
   app.use(walletRoutes(wallet, identity));
   const verifyKey = process.env.VERIFY_ET_KEY;
   const verifyEt = verifyKey ? httpVerifyEt(verifyKey, process.env.VERIFY_ET_URL || undefined) : null;
