@@ -138,7 +138,7 @@ test("WALLET_MODE only turns real money on when set to real", () => {
 });
 
 describe("app", () => {
-  test("a staked match pays the winner when the other player forfeits", () => {
+  test("a staked match nobody turns up for is abandoned and both stakes go back", () => {
     const clock = new FakeClock();
     const { io, matches, identity, wallet } = createApp({ store: new MemoryStore(), clock });
     const [alice, bob] = ["Alice", "Bob"].map((n) => identity.signup(n).profile);
@@ -149,12 +149,13 @@ describe("app", () => {
     const m = matches.create({ game: ticTacToe, players: [alice.id, bob.id] });
     wallet.bind(held.escrow.id, m.id);
 
-    // Neither is connected, so both forfeit clocks run; seat 0's lands first.
+    // Neither is connected, so both forfeit clocks run. Both gone is a draw, not a
+    // loss for whoever dropped first (audit M6).
     clock.advance(DISCONNECT_FORFEIT_MS);
-    assert.ok(m.cur.outcome);
-    assert.equal(wallet.escrow(held.escrow.id)?.status, "settled");
-    const winner = m.cur.outcome.winner === 0 ? alice : bob;
-    assert.equal(wallet.balanceOf(winner.id), DEFAULTS.faucetAmount + 80 * BIRR);
+    assert.deepEqual(m.cur.outcome, { winner: null, draw: true, reason: "abandoned" });
+    assert.equal(wallet.escrow(held.escrow.id)?.status, "refunded");
+    assert.equal(wallet.balanceOf(alice.id), DEFAULTS.faucetAmount);
+    assert.equal(wallet.balanceOf(bob.id), DEFAULTS.faucetAmount);
     io.close();
   });
 

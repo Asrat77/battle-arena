@@ -432,7 +432,7 @@ export class Lobby {
   // ---- rematch ----
 
   private start(game: AnyGame, players: [string, string], botSeat: Seat | null, room: string | null, escrowId?: string) {
-    const m = this.matches.create({ game, players, botSeat });
+    const m = this.matches.create({ game, players, botSeat, durable: escrowId !== undefined });
     if (escrowId) this.wallet?.bind(escrowId, m.id);
     if (room) {
       this.matchRooms.set(m.id, room);

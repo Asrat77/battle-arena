@@ -30,6 +30,7 @@ import { GAME_ICONS } from "@/lib/gameCatalog";
 const REASONS: Record<string, string> = {
   cracked: "cracked the code",
   forfeit: "by forfeit",
+  abandoned: "abandoned",
   timeout: "on time",
 };
 
@@ -297,6 +298,7 @@ function Timeline({
 function entryText(entry: LogEntry, labels: [string, string], describe?: (move: never) => string, timeoutText?: string): { text: React.ReactNode; system?: boolean } {
   if (entry.seat === "system") {
     if (entry.move.type === "forfeit") return { text: `${labels[entry.move.seat]} forfeits`, system: true };
+    if (entry.move.type === "abandon") return { text: "Both players dropped out", system: true };
     return { text: timeoutText ?? "Timer ran out", system: true };
   }
   const who = <b className={`font-semibold ${entry.seat === 0 ? "text-you" : "text-opp"}`}>{labels[entry.seat]}</b>;

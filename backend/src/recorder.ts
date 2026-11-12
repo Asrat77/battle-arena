@@ -62,6 +62,11 @@ export class Recorder extends EventEmitter {
     this.store.write(MATCHES, { ...all, [matchId]: change(all[matchId]) });
   }
 
+  private commitBlockOf(matchId: string): number | null {
+    const block = this.ledger.blocks().find((b) => b.kind === "commit" && (b.payload as CommitPayload)?.matchId === matchId);
+    return block ? block.index : null;
+  }
+
   private commit(m: Match) {
     const payload: CommitPayload = { matchId: m.id, gameId: m.game.id, players: m.players, commitments: m.commitments };
     void this.ledger.append("commit", payload).then((block) => {
@@ -80,7 +85,8 @@ export class Recorder extends EventEmitter {
       commitments: m.commitments,
       resultHash: hash,
       status: "pending",
-      commitIndex: this.commitIndex.get(m.id) ?? null,
+      // A match resumed after a restart had its commit block sealed by the old process.
+      commitIndex: this.commitIndex.get(m.id) ?? this.commitBlockOf(m.id),
       resultIndex: null,
     };
     this.commitIndex.delete(m.id);

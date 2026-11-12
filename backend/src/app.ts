@@ -5,6 +5,7 @@ import { createServer } from "node:http";
 import cors from "cors";
 import express from "express";
 import { Server } from "socket.io";
+import { getGame, listGames } from "../../engine/registry";
 import type { MatchRecord } from "../../engine/types";
 import type { Clock } from "./clock";
 import { Chat } from "./chat";
@@ -73,7 +74,7 @@ export function createApp(options: AppOptions = {}) {
 
   onProfileChange = (profile) => io.to(profileRoom(profile.id)).emit("profile:update", profile);
 
-  const matches = new MatchRuntime(io, { clock: options.clock });
+  const matches = new MatchRuntime(io, { clock: options.clock, store });
   const recorder = new Recorder(store, ledger, matches);
   app.use(matchRoutes(recorder, matches));
   const wallet = new Wallet(store, {
@@ -81,8 +82,6 @@ export function createApp(options: AppOptions = {}) {
     ...options.wallet,
     onChange: (id, balance) => io.to(profileRoom(id)).emit("wallet:balance", { balance }),
   });
-  // Live matches don't survive a restart, so stakes still held belong to a match that is gone.
-  wallet.refundAllHeld();
   matches.on("end", (m: Match, record: MatchRecord | null) => {
     const escrow = wallet.escrowForMatch(m.id);
     if (escrow && record) wallet.settle(escrow.id, record.outcome);
@@ -130,6 +129,12 @@ export function createApp(options: AppOptions = {}) {
     onChampion: (id, tournamentId, ts) => rewards.tournamentWon(id, tournamentId, ts),
   });
   app.use(tournamentRoutes(tournaments));
+
+  // Every "end" listener is attached now, so resumed matches settle like any other.
+  // Staked matches are saved after each move and pick up where they were; a stake
+  // still held for any other match belongs to one that died with the old process.
+  const resumed = matches.restore(options.games ?? { get: getGame, list: listGames });
+  wallet.refundAllHeld(new Set(resumed));
 
   io.on("connection", (socket) => {
     // One bad message must never crash the process: a crash refunds every live stake.

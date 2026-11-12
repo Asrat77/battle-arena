@@ -10,8 +10,26 @@ import { checkEntry, initial, step, type MatchState } from "../../engine/replay"
 import { createRng } from "../../engine/rng";
 import type { AnyGame, LogEntry, MatchRecord, Seat, Viewer } from "../../engine/types";
 import { systemClock, type Clock, type TimerHandle } from "./clock";
+import type { Store } from "./store";
 
 export const DISCONNECT_FORFEIT_MS = 30_000;
+/** After a restart, players of a resumed match get this long to reconnect. */
+export const RESUME_GRACE_MS = 120_000;
+/** Store key for matches that must survive a restart (staked ones). */
+const LIVE = "liveMatches";
+
+/** What is kept on disk for a durable match: enough to replay it to the current state. */
+export interface SavedMatch {
+  id: string;
+  gameId: string;
+  seed: string;
+  players: [string, string];
+  bots: Seat[];
+  log: LogEntry[];
+  startedAt: number;
+  commitments: Record<string, string>;
+  committed: boolean;
+}
 export const BOT_DELAY_MS: [number, number] = [1_500, 5_000];
 const MAX_MOVE_BYTES = 2_048;
 
@@ -37,6 +55,10 @@ export interface Match {
   active: Seat[];
   /** Per seat: when the forfeit lands for a player who has dropped off, else null. */
   away: [number | null, number | null];
+  /** Kept in the store after every move so a restart resumes it (staked matches). */
+  durable: boolean;
+  /** Resumed after a restart and waiting for both players: the turn clock is paused. */
+  resuming: boolean;
 }
 
 export interface CreateMatchInput {
@@ -46,6 +68,8 @@ export interface CreateMatchInput {
   /** Bot seats, for a bot-vs-bot match. Overrides botSeat. */
   botSeats?: Seat[];
   seed?: string;
+  /** Persist the match so a restart resumes it instead of losing it. Used for staked matches. */
+  durable?: boolean;
 }
 
 type Ack = (res: { ok: true } | { ok: false; reason: string }) => void;
@@ -63,13 +87,15 @@ export const profileRoom = (profileId: string) => `profile:${profileId}`;
 export class MatchRuntime extends EventEmitter {
   private matches = new Map<string, Match>();
   private readonly clock: Clock;
+  private readonly store: Store | null;
 
   constructor(
     private readonly io: Server,
-    opts: { clock?: Clock } = {},
+    opts: { clock?: Clock; store?: Store } = {},
   ) {
     super();
     this.clock = opts.clock ?? systemClock;
+    this.store = opts.store ?? null;
   }
 
   get(id: string): Match | undefined {
@@ -109,6 +135,8 @@ export class MatchRuntime extends EventEmitter {
       timers: { bot: [], disconnect: [] },
       active: [],
       away: [null, null],
+      durable: Boolean(input.durable),
+      resuming: false,
     };
     this.matches.set(id, m);
 
@@ -126,6 +154,65 @@ export class MatchRuntime extends EventEmitter {
     return m;
   }
 
+  /**
+   * Bring back the durable matches that were live when the server stopped: replay each
+   * saved log, re-arm a fresh turn timer, and give both players RESUME_GRACE_MS to come
+   * back. Call once at boot, after every "end" listener is attached. Returns the ids
+   * resumed; a saved match whose game is gone or whose log no longer replays is dropped
+   * (and its stake refunded by the caller).
+   */
+  restore(games: { get(id: string): AnyGame | undefined }): string[] {
+    const saved = this.saved();
+    const resumed: string[] = [];
+    for (const s of Object.values(saved)) {
+      const game = games.get(s.gameId);
+      let cur: MatchState<unknown> | null = null;
+      if (game) {
+        try {
+          cur = initial(game, s.seed);
+          s.log.forEach((entry, i) => (cur = step(game, s.seed, cur!, entry, i)));
+        } catch (err) {
+          console.error(`could not resume match ${s.id}`, err);
+          cur = null;
+        }
+      }
+      if (!game || !cur) {
+        this.drop(s.id);
+        continue;
+      }
+      const m: Match = {
+        id: s.id,
+        game,
+        seed: s.seed,
+        players: s.players,
+        botSeat: s.bots[0] ?? null,
+        bots: s.bots,
+        log: s.log,
+        cur,
+        deadline: null,
+        commitments: s.commitments,
+        committed: s.committed,
+        startedAt: s.startedAt,
+        endedAt: null,
+        timers: { bot: [], disconnect: [] },
+        active: [],
+        away: [null, null],
+        durable: true,
+        resuming: true,
+      };
+      this.matches.set(m.id, m);
+      resumed.push(m.id);
+      // The turn clock waits until both players are back, so nobody loses on time
+      // while the server was down; the grace timers below cover a no-show.
+      this.advanced(m, true);
+      if (m.cur.outcome) continue;
+      for (const seat of [0, 1] as const) {
+        if (!m.bots.includes(seat) && !this.isOnline(m.players[seat])) this.startDisconnectTimer(m, seat, RESUME_GRACE_MS);
+      }
+    }
+    return resumed;
+  }
+
   /** Wire match events for an authenticated socket and restore any live match. */
   attach(socket: Socket, profileId: string) {
     socket.join(profileRoom(profileId));
@@ -140,6 +227,7 @@ export class MatchRuntime extends EventEmitter {
         this.io.to(this.allRooms(m)).emit("match:presence", this.presencePayload(m));
       }
       this.sendSeat(socket, m, seat);
+      this.unpauseIfAllBack(m);
     }
 
     socket.on("match:move", (msg: { matchId?: string; move?: unknown }, ack?: Ack) => {
@@ -192,8 +280,10 @@ export class MatchRuntime extends EventEmitter {
       watching = this.watchedBy(socket);
     });
 
-    socket.on("disconnect", () => {
+    socket.on("disconnect", (reason: string) => {
       watching.forEach((m) => this.sendSpectatorCount(m));
+      // The server going down is not the player leaving: a durable match resumes on boot.
+      if (reason === "server shutting down") return;
       if (this.isOnline(profileId)) return;
       for (const m of this.activeFor(profileId)) {
         const seat = this.seatOf(m, profileId);
@@ -241,27 +331,41 @@ export class MatchRuntime extends EventEmitter {
       this.finish(m);
       return;
     }
+    this.save(m);
 
     // Keep the running deadline while a simultaneous phase only loses seats
     // (one player has moved, the other still has the same time left).
     const shrinking = !first && m.active.length > 0 && m.active.length < prev.length &&
       m.active.every((s) => prev.includes(s)) && previousDeadlineMs === m.game.deadlineMs(state);
-    if (!shrinking) {
-      m.timers.deadline?.cancel();
-      m.timers.deadline = undefined;
-      m.deadline = null;
-      const ms = m.game.deadlineMs(state);
-      if (ms !== null) {
-        m.deadline = this.clock.now() + ms;
-        m.timers.deadline = this.clock.setTimeout(() => {
-          m.timers.deadline = undefined;
-          this.append(m, { t: this.clock.now(), seat: "system", move: { type: "timeout" } });
-        }, ms);
-      }
-    }
+    if (!shrinking) this.armDeadline(m);
 
     this.pushViews(m);
     this.scheduleBot(m);
+  }
+
+  /** Restart the turn clock for the current state (none while a resumed match waits). */
+  private armDeadline(m: Match) {
+    m.timers.deadline?.cancel();
+    m.timers.deadline = undefined;
+    m.deadline = null;
+    if (m.resuming || m.cur.outcome) return;
+    const ms = m.game.deadlineMs(m.cur.state);
+    if (ms !== null) {
+      m.deadline = this.clock.now() + ms;
+      m.timers.deadline = this.clock.setTimeout(() => {
+        m.timers.deadline = undefined;
+        this.append(m, { t: this.clock.now(), seat: "system", move: { type: "timeout" } });
+      }, ms);
+    }
+  }
+
+  /** A resumed match starts its turn clock once every human seat is connected again. */
+  private unpauseIfAllBack(m: Match) {
+    if (!m.resuming) return;
+    if (!([0, 1] as const).every((s) => m.bots.includes(s) || this.isOnline(m.players[s]))) return;
+    m.resuming = false;
+    this.armDeadline(m);
+    this.pushViews(m);
   }
 
   // Commitments only exist once each seat has chosen its hidden data (a Crack
@@ -305,20 +409,25 @@ export class MatchRuntime extends EventEmitter {
     }, delay);
   }
 
-  private startDisconnectTimer(m: Match, seat: Seat) {
+  private startDisconnectTimer(m: Match, seat: Seat, ms = DISCONNECT_FORFEIT_MS) {
     if (m.timers.disconnect[seat] || m.cur.outcome) return;
-    m.away[seat] = this.clock.now() + DISCONNECT_FORFEIT_MS;
+    m.away[seat] = this.clock.now() + ms;
     this.io.to(this.allRooms(m)).emit("match:presence", this.presencePayload(m));
     m.timers.disconnect[seat] = this.clock.setTimeout(() => {
       m.timers.disconnect[seat] = undefined;
       m.away[seat] = null;
-      if (!this.isOnline(m.players[seat])) {
-        this.append(m, { t: this.clock.now(), seat: "system", move: { type: "forfeit", seat } });
-      }
-    }, DISCONNECT_FORFEIT_MS);
+      if (this.isOnline(m.players[seat])) return;
+      // Both gone: nobody showed up to win it, so it is a draw rather than a loss for
+      // whoever happened to drop first.
+      const other: Seat = seat === 0 ? 1 : 0;
+      const otherGone = !m.bots.includes(other) && !this.isOnline(m.players[other]);
+      const move = otherGone ? ({ type: "abandon" } as const) : ({ type: "forfeit", seat } as const);
+      this.append(m, { t: this.clock.now(), seat: "system", move });
+    }, ms);
   }
 
   private finish(m: Match) {
+    this.drop(m.id);
     m.endedAt = this.clock.now();
     m.deadline = null;
     m.timers.deadline?.cancel();
@@ -436,6 +545,34 @@ export class MatchRuntime extends EventEmitter {
   private seatOf(m: Match, profileId: string): Seat | null {
     const seat = m.players.indexOf(profileId);
     return seat === 0 || seat === 1 ? (m.bots.includes(seat) ? null : seat) : null;
+  }
+
+  private saved(): Record<string, SavedMatch> {
+    return this.store?.read<Record<string, SavedMatch>>(LIVE, {}) ?? {};
+  }
+
+  private save(m: Match) {
+    if (!m.durable || !this.store) return;
+    const s: SavedMatch = {
+      id: m.id,
+      gameId: m.game.id,
+      seed: m.seed,
+      players: m.players,
+      bots: m.bots,
+      log: [...m.log],
+      startedAt: m.startedAt,
+      commitments: m.commitments,
+      committed: m.committed,
+    };
+    this.store.write(LIVE, { ...this.saved(), [m.id]: s });
+  }
+
+  private drop(id: string) {
+    if (!this.store) return;
+    const all = this.saved();
+    if (!Object.hasOwn(all, id)) return;
+    const { [id]: _gone, ...rest } = all;
+    this.store.write(LIVE, rest);
   }
 
   private isOnline(profileId: string) {
