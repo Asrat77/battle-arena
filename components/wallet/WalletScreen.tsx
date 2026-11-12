@@ -32,7 +32,7 @@ const TXN: Record<WalletTxn["kind"], { label: string; icon: Icon3DName }> = {
 
 export function WalletScreen() {
   const { ready, profile } = useSession();
-  const { wallet, busy, faucet, deposit, withdraw } = useWallet();
+  const { wallet, busy, faucet, deposit, withdraw, cancelWithdrawal } = useWallet();
   const toast = useToast();
 
   if (ready && !profile) {
@@ -120,6 +120,7 @@ export function WalletScreen() {
           minAmount={wallet.withdrawals.minAmount}
           requests={wallet.withdrawals.requests}
           onSubmit={withdraw}
+          onCancel={cancelWithdrawal}
         />
       )}
 

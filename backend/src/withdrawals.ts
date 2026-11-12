@@ -1,9 +1,15 @@
 // Withdrawals: a player asks to cash out to their own Telebirr or CBE
 // account. The amount leaves their wallet at once (so it can't be staked
 // twice) and a Telegram bot alerts the moderators' group with Paid / Reject
-// buttons. A moderator sends the money by hand, taps Paid and replies with
-// the transaction number; when verify.et is set up we check that transfer
-// really reached the player before closing the request. Reject refunds it.
+// buttons. A moderator taps Paid first (from then on the player can't cancel),
+// sends the money by hand and replies with the transaction number. verify.et
+// must confirm that transfer: to the player's account, for the full amount,
+// made after the request, from our own account (when PAYOUT_SENDER_NAME is
+// set), and not used for another withdrawal. When it can't confirm (or
+// verify.et isn't set up) a moderator can still "confirm paid anyway" with a
+// written reason, which is recorded. Reject refunds the player; once a payout
+// number was given, Reject asks again, since a refund after a real payout pays
+// twice. A player can cancel a request no moderator has picked up yet.
 //
 // On when WALLET_MODE=real and TELEGRAM_BOT_TOKEN and TELEGRAM_MODERATOR_CHAT
 // are set. The bot long-polls Telegram, so no public webhook URL is needed;
@@ -12,15 +18,17 @@
 
 import { randomBytes } from "node:crypto";
 import type { Socket } from "socket.io";
-import type { DepositBank, VerifyEt } from "./deposits";
+import { type DepositBank, namesMatch, normalizeReference, type VerifyEt } from "./deposits";
 import type { Store } from "./store";
 import { BIRR, type Wallet } from "./wallet";
 
 const WITHDRAWALS = "withdrawals";
 export const MIN_WITHDRAWAL = 50 * BIRR;
 const BANKS: Record<DepositBank, string> = { telebirr: "Telebirr", cbe: "CBE" };
+/** Clock difference we allow between verify.et's receipt time and ours. */
+export const CLOCK_SKEW_MS = 5 * 60_000;
 
-export type WithdrawalStatus = "pending" | "paid" | "rejected";
+export type WithdrawalStatus = "pending" | "paid" | "rejected" | "cancelled";
 
 export interface Withdrawal {
   id: string;
@@ -32,14 +40,27 @@ export interface Withdrawal {
   status: WithdrawalStatus;
   /** Transaction number of the moderator's transfer, once paid. */
   reference: string | null;
-  /** Telegram name of the moderator who closed it. */
+  /** Telegram name of the moderator who closed it ("player" when the player cancelled). */
   closedBy: string | null;
+  /** The moderator who tapped Paid; from then on the player can't cancel. */
+  pickedUpBy?: string | null;
+  /** The last payout number verify.et couldn't confirm, and why. */
+  unverified?: { reference: string; why: string } | null;
+  /** Set when a moderator confirmed the payout without verify.et's check. */
+  forced?: { by: string; reason: string } | null;
+  /** The "reply with why you're sure" prompt for a forced confirmation. */
+  forcePromptMessageId?: number | null;
   createdAt: number;
   closedAt: number | null;
   /** The alert in the moderators' chat, and the "reply with the number" prompt. */
   alertMessageId: number | null;
   promptMessageId: number | null;
 }
+
+export type WithdrawalView = Pick<Withdrawal, "id" | "bank" | "account" | "amount" | "status" | "reference" | "createdAt" | "closedAt"> & {
+  /** No moderator has picked it up yet, so the player may still cancel. */
+  cancellable: boolean;
+};
 
 /** The few Telegram Bot API calls we use. */
 export interface TelegramApi {
@@ -67,6 +88,8 @@ export interface WithdrawalOptions {
   /** Chat id of the moderators' group (a negative number for groups). */
   moderatorChat: string | null;
   verifyEt?: VerifyEt | null;
+  /** Name on our payout account; when set, the payout receipt's sender must match it. */
+  payoutSenderName?: string | null;
   nameOf?: (profileId: string) => string;
   now?: () => number;
   onUpdate?: (w: Withdrawal) => void;
@@ -120,17 +143,50 @@ export class Withdrawals {
     return this.list().find((w) => w.id === id) ?? null;
   }
 
-  forPlayer(profileId: string, limit = 10): Withdrawal[] {
+  /** A player's own requests, without moderator-only notes. */
+  forPlayer(profileId: string, limit = 10) {
     return this.list()
       .filter((w) => w.profileId === profileId)
       .slice(-limit)
-      .reverse();
+      .reverse()
+      .map((w) => this.view(w));
+  }
+
+  /** What the player sees of a request (no moderator notes). */
+  view(w: Withdrawal): WithdrawalView {
+    return {
+      id: w.id,
+      bank: w.bank,
+      account: w.account,
+      amount: w.amount,
+      status: w.status,
+      reference: w.reference,
+      createdAt: w.createdAt,
+      closedAt: w.closedAt,
+      cancellable: w.status === "pending" && !w.pickedUpBy,
+    };
+  }
+
+  /** The withdrawal that already used payout number `reference`, if any. */
+  private usedBy(reference: string, except: string): Withdrawal | null {
+    return this.list().find((x) => x.id !== except && x.status === "paid" && x.reference && normalizeReference(x.reference) === reference) ?? null;
+  }
+
+  /** The player takes back a request no moderator has picked up yet. */
+  async cancel(profileId: string, id: unknown): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const w = typeof id === "string" ? this.get(id) : null;
+    if (!w || w.profileId !== profileId) return { ok: false, reason: "no such withdrawal" };
+    if (w.status !== "pending") return { ok: false, reason: "that withdrawal is already closed" };
+    if (w.pickedUpBy) return { ok: false, reason: "a moderator is already sending it" };
+    this.wallet.refundWithdrawal(w.profileId, w.amount, w.id);
+    await this.close(w, { status: "cancelled", closedBy: "player" });
+    return { ok: true };
   }
 
   async request(
     profileId: string,
     input: { bank?: unknown; account?: unknown; amount?: unknown },
-  ): Promise<{ ok: true; withdrawal: Withdrawal } | { ok: false; reason: string }> {
+  ): Promise<{ ok: true; withdrawal: WithdrawalView } | { ok: false; reason: string }> {
     if (!this.enabled) return { ok: false, reason: "withdrawals are off" };
     const bank = (["telebirr", "cbe"] as const).find((b) => b === input.bank);
     if (!bank) return { ok: false, reason: "pick Telebirr or CBE" };
@@ -174,7 +230,7 @@ export class Withdrawals {
       // The request stands (the money is held); moderators can still find it with /pending.
       console.warn(`withdrawal ${w.id}: telegram alert failed`, err);
     }
-    return { ok: true, withdrawal: this.get(w.id)! };
+    return { ok: true, withdrawal: this.view(this.get(w.id)!) };
   }
 
   private alertText(w: Withdrawal) {
@@ -185,8 +241,11 @@ export class Withdrawals {
       `Send to: ${BANKS[w.bank]} ${w.account}`,
     ];
     if (w.status === "paid") lines.push(`✅ Paid by ${w.closedBy} · ref ${w.reference}`);
+    if (w.status === "paid" && w.forced) lines.push(`⚠️ Not checked by verify.et. ${w.forced.by}: "${w.forced.reason}"`);
     else if (w.status === "rejected") lines.push(`❌ Rejected by ${w.closedBy} · refunded`);
-    else lines.push("", "Send the money, then tap Paid and reply with the transaction number.");
+    else if (w.status === "cancelled") lines.push("🚫 Cancelled by the player · refunded");
+    else if (w.pickedUpBy) lines.push("", `${w.pickedUpBy} is sending it. Reply to the prompt with the transaction number.`);
+    else lines.push("", "Tap Paid BEFORE you send (so the player can't cancel), send the money, then reply with the transaction number.");
     return lines.join("\n");
   }
 
@@ -245,19 +304,37 @@ export class Withdrawals {
     const cb = update.callback_query;
     if (cb) {
       const [action, id] = String(cb.data ?? "").split(":");
-      if (action !== "paid" && action !== "reject") return;
+      if (!["paid", "reject", "reject!", "force"].includes(action)) return;
       const w = this.get(id);
       const who = cb.from?.username ? `@${cb.from.username}` : (cb.from?.first_name ?? "a moderator");
       await this.opts.telegram!.call("answerCallbackQuery", { callback_query_id: cb.id }).catch(() => {});
-      if (!w || w.status !== "pending") return;
-      if (action === "reject") {
+      if (!w) return;
+      if (w.status !== "pending") {
+        await this.say(`Withdrawal ${w.id} is already ${w.status === "cancelled" ? "cancelled by the player" : w.status}.`);
+        return;
+      }
+      if (action === "reject" && w.unverified) {
+        // A payout number was given: maybe money went out. A refund now would pay twice.
+        await this.say(`Withdrawal ${w.id}: ${w.unverified.reference} was given as its payout. Reject only if NO money was sent; the player gets ${birr(w.amount)} birr back.`, {
+          reply_markup: { inline_keyboard: [[{ text: "❌ Nothing was sent, refund", callback_data: `reject!:${w.id}` }]] },
+        });
+      } else if (action === "reject" || action === "reject!") {
         this.wallet.refundWithdrawal(w.profileId, w.amount, w.id);
         await this.close(w, { status: "rejected", closedBy: who });
       } else if (action === "paid") {
+        if (!w.pickedUpBy) this.patch(w.id, { pickedUpBy: who });
         const prompt = await this.say(`Reply to this message with the ${BANKS[w.bank]} transaction number for withdrawal ${w.id} (${birr(w.amount)} birr to ${w.account}).`, {
           reply_markup: { force_reply: true, selective: true },
         });
         if (prompt?.message_id) this.patch(w.id, { promptMessageId: prompt.message_id });
+        await this.refreshAlert(this.get(w.id)!);
+      } else if (action === "force") {
+        if (!w.unverified) return;
+        const prompt = await this.say(
+          `Confirming withdrawal ${w.id} as paid with ${w.unverified.reference} WITHOUT verify.et's check (${w.unverified.why}). Reply to this message with why you're sure the money reached ${BANKS[w.bank]} ${w.account}. It is recorded with your name.`,
+          { reply_markup: { force_reply: true, selective: true } },
+        );
+        if (prompt?.message_id) this.patch(w.id, { forcePromptMessageId: prompt.message_id });
       }
       return;
     }
@@ -270,39 +347,68 @@ export class Withdrawals {
       return;
     }
     if (!repliedTo || typeof msg.text !== "string") return;
+    const who = msg.from?.username ? `@${msg.from.username}` : (msg.from?.first_name ?? "a moderator");
+
+    const forcing = this.list().find((x) => x.forcePromptMessageId === repliedTo && x.status === "pending");
+    if (forcing?.unverified) {
+      const reason = msg.text.trim().slice(0, 300);
+      if (reason.length < 5) {
+        await this.say("Write a short reason (what you checked). Reply to the prompt again.");
+        return;
+      }
+      const used = this.usedBy(forcing.unverified.reference, forcing.id);
+      if (used) {
+        await this.say(`${forcing.unverified.reference} was already used for withdrawal ${used.id}.`);
+        return;
+      }
+      await this.close(forcing, { status: "paid", reference: forcing.unverified.reference, closedBy: who, forced: { by: who, reason } });
+      await this.say(`⚠️ Withdrawal ${forcing.id} marked paid (${forcing.unverified.reference}) without verify.et's check.`);
+      return;
+    }
+
     const w = this.list().find((x) => x.promptMessageId === repliedTo && x.status === "pending");
     if (!w) return;
-    const reference = msg.text.trim().toUpperCase();
-    if (!/^[A-Z0-9-]{6,40}$/.test(reference)) {
+    const reference = normalizeReference(msg.text.trim());
+    if (!/^[A-Z0-9]{6,40}$/.test(reference)) {
       await this.say("That doesn't look like a transaction number. Reply to the prompt again.");
       return;
     }
-    const who = msg.from?.username ? `@${msg.from.username}` : (msg.from?.first_name ?? "a moderator");
-
-    // With verify.et set up, check the transfer really reached the player's account.
-    if (this.opts.verifyEt) {
-      let result;
-      try {
-        result = await this.opts.verifyEt.verify({ bank: w.bank, reference, settlementAccount: w.account });
-      } catch {
-        result = { state: "failed" as const, reason: "couldn't reach verify.et" };
-      }
-      const ok = result.state === "verified" && result.toUs && result.amount >= w.amount;
-      if (!ok) {
-        const why =
-          result.state === "verified"
-            ? !result.toUs
-              ? `it went to a different account than ${w.account}`
-              : `it was ${birr(result.amount)} birr, not ${birr(w.amount)}`
-            : result.state === "pending"
-              ? "verify.et is still checking"
-              : result.reason;
-        await this.say(`Couldn't confirm ${reference} for withdrawal ${w.id}: ${why}. Check it and reply to the prompt again.`);
-        return;
-      }
+    const used = this.usedBy(reference, w.id);
+    if (used) {
+      await this.say(`${reference} was already used for withdrawal ${used.id}. Reply to the prompt with this payout's own number.`);
+      return;
     }
-    await this.close(w, { status: "paid", reference, closedBy: who });
+    const why = await this.checkPayout(w, reference);
+    if (why) {
+      this.patch(w.id, { unverified: { reference, why } });
+      await this.say(`Couldn't confirm ${reference} for withdrawal ${w.id}: ${why}. Check it and reply to the prompt again, or confirm it by hand if you're sure.`, {
+        reply_markup: { inline_keyboard: [[{ text: "⚠️ Confirm paid anyway", callback_data: `force:${w.id}` }]] },
+      });
+      return;
+    }
+    await this.close(w, { status: "paid", reference, closedBy: who, unverified: null });
     await this.say(`✅ Withdrawal ${w.id} marked paid (${reference}).`);
+  }
+
+  /** Why verify.et doesn't show `reference` as this payout, or null when it does. */
+  private async checkPayout(w: Withdrawal, reference: string): Promise<string | null> {
+    if (!this.opts.verifyEt) return "verify.et isn't set up, so payouts can't be checked";
+    let r;
+    try {
+      r = await this.opts.verifyEt.verify({ bank: w.bank, reference, settlementAccount: w.account });
+    } catch {
+      return "couldn't reach verify.et";
+    }
+    if (r.state === "pending") return "verify.et is still checking";
+    if (r.state === "failed") return r.reason;
+    if (!r.toUs) return `it went to a different account than ${w.account}`;
+    if (r.amount < w.amount) return `it was ${birr(r.amount)} birr, not ${birr(w.amount)}`;
+    if (r.itemStatus && !/^(success|successful|completed)$/i.test(r.itemStatus)) return `the receipt says "${r.itemStatus}"`;
+    if (r.paidAt == null) return "the receipt has no date";
+    if (r.paidAt < w.createdAt - CLOCK_SKEW_MS) return "it was made before the player asked for this withdrawal";
+    const ours = this.opts.payoutSenderName;
+    if (ours && !namesMatch(ours, r.senderName)) return `it was sent by "${r.senderName ?? "?"}", not our account`;
+    return null;
   }
 
   /** Long-poll Telegram for button taps and replies until stop(). */
@@ -342,6 +448,10 @@ export class Withdrawals {
   attach(socket: Socket, profileId: string) {
     socket.on("wallet:withdraw", async (msg: { bank?: unknown; account?: unknown; amount?: unknown }, ack?: (res: unknown) => void) => {
       const res = await this.request(profileId, msg ?? {});
+      if (typeof ack === "function") ack(res);
+    });
+    socket.on("wallet:withdraw-cancel", async (msg: { id?: unknown }, ack?: (res: unknown) => void) => {
+      const res = await this.cancel(profileId, msg?.id);
       if (typeof ack === "function") ack(res);
     });
   }
