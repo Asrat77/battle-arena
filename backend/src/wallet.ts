@@ -95,6 +95,8 @@ export class Wallet {
   private readonly onChange: (profileId: string, balance: number) => void;
   /** Where players can send real money; set by Deposits when deposits are on. */
   depositAccounts: () => { bank: string; account: string }[] = () => [];
+  /** The name this player pays deposits from (locked once one is credited); set by Deposits. */
+  depositPayer: (profileId: string) => { name: string; locked: boolean } | null = () => null;
   /** Withdrawal settings and this player's requests; set by Withdrawals when withdrawals are on. */
   withdrawals: (profileId: string) => { enabled: boolean; minAmount: number; requests: unknown[] } = () => ({
     enabled: false,
@@ -304,6 +306,7 @@ export class Wallet {
       balance: this.balanceOf(profileId),
       faucetReadyAt: this.mode === "play" ? this.faucetReadyAt(profileId) : null,
       depositAccounts: this.depositAccounts(),
+      depositPayer: this.depositPayer(profileId),
       withdrawals: this.withdrawals(profileId),
       history: this.history(profileId),
     };

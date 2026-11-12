@@ -26,9 +26,11 @@ export function useWallet() {
     const onBalance = () => refresh();
     socket.on("wallet:balance", onBalance);
     socket.on("wallet:withdrawal", onBalance);
+    socket.on("wallet:deposit", onBalance);
     return () => {
       socket.off("wallet:balance", onBalance);
       socket.off("wallet:withdrawal", onBalance);
+      socket.off("wallet:deposit", onBalance);
     };
   }, [socket, connected, refresh]);
 
@@ -48,10 +50,10 @@ export function useWallet() {
 
   /** Check a pasted Telebirr/CBE transaction number; resolves once verify.et answers (can take a minute). */
   const deposit = useCallback(
-    (bank: string, reference: string) =>
+    (bank: string, reference: string, payerName: string) =>
       new Promise<DepositResult>((resolve) => {
         if (!socket) return resolve({ ok: false, reason: "Not connected" });
-        socket.emit("wallet:deposit", { bank, reference }, (res: DepositResult) => {
+        socket.emit("wallet:deposit", { bank, reference, payerName }, (res: DepositResult) => {
           if (res.ok) refresh();
           resolve(res);
         });

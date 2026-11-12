@@ -157,4 +157,17 @@ describe("withdrawals", () => {
     assert.equal(normalizeAccount("cbe", "1000 1234 56789"), "1000123456789");
     assert.equal(normalizeAccount("cbe", "123"), null);
   });
+  test("other moderator buttons (deposit reviews) are passed on, not taken as withdrawal taps", async () => {
+    const store = new MemoryStore();
+    const wallet = new Wallet(store, { mode: "real" });
+    const seen: any[] = [];
+    const withdrawals = new Withdrawals(store, wallet, {
+      telegram: fakeTelegram().api,
+      moderatorChat: CHAT,
+      alsoHandle: async (u) => void seen.push(u),
+    });
+    await withdrawals.handleUpdate(tap("dep-ok:abc"));
+    await withdrawals.handleUpdate(tap("dep-ok:abc", "-999"));
+    assert.equal(seen.length, 1, "only updates from the moderators' chat");
+  });
 });

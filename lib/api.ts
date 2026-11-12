@@ -124,6 +124,8 @@ export interface WalletSummary {
   faucetReadyAt: number | null;
   /** Where to send real money; empty while deposits are off. */
   depositAccounts: { bank: string; account: string }[];
+  /** The name on the account this player pays deposits from; locked once a deposit is credited. */
+  depositPayer?: { name: string; locked: boolean } | null;
   withdrawals: { enabled: boolean; minAmount: number; requests: Withdrawal[] };
   history: WalletTxn[];
 }
@@ -133,7 +135,8 @@ export interface Deposit {
   id: string;
   bank: "telebirr" | "cbe";
   reference: string;
-  status: "checking" | "credited" | "rejected";
+  /** review: a moderator has to approve it before it's credited. */
+  status: "checking" | "review" | "credited" | "rejected";
   amount: number | null;
   reason: string | null;
   createdAt: number;
