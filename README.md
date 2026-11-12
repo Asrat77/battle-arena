@@ -114,6 +114,8 @@ The server reads `.env.local`, then `.env` (both git-ignored).
 | `FRONTEND_URL` | server | Allowed CORS origin, default `http://localhost:3000` |
 | `PORT` | server | Server port, default `3001` |
 | `DATA_FILE` | server | Where profiles and the ledger are stored, default `data/db.json` |
+| `WALLET_LOG_FILE` | server | Append-only, hash-chained log of every wallet balance change, default `wallet-log.jsonl` beside `DATA_FILE`. Keep it with `db.json`; never edit it |
+| `ADMIN_TOKEN` | server | At least 24 characters. Turns on the admin wallet routes (`X-Admin-Token` header): `GET /api/admin/wallet/reconcile`, `GET /api/admin/wallet/fees?book=real`, `POST /api/admin/wallet/adjust`. Unset: those routes answer 404 |
 | `WALLET_MODE` | server | `play` (default): staked matches use play money with a daily free top-up. `real`: real birr, with deposits checked by verify.et, but only together with `REAL_MONEY_LEGAL_OK=1` |
 | `REAL_MONEY_LEGAL_OK` | server | Set to `1` only once real-money play is legally cleared (licence, age checks, terms). Without it `WALLET_MODE=real` is ignored and the server logs a warning. Play and real balances are kept apart, so switching modes never turns play birr into real birr |
 | `VERIFY_ET_KEY` | server | verify.et API key for checking deposit receipts. Never prefix it with `NEXT_PUBLIC_` |
