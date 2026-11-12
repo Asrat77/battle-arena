@@ -28,7 +28,7 @@ servers:
         TRUST_PROXY: "1"
       secret:
         - LEDGER_PRIVATE_KEY
-        # Staked matches (see README). WALLET_MODE=real turns on real money.
+        # Staked matches (see README). WALLET_MODE=real needs REAL_MONEY_LEGAL_OK=1 too (see deploy/README.md).
         - WALLET_MODE
         - VERIFY_ET_KEY
         - DEPOSIT_TELEBIRR

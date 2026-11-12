@@ -7,7 +7,12 @@
 //
 // WALLET_MODE=play (the default) uses play money only: players top up from a
 // free daily faucet and nothing is ever worth real birr. Real deposits and
-// withdrawals come later, behind WALLET_MODE=real.
+// withdrawals need WALLET_MODE=real *and* REAL_MONEY_LEGAL_OK=1 (audit C3).
+//
+// Play and real money are two separate books (store keys wallet:play and
+// wallet:real), so flipping WALLET_MODE never turns faucet birr into
+// withdrawable birr (audit H6). Deposits, withdrawals and their refunds always
+// touch the real book; stakes and the faucet use the book of the current mode.
 
 import { randomBytes } from "node:crypto";
 import { Router } from "express";
@@ -17,7 +22,11 @@ import { bearerToken, type Identity } from "./identity";
 import { own } from "./safe";
 import type { Store } from "./store";
 
-const WALLET = "wallet";
+/** Before the split (audit H6) both kinds of money shared this one key. */
+const LEGACY = "wallet";
+const BOOKS: Record<WalletMode, string> = { play: "wallet:play", real: "wallet:real" };
+/** What real money the old shared book held, kept for a manual check after the split. */
+export const LEGACY_REPORT = "walletLegacyReport";
 /** Fees collect here. Not a profile, so nobody can spend it. */
 export const PLATFORM_ACCOUNT = "platform";
 
@@ -116,10 +125,53 @@ export class Wallet {
     this.faucetAmount = opts.faucetAmount ?? DEFAULTS.faucetAmount;
     this.faucetWindowMs = opts.faucetWindowMs ?? DEFAULTS.faucetWindowMs;
     this.onChange = opts.onChange ?? (() => {});
+    this.migrate();
   }
 
-  private data(): WalletData {
-    return this.store.read<WalletData>(WALLET, { balances: {}, txns: [], escrows: {}, lastFaucet: {} });
+  /**
+   * The old single book becomes the play book: it mixed faucet birr with real
+   * deposits, so none of it may become withdrawable. Real money it held is
+   * listed under LEGACY_REPORT (and logged) for a manual refund. Escrows still
+   * held in it are refunded on boot like any other (refundAllHeld covers both books).
+   */
+  private migrate() {
+    const legacy = this.store.read<WalletData | null>(LEGACY, null);
+    if (!legacy) return;
+    if (this.store.read<WalletData | null>(BOOKS.play, null) === null) {
+      const real: Record<string, { deposited: number; withdrawn: number; refunded: number; balance: number }> = {};
+      for (const t of legacy.txns) {
+        if (t.kind !== "deposit" && t.kind !== "withdrawal" && t.kind !== "withdrawal-refund") continue;
+        const r = (real[t.profileId] ??= { deposited: 0, withdrawn: 0, refunded: 0, balance: 0 });
+        if (t.kind === "deposit") r.deposited += t.amount;
+        else if (t.kind === "withdrawal") r.withdrawn -= t.amount;
+        else r.refunded += t.amount;
+      }
+      for (const [id, r] of Object.entries(real)) r.balance = own(legacy.balances, id) ?? 0;
+      this.store.write(BOOKS.play, legacy);
+      if (Object.keys(real).length > 0) {
+        this.store.write(LEGACY_REPORT, { migratedAt: this.now(), profiles: real });
+        console.warn(`wallet: old shared book moved to play money; ${Object.keys(real).length} profile(s) had real deposits, see ${LEGACY_REPORT}`);
+      }
+    }
+    this.store.remove(LEGACY);
+  }
+
+  private data(mode: WalletMode = this.mode): WalletData {
+    return this.store.read<WalletData>(BOOKS[mode], { balances: {}, txns: [], escrows: {}, lastFaucet: {} });
+  }
+
+  /** The book that holds this escrow, current mode first. */
+  private findEscrow(id: string): { mode: WalletMode; d: WalletData; e: Escrow } | null {
+    for (const mode of this.modes()) {
+      const d = this.data(mode);
+      const e = own(d.escrows, id);
+      if (e) return { mode, d, e };
+    }
+    return null;
+  }
+
+  private modes(): WalletMode[] {
+    return this.mode === "real" ? ["real", "play"] : ["play", "real"];
   }
 
   balanceOf(profileId: string): number {
@@ -135,11 +187,15 @@ export class Wallet {
   }
 
   escrow(id: string): Escrow | null {
-    return own(this.data().escrows, id) ?? null;
+    return this.findEscrow(id)?.e ?? null;
   }
 
   escrowForMatch(matchId: string): Escrow | null {
-    return Object.values(this.data().escrows).find((e) => e.matchId === matchId) ?? null;
+    for (const mode of this.modes()) {
+      const e = Object.values(this.data(mode).escrows).find((x) => x.matchId === matchId);
+      if (e) return e;
+    }
+    return null;
   }
 
   /** Is this stake allowed, before anyone's balance is looked at? */
@@ -167,7 +223,7 @@ export class Wallet {
     const d = this.data();
     d.lastFaucet[profileId] = this.now();
     this.move(d, profileId, this.faucetAmount, "faucet", null);
-    this.save(d, [profileId]);
+    this.save(d, this.mode, [profileId]);
     return { ok: true, balance: d.balances[profileId] };
   }
 
@@ -195,16 +251,15 @@ export class Wallet {
     };
     d.escrows[escrow.id] = escrow;
     for (const p of players) this.move(d, p, -stake, "hold", escrow.id);
-    this.save(d, players);
+    this.save(d, this.mode, players);
     return { ok: true, escrow };
   }
 
   bind(escrowId: string, matchId: string): void {
-    const d = this.data();
-    const e = d.escrows[escrowId];
-    if (!e || e.status !== "held") return;
-    e.matchId = matchId;
-    this.store.write(WALLET, d);
+    const found = this.findEscrow(escrowId);
+    if (!found || found.e.status !== "held") return;
+    found.e.matchId = matchId;
+    this.store.write(BOOKS[found.mode], found.d);
   }
 
   /** What the winner takes home from a pot of two stakes. */
@@ -216,10 +271,10 @@ export class Wallet {
 
   /** Pay out a finished match. A draw refunds both stakes with no fee. */
   settle(escrowId: string, outcome: Pick<Outcome, "winner" | "draw">): Escrow | null {
-    const d = this.data();
-    const e = d.escrows[escrowId];
-    if (!e || e.status !== "held") return null;
-    if (outcome.draw || outcome.winner === null) return this.refundIn(d, e);
+    const found = this.findEscrow(escrowId);
+    if (!found || found.e.status !== "held") return null;
+    const { mode, d, e } = found;
+    if (outcome.draw || outcome.winner === null) return this.refundIn(mode, d, e);
     const winner = e.players[outcome.winner];
     const { prize, fee } = this.payout(e.stake, e.feeBps);
     this.move(d, winner, prize, "win", e.id);
@@ -227,16 +282,15 @@ export class Wallet {
     e.status = "settled";
     e.winner = outcome.winner;
     e.closedAt = this.now();
-    this.save(d, [winner]);
+    this.save(d, mode, [winner]);
     return e;
   }
 
   /** Give both stakes back (match never started, aborted, or a draw). */
   refund(escrowId: string): Escrow | null {
-    const d = this.data();
-    const e = d.escrows[escrowId];
-    if (!e || e.status !== "held") return null;
-    return this.refundIn(d, e);
+    const found = this.findEscrow(escrowId);
+    if (!found || found.e.status !== "held") return null;
+    return this.refundIn(found.mode, found.d, found.e);
   }
 
   /**
@@ -245,17 +299,19 @@ export class Wallet {
    * died with the old process.
    */
   refundAllHeld(resumed: ReadonlySet<string> = new Set()): Escrow[] {
-    const d = this.data();
-    return Object.values(d.escrows)
-      .filter((e) => e.status === "held" && !(e.matchId && resumed.has(e.matchId)))
-      .map((e) => this.refundIn(d, e));
+    return this.modes().flatMap((mode) => {
+      const d = this.data(mode);
+      return Object.values(d.escrows)
+        .filter((e) => e.status === "held" && !(e.matchId && resumed.has(e.matchId)))
+        .map((e) => this.refundIn(mode, d, e));
+    });
   }
 
-  private refundIn(d: WalletData, e: Escrow): Escrow {
+  private refundIn(mode: WalletMode, d: WalletData, e: Escrow): Escrow {
     for (const p of e.players) this.move(d, p, e.stake, "release", e.id);
     e.status = "refunded";
     e.closedAt = this.now();
-    this.save(d, e.players);
+    this.save(d, mode, e.players);
     return e;
   }
 
@@ -263,38 +319,45 @@ export class Wallet {
   deposit(profileId: string, amount: number, ref: string): Result<{ balance: number }> {
     if (this.mode !== "real") return { ok: false, reason: "real money is off" };
     if (!Number.isInteger(amount) || amount <= 0) return { ok: false, reason: "bad amount" };
-    const d = this.data();
+    const d = this.data("real");
     this.move(d, profileId, amount, "deposit", ref);
-    this.save(d, [profileId]);
+    this.save(d, "real", [profileId]);
     return { ok: true, balance: d.balances[profileId] };
   }
 
   /** The credit for deposit `ref`, if the wallet has one (used after a restart). */
   depositTxn(ref: string): Txn | null {
-    return this.data().txns.find((t) => t.kind === "deposit" && t.ref === ref) ?? null;
+    return this.txnFor("deposit", ref);
   }
 
-  /** The first transaction of this kind for `ref`, if any (used after a restart). */
+  /**
+   * The first transaction of this kind for `ref`, if any (used after a restart).
+   * Looks in the real book, then the play book (money moved before the split lives there).
+   */
   txnFor(kind: TxnKind, ref: string): Txn | null {
-    return this.data().txns.find((t) => t.kind === kind && t.ref === ref) ?? null;
+    for (const mode of ["real", "play"] as const) {
+      const t = this.data(mode).txns.find((x) => x.kind === kind && x.ref === ref);
+      if (t) return t;
+    }
+    return null;
   }
 
   /** Take money out for a withdrawal request (refunded if moderators reject it). Real mode only. */
   withdraw(profileId: string, amount: number, ref: string): Result<{ balance: number }> {
     if (this.mode !== "real") return { ok: false, reason: "real money is off" };
     if (!Number.isInteger(amount) || amount <= 0) return { ok: false, reason: "bad amount" };
-    const d = this.data();
+    const d = this.data("real");
     if ((d.balances[profileId] ?? 0) < amount) return { ok: false, reason: "insufficient balance" };
     this.move(d, profileId, -amount, "withdrawal", ref);
-    this.save(d, [profileId]);
+    this.save(d, "real", [profileId]);
     return { ok: true, balance: d.balances[profileId] };
   }
 
-  /** Give back a withdrawal that moderators rejected. */
+  /** Give back a withdrawal that moderators rejected. Always real money, whatever the mode now. */
   refundWithdrawal(profileId: string, amount: number, ref: string) {
-    const d = this.data();
+    const d = this.data("real");
     this.move(d, profileId, amount, "withdrawal-refund", ref);
-    this.save(d, [profileId]);
+    this.save(d, "real", [profileId]);
   }
 
   private move(d: WalletData, profileId: string, amount: number, kind: TxnKind, ref: string | null) {
@@ -304,8 +367,10 @@ export class Wallet {
     d.txns.push({ id: randomBytes(6).toString("hex"), profileId, kind, amount, balance, ref, ts: this.now() });
   }
 
-  private save(d: WalletData, changed: string[]) {
-    this.store.write(WALLET, d);
+  private save(d: WalletData, mode: WalletMode, changed: string[]) {
+    this.store.write(BOOKS[mode], d);
+    // Open tabs show the current mode's balance only.
+    if (mode !== this.mode) return;
     for (const p of new Set(changed)) if (p !== PLATFORM_ACCOUNT) this.onChange(p, d.balances[p] ?? 0);
   }
 
@@ -350,8 +415,16 @@ export class Wallet {
   }
 }
 
-export function walletModeFromEnv(value = process.env.WALLET_MODE): WalletMode {
-  return value === "real" ? "real" : "play";
+/**
+ * Real money needs two settings: WALLET_MODE=real and REAL_MONEY_LEGAL_OK=1, the
+ * second set only once real-money play is legally cleared (audit C3). Either one
+ * alone keeps play money.
+ */
+export function walletModeFromEnv(value = process.env.WALLET_MODE, legalOk = process.env.REAL_MONEY_LEGAL_OK): WalletMode {
+  if (value !== "real") return "play";
+  if (legalOk?.trim() === "1") return "real";
+  console.warn("WALLET_MODE=real ignored: REAL_MONEY_LEGAL_OK=1 is not set, so the wallet stays on play money");
+  return "play";
 }
 
 export function walletRoutes(wallet: Wallet, identity: Identity): Router {

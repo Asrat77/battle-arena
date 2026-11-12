@@ -9,7 +9,7 @@ import { createApp } from "./app";
 import { FakeClock } from "./clock";
 import { DISCONNECT_FORFEIT_MS } from "./matches";
 import { MemoryStore } from "./store";
-import { BIRR, DEFAULTS, PLATFORM_ACCOUNT, Wallet, walletModeFromEnv } from "./wallet";
+import { BIRR, DEFAULTS, LEGACY_REPORT, PLATFORM_ACCOUNT, Wallet, walletModeFromEnv } from "./wallet";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -131,10 +131,85 @@ describe("escrow", () => {
   });
 });
 
-test("WALLET_MODE only turns real money on when set to real", () => {
-  assert.equal(walletModeFromEnv(undefined), "play");
-  assert.equal(walletModeFromEnv("yes"), "play");
-  assert.equal(walletModeFromEnv("real"), "real");
+test("real money needs WALLET_MODE=real and REAL_MONEY_LEGAL_OK=1 (audit C3)", () => {
+  assert.equal(walletModeFromEnv(undefined, undefined), "play");
+  assert.equal(walletModeFromEnv("yes", "1"), "play");
+  assert.equal(walletModeFromEnv("real", undefined), "play");
+  assert.equal(walletModeFromEnv("real", "0"), "play");
+  assert.equal(walletModeFromEnv("real", "yes"), "play");
+  assert.equal(walletModeFromEnv("real", "1"), "real");
+});
+
+describe("play and real books (audit H6)", () => {
+  test("faucet birr never shows up, or can be withdrawn, after a switch to real mode", () => {
+    const store = new MemoryStore();
+    const play = new Wallet(store, { mode: "play" });
+    assert.ok(play.faucet("a").ok);
+    assert.equal(play.balanceOf("a"), DEFAULTS.faucetAmount);
+
+    const real = new Wallet(store, { mode: "real" });
+    assert.equal(real.balanceOf("a"), 0);
+    assert.deepEqual(real.withdraw("a", 100 * BIRR, "w1"), { ok: false, reason: "insufficient balance" });
+    assert.ok(real.deposit("a", 70 * BIRR, "d1").ok);
+    assert.equal(real.balanceOf("a"), 70 * BIRR);
+
+    // And back: the real deposit is not play money either.
+    const again = new Wallet(store, { mode: "play" });
+    assert.equal(again.balanceOf("a"), DEFAULTS.faucetAmount);
+  });
+
+  test("a stake held in one book still settles in it after the mode changes", () => {
+    const store = new MemoryStore();
+    const play = new Wallet(store, { mode: "play" });
+    play.faucet("a");
+    play.faucet("b");
+    const held = play.hold(["a", "b"], 100 * BIRR);
+    assert.ok(held.ok);
+    play.bind(held.escrow.id, "m1");
+
+    const real = new Wallet(store, { mode: "real" });
+    assert.equal(real.escrowForMatch("m1")?.id, held.escrow.id);
+    real.settle(held.escrow.id, { winner: 0, draw: false });
+    assert.equal(real.balanceOf("a"), 0, "the prize is play money, not real");
+    assert.equal(new Wallet(store, { mode: "play" }).balanceOf("a"), DEFAULTS.faucetAmount - 100 * BIRR + 180 * BIRR);
+  });
+
+  test("withdrawal refunds go to the real book even in play mode", () => {
+    const store = new MemoryStore();
+    const real = new Wallet(store, { mode: "real" });
+    real.deposit("a", 100 * BIRR, "d1");
+    real.withdraw("a", 100 * BIRR, "w1");
+    const play = new Wallet(store, { mode: "play" });
+    play.refundWithdrawal("a", 100 * BIRR, "w1");
+    assert.equal(play.balanceOf("a"), 0);
+    assert.equal(play.txnFor("withdrawal-refund", "w1")?.amount, 100 * BIRR);
+    assert.equal(new Wallet(store, { mode: "real" }).balanceOf("a"), 100 * BIRR);
+  });
+
+  test("the old shared book becomes play money and its real deposits are reported", () => {
+    const store = new MemoryStore();
+    const ts = 1;
+    store.write("wallet", {
+      balances: { a: 150 * BIRR, b: 500 * BIRR },
+      txns: [
+        { id: "1", profileId: "a", kind: "deposit", amount: 200 * BIRR, balance: 200 * BIRR, ref: "dep1", ts },
+        { id: "2", profileId: "a", kind: "withdrawal", amount: -50 * BIRR, balance: 150 * BIRR, ref: "w1", ts },
+        { id: "3", profileId: "b", kind: "faucet", amount: 500 * BIRR, balance: 500 * BIRR, ref: null, ts },
+      ],
+      escrows: {},
+      lastFaucet: { b: ts },
+    });
+    const real = new Wallet(store, { mode: "real" });
+    assert.equal(store.read("wallet", null), null, "old key removed");
+    assert.equal(real.balanceOf("a"), 0, "mixed money is not withdrawable");
+    assert.equal(new Wallet(store, { mode: "play" }).balanceOf("a"), 150 * BIRR);
+    assert.deepEqual(store.read<any>(LEGACY_REPORT, null).profiles, {
+      a: { deposited: 200 * BIRR, withdrawn: 50 * BIRR, refunded: 0, balance: 150 * BIRR },
+    });
+    // Restart recovery still finds money moved before the split.
+    assert.equal(real.depositTxn("dep1")?.amount, 200 * BIRR);
+    assert.equal(real.txnFor("withdrawal", "w1")?.amount, -50 * BIRR);
+  });
 });
 
 describe("app", () => {
