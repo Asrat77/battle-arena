@@ -116,6 +116,8 @@ export function createApp(options: AppOptions = {}) {
     ...options.deposits,
     onUpdate: (deposit) => io.to(profileRoom(deposit.profileId)).emit("wallet:deposit", deposit),
   });
+  // A deposit check that was running when the last process died: finish or release it.
+  deposits.recover();
   wallet.depositAccounts = () => deposits.accounts();
   wallet.depositPayer = (id) => deposits.payer(id);
   const withdrawals = new Withdrawals(store, wallet, {
