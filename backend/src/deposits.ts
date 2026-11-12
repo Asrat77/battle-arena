@@ -19,6 +19,7 @@
 
 import { randomBytes } from "node:crypto";
 import type { Socket } from "socket.io";
+import { RateLimiter } from "./rateLimit";
 import type { Store } from "./store";
 import { BIRR, type Wallet } from "./wallet";
 
@@ -32,6 +33,13 @@ export const RETRY_MS = 5_000;
 export const RETRIES = 2;
 /** A transfer older than this goes to a moderator instead of being credited at once. */
 export const MAX_TRANSFER_AGE_MS = 24 * 60 * 60_000;
+/**
+ * Each check can spend up to 1 + RETRIES of verify.et's monthly credits, so
+ * checks are limited per account and per IP, one at a time per account.
+ */
+export const DEPOSIT_LIMITS = { perAccount: 5, perIp: 15, windowMs: 60 * 60_000 };
+/** How often to remind moderators that verify.et credits ran out. */
+const CREDITS_ALERT_EVERY_MS = 60 * 60_000;
 /** Phone and server clocks differ a little. */
 const CLOCK_SLACK_MS = 10 * 60_000;
 
@@ -59,7 +67,7 @@ export type VerifyResult =
       ambiguous?: boolean;
     }
   /** retry: a passing problem (bank slow, verify.et busy), worth asking again. */
-  | { state: "failed"; reason: string; retry?: boolean };
+  | { state: "failed"; reason: string; retry?: boolean; creditsOut?: boolean };
 
 export interface VerifyEt {
   verify(input: { bank: DepositBank; reference: string; settlementAccount: string }): Promise<VerifyResult>;
@@ -109,7 +117,7 @@ export function httpVerifyEt(apiKey: string, baseUrl = "https://verify.et"): Ver
   const call = async (path: string, init: RequestInit = {}) => {
     const res = await fetch(baseUrl + path, { ...init, headers: { ...headers, ...init.headers } });
     const body: any = await res.json().catch(() => ({}));
-    if (res.status === 402) return { state: "failed", reason: "verification credits used up" } as const;
+    if (res.status === 402) return { state: "failed", reason: "deposits are paused for now, try again later", creditsOut: true } as const;
     if (res.status === 429 || res.status === 503) return { state: "failed", reason: "verify.et is busy, try again shortly", retry: true } as const;
     if (!res.ok && res.status !== 202) {
       const reason = String(body?.message || `verify.et error ${res.status}`);
@@ -191,6 +199,9 @@ export interface DepositOptions {
   /** Where deposits needing a human go. Without it they wait in review (logged). */
   moderators?: ModeratorChat | null;
   nameOf?: (profileId: string) => string;
+  limits?: Partial<typeof DEPOSIT_LIMITS>;
+  /** The caller's IP for a socket (real client IP behind a proxy). */
+  ipOf?: (socket: Socket) => string;
 }
 
 export function depositAccountsFromEnv(env: Record<string, string | undefined> = process.env): Partial<Record<DepositBank, string>> {
@@ -253,6 +264,11 @@ export class Deposits {
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly onUpdate: (deposit: Deposit) => void;
   private readonly nameOf: (profileId: string) => string;
+  private readonly accountLimit: RateLimiter;
+  private readonly ipLimit: RateLimiter;
+  /** Accounts with a check running now. */
+  private readonly inFlight = new Set<string>();
+  private creditsAlertAt = -Infinity;
 
   constructor(
     private readonly store: Store,
@@ -263,6 +279,9 @@ export class Deposits {
     this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
     this.onUpdate = opts.onUpdate ?? (() => {});
     this.nameOf = opts.nameOf ?? ((id) => id);
+    const limits = { ...DEPOSIT_LIMITS, ...opts.limits };
+    this.accountLimit = new RateLimiter(limits.perAccount, limits.windowMs, this.now);
+    this.ipLimit = new RateLimiter(limits.perIp, limits.windowMs, this.now);
   }
 
   /** Deposits need real mode, a verify.et key and somewhere to send money. */
@@ -306,6 +325,7 @@ export class Deposits {
     rawBank: unknown,
     rawReference: unknown,
     rawPayerName?: unknown,
+    ip?: string,
   ): Promise<{ ok: true; deposit: Deposit } | { ok: false; reason: string }> {
     if (!this.enabled) return { ok: false, reason: "deposits are off" };
     const bank = DEPOSIT_BANKS.find((b) => b === rawBank);
@@ -329,6 +349,14 @@ export class Deposits {
       if (nameWords(payerName).length < 2) return { ok: false, reason: "enter the full name on the account you pay from" };
       d.payers[profileId] = { name: payerName, locked: false };
     }
+
+    // Every check below spends verify.et credits: one at a time, and only so many an hour.
+    if (this.inFlight.has(profileId)) return { ok: false, reason: "a deposit is already being checked, wait for it to finish" };
+    if (!this.accountLimit.take(profileId) || (ip !== undefined && !this.ipLimit.take(ip))) {
+      console.warn(`deposit rate limit hit by ${profileId} from ${ip ?? "?"}`);
+      return { ok: false, reason: "too many deposit checks, try again in an hour" };
+    }
+    this.inFlight.add(profileId);
     const deposit: Deposit = {
       id: randomBytes(8).toString("hex"),
       profileId,
@@ -358,8 +386,22 @@ export class Deposits {
       }
     } catch {
       result = { state: "failed", reason: "couldn't reach verify.et, try again shortly" };
+    } finally {
+      this.inFlight.delete(profileId);
     }
+    if (result.state === "failed" && result.creditsOut) await this.creditsOut();
     return { ok: true, deposit: await this.close(deposit.id, result) };
+  }
+
+  /** verify.et answered 402: no credits left. Tell the moderators (at most hourly). */
+  private async creditsOut() {
+    const now = this.now();
+    if (now - this.creditsAlertAt < CREDITS_ALERT_EVERY_MS) return;
+    this.creditsAlertAt = now;
+    const text = "⚠️ verify.et credits are used up (HTTP 402). Deposits can't be checked until the plan is topped up or the month resets.";
+    console.error(text);
+    const mods = this.opts.moderators;
+    if (mods) await mods.call("sendMessage", { chat_id: mods.chatId, text }).catch((err) => console.warn("telegram alert failed", err));
   }
 
   /** Why a verified transfer to us can't be credited without a human, or null. */
@@ -515,7 +557,8 @@ export class Deposits {
   /** wallet:deposit { bank, reference, payerName } over the signed-in socket. */
   attach(socket: Socket, profileId: string) {
     socket.on("wallet:deposit", async (msg: { bank?: unknown; reference?: unknown; payerName?: unknown }, ack?: (res: unknown) => void) => {
-      const res = await this.submit(profileId, msg?.bank, msg?.reference, msg?.payerName);
+      const ip = this.opts.ipOf ? this.opts.ipOf(socket) : socket.handshake.address;
+      const res = await this.submit(profileId, msg?.bank, msg?.reference, msg?.payerName, ip);
       if (typeof ack === "function") ack(res);
     });
   }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { Deposits, depositAccountsFromEnv, namesMatch, parseReference, httpVerifyEt, MIN_DEPOSIT, POLL_TRIES, RETRIES, type VerifyEt, type VerifyResult } from "./deposits";
+import { Deposits, DEPOSIT_LIMITS, depositAccountsFromEnv, namesMatch, parseReference, httpVerifyEt, MIN_DEPOSIT, POLL_TRIES, RETRIES, type VerifyEt, type VerifyResult } from "./deposits";
 import { MemoryStore } from "./store";
 import { BIRR, Wallet } from "./wallet";
 
@@ -48,6 +48,7 @@ function setup(answers: Record<string, VerifyResult | VerifyResult[]>, opts: { m
     accounts: ACCOUNTS,
     sleep: async () => {},
     onUpdate: (d) => updates.push(d.status),
+    limits: { perAccount: 100 },
   });
   return { wallet, deposits, calls: fake.calls, updates };
 }
@@ -193,6 +194,7 @@ function guarded(answers: Record<string, VerifyResult | VerifyResult[]>, opts: {
     receiverName: opts.receiverName ?? null,
     accountCreatedAt: () => opts.createdAt ?? 0,
     moderators: tg.chat,
+    limits: { perAccount: 100 },
   });
   const tap = (data: string, chat = "-42") =>
     deposits.handleUpdate({ callback_query: { id: "cb", data, from: { username: "mod" }, message: { chat: { id: chat } } } });
@@ -296,6 +298,73 @@ describe("deposits: who paid and when (audit H1, M4, M10)", () => {
     assert.ok(namesMatch("Abebe", "Abebe Kebede"), "one word given: one hit (submit asks for two words anyway)");
     assert.ok(!namesMatch("", "Abebe Kebede"));
     assert.ok(!namesMatch("Abebe Bikila", null));
+  });
+});
+
+describe("deposits: verify.et credits (audit H2)", () => {
+  function limited(answers: Record<string, VerifyResult | VerifyResult[]>, verify?: VerifyEt["verify"]) {
+    const store = new MemoryStore();
+    const wallet = new Wallet(store, { mode: "real" });
+    const tg = fakeTelegram();
+    const fake = fakeVerifyEt(answers);
+    let t = 1_000_000;
+    const deposits = new Deposits(store, wallet, {
+      verifyEt: verify ? { ...fake.api, verify } : fake.api,
+      accounts: ACCOUNTS,
+      sleep: async () => {},
+      now: () => t,
+      moderators: tg.chat,
+    });
+    return { deposits, calls: fake.calls, tg, later: (ms: number) => (t += ms) };
+  }
+
+  test("checks per account are limited, and a refused try costs no credit", async () => {
+    const { deposits, calls, later } = limited({});
+    for (let i = 0; i < DEPOSIT_LIMITS.perAccount; i++) {
+      assert.equal((await deposits.submit("a", "telebirr", `CH12NOPE0${i}`, PAYER, "1.1.1.1")).ok, true);
+    }
+    assert.deepEqual(await deposits.submit("a", "telebirr", "CH12NOPE99", PAYER, "1.1.1.1"), { ok: false, reason: "too many deposit checks, try again in an hour" });
+    assert.equal(calls.length, DEPOSIT_LIMITS.perAccount);
+    later(DEPOSIT_LIMITS.windowMs + 1);
+    assert.equal((await deposits.submit("a", "telebirr", "CH12NOPE99", PAYER, "1.1.1.1")).ok, true);
+  });
+
+  test("checks per IP are limited across accounts", async () => {
+    const { deposits, calls } = limited({});
+    for (let i = 0; i < DEPOSIT_LIMITS.perIp; i++) {
+      assert.equal((await deposits.submit(`p${i}`, "telebirr", `CH12IPIP${String(i).padStart(2, "0")}`, PAYER, "6.6.6.6")).ok, true);
+    }
+    assert.equal((await deposits.submit("fresh", "telebirr", "CH12IPIP99", PAYER, "6.6.6.6")).ok, false);
+    assert.equal((await deposits.submit("fresh", "telebirr", "CH12IPIP99", PAYER, "7.7.7.7")).ok, true);
+    assert.equal(calls.length, DEPOSIT_LIMITS.perIp + 1);
+  });
+
+  test("one check at a time per account", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const { deposits } = limited({}, async () => {
+      await gate;
+      return { state: "failed", reason: "transaction not found" };
+    });
+    const first = deposits.submit("a", "telebirr", "CH12SLOW01", PAYER);
+    assert.deepEqual(await deposits.submit("a", "telebirr", "CH12SLOW02", PAYER), { ok: false, reason: "a deposit is already being checked, wait for it to finish" });
+    release();
+    assert.equal((await first).ok, true);
+    assert.equal((await deposits.submit("a", "telebirr", "CH12SLOW02", PAYER)).ok, true);
+  });
+
+  test("running out of credits (402) alerts moderators once an hour", async () => {
+    const out: VerifyResult = { state: "failed", reason: "deposits are paused for now, try again later", creditsOut: true };
+    const { deposits, tg, later } = limited({ CH12CRED01: out, CH12CRED02: out, CH12CRED03: out });
+    const r = await deposits.submit("a", "telebirr", "CH12CRED01", PAYER);
+    assert.ok(r.ok);
+    assert.equal(r.deposit.status, "rejected");
+    await deposits.submit("b", "telebirr", "CH12CRED02", PAYER);
+    const alerts = () => tg.sent.filter((m) => /credits are used up/.test(String(m.params.text))).length;
+    assert.equal(alerts(), 1);
+    later(60 * 60_000);
+    await deposits.submit("c", "telebirr", "CH12CRED03", PAYER);
+    assert.equal(alerts(), 2);
   });
 });
 
@@ -404,7 +473,7 @@ describe("httpVerifyEt", () => {
       assert.deepEqual(await httpVerifyEt("K").status("r2"), { state: "pending", requestId: "r2" });
     });
     await withFetch(402, { message: "no credits" }, async () => {
-      assert.deepEqual(await httpVerifyEt("K").status("r2"), { state: "failed", reason: "verification credits used up" });
+      assert.deepEqual(await httpVerifyEt("K").status("r2"), { state: "failed", reason: "deposits are paused for now, try again later", creditsOut: true });
     });
     await withFetch(200, { message: "Not found", data: [{ verified: false }], verification: { processingStatus: "completed", verified: false } }, async () => {
       assert.deepEqual(await httpVerifyEt("K").status("r3"), { state: "failed", reason: "Not found", retry: false });

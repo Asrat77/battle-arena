@@ -105,6 +105,14 @@ export function createApp(options: AppOptions = {}) {
     accountCreatedAt: (id) => identity.get(id)?.createdAt ?? null,
     moderators: telegram && moderatorChat ? { call: (m, p) => telegram.call(m, p), chatId: moderatorChat } : null,
     nameOf,
+    // Behind TRUST_PROXY hops, the client is that many entries from the end of X-Forwarded-For.
+    ipOf: (socket) => {
+      const fwd = String(socket.handshake.headers["x-forwarded-for"] ?? "")
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean);
+      return hops > 0 && fwd.length >= hops ? fwd[fwd.length - hops] : socket.handshake.address;
+    },
     ...options.deposits,
     onUpdate: (deposit) => io.to(profileRoom(deposit.profileId)).emit("wallet:deposit", deposit),
   });
