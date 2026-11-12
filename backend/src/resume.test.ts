@@ -142,4 +142,33 @@ describe("restart", () => {
     assert.equal(app.wallet.escrow(escrowId)?.status, "settled");
     app.io.close();
   });
+
+  test("the first to leave forfeits even if the other drops later (review R1)", async () => {
+    const app = boot(new MemoryStore());
+    const { alice, bob, m, escrowId } = stakedMatch(app);
+    await new Promise<void>((resolve) => app.httpServer.listen(0, resolve));
+    const url = `http://localhost:${(app.httpServer.address() as AddressInfo).port}`;
+    const join = async (token: string) => {
+      const s = connect(url, { auth: { token }, transports: ["websocket"], forceNew: true, reconnection: false });
+      await new Promise<void>((resolve) => s.once("connect", resolve));
+      return s;
+    };
+    const wait = () => new Promise((r) => setTimeout(r, 50));
+    const a = await join(alice.token);
+    const b = await join(bob.token);
+    await wait();
+    assert.deepEqual(m.away, [null, null]);
+    // Alice (losing) leaves; Bob drops 27 s later, before Alice's 30 s are up.
+    a.disconnect();
+    await wait();
+    app.clock.advance(27_000);
+    b.disconnect();
+    await wait();
+    app.clock.advance(3_000);
+    const aliceSeat = m.players.indexOf(alice.profile.id);
+    assert.deepEqual(m.cur.outcome, { winner: aliceSeat === 0 ? 1 : 0, draw: false, reason: "forfeit" });
+    assert.equal(app.wallet.escrow(escrowId)?.status, "settled");
+    assert.equal(app.wallet.balanceOf(bob.profile.id), DEFAULTS.faucetAmount + 80 * BIRR);
+    app.io.close();
+  });
 });
