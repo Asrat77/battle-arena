@@ -70,6 +70,12 @@ export interface Txn {
   /** Manual adjustments: why, and who made it. */
   note?: string;
   by?: string;
+  /**
+   * A win paid with an opponent's stake that came from deposit money still on hold:
+   * this much of it can't be withdrawn before `heldUntil` (review R5).
+   */
+  heldAmount?: number;
+  heldUntil?: number;
 }
 
 export type EscrowStatus = "held" | "settled" | "refunded";
@@ -85,6 +91,11 @@ export interface Escrow {
   closedAt: number | null;
   /** Seat paid on a win; null on a draw or refund. */
   winner: 0 | 1 | null;
+  /**
+   * Real money only: per seat, how much of the stake was deposit money still on
+   * hold, and until when. A winner takes over the loser's hold (review R5).
+   */
+  heldStake?: [{ amount: number; until: number } | null, { amount: number; until: number } | null];
 }
 
 interface WalletData {
@@ -286,6 +297,15 @@ export class Wallet {
       closedAt: null,
       winner: null,
     };
+    if (this.mode === "real") {
+      // Stake paid from deposit money still on hold: the hold travels with it to the winner.
+      const parts = players.map((p) => {
+        const w = this.withdrawable(p);
+        const amount = Math.min(stake, w.held);
+        return amount > 0 && w.heldUntil !== null ? { amount, until: w.heldUntil } : null;
+      });
+      if (parts.some(Boolean)) escrow.heldStake = [parts[0], parts[1]];
+    }
     d.escrows[escrow.id] = escrow;
     for (const p of players) this.move(d, p, -stake, "hold", escrow.id);
     this.save(d, this.mode, players);
@@ -319,7 +339,11 @@ export class Wallet {
     if (outcome.draw || outcome.winner === null) return this.refundIn(mode, d, e);
     const winner = e.players[outcome.winner];
     const { prize, fee } = this.payout(e.stake, e.feeBps);
-    this.move(d, winner, prize, "win", e.id);
+    const loserHeld = e.heldStake?.[outcome.winner === 0 ? 1 : 0];
+    // The winner's own stake comes back free; what the loser paid in (less the fee) keeps the loser's hold.
+    const fromLoser = Math.max(0, prize - e.stake);
+    const inherited = loserHeld && loserHeld.until > this.now() && fromLoser > 0 ? { heldAmount: Math.min(fromLoser, loserHeld.amount), heldUntil: loserHeld.until } : {};
+    this.move(d, winner, prize, "win", e.id, inherited);
     if (fee > 0) this.move(d, PLATFORM_ACCOUNT, fee, "fee", e.id);
     e.status = "settled";
     e.winner = outcome.winner;
@@ -387,21 +411,37 @@ export class Wallet {
   /**
    * How much real money this player can take out now: the balance minus deposits
    * younger than the hold (audit M5), so a deposit paid with a reversible or
-   * stolen transfer can't be cashed straight back out. `heldUntil` is when the
-   * newest held deposit frees up.
+   * stolen transfer can't be cashed straight back out. Winnings paid with an
+   * opponent's held deposit money stay held as long as it would have (review R5),
+   * so losing on purpose to another account doesn't skip the hold. `heldUntil` is
+   * when the last held money frees up.
    */
   withdrawable(profileId: string): { amount: number; held: number; heldUntil: number | null } {
     const d = this.data("real");
-    const since = this.now() - this.depositHoldMs;
+    const now = this.now();
+    const since = now - this.depositHoldMs;
     let held = 0;
-    let newest: number | null = null;
+    let until: number | null = null;
     for (const t of d.txns) {
-      if (t.kind !== "deposit" || t.profileId !== profileId || t.ts <= since) continue;
-      held += t.amount;
-      newest = Math.max(newest ?? 0, t.ts);
+      if (t.profileId !== profileId) continue;
+      if (t.kind === "deposit" && t.ts > since) {
+        held += t.amount;
+        until = Math.max(until ?? 0, t.ts + this.depositHoldMs);
+      } else if (t.kind === "win" && t.heldAmount && t.heldUntil && t.heldUntil > now) {
+        held += t.heldAmount;
+        until = Math.max(until ?? 0, t.heldUntil);
+      }
     }
+    // Held money this player staked and lost has moved on (its hold went with it to the winner).
+    for (const e of Object.values(d.escrows)) {
+      if (e.status !== "settled" || e.winner === null || !e.heldStake) continue;
+      const seat = e.players.indexOf(profileId);
+      const part = seat === -1 || seat === e.winner ? null : e.heldStake[seat];
+      if (part && part.until > now) held -= part.amount;
+    }
+    held = Math.max(0, held);
     const balance = own(d.balances, profileId) ?? 0;
-    return { amount: Math.max(0, balance - held), held: Math.min(held, balance), heldUntil: newest === null ? null : newest + this.depositHoldMs };
+    return { amount: Math.max(0, balance - held), held: Math.min(held, balance), heldUntil: until };
   }
 
   /** Take money out for a withdrawal request (refunded if moderators reject it). Real mode only. */
@@ -415,7 +455,7 @@ export class Wallet {
       const hours = Math.round(this.depositHoldMs / 3_600_000);
       return {
         ok: false,
-        reason: `deposits can be withdrawn ${hours} hours after they arrive; you can withdraw ${free.amount / BIRR} birr now`,
+        reason: `deposits (and winnings paid from someone's new deposit) can be withdrawn ${hours} hours after they arrive; you can withdraw ${free.amount / BIRR} birr now`,
       };
     }
     this.move(d, profileId, -amount, "withdrawal", ref);
@@ -430,7 +470,7 @@ export class Wallet {
     this.save(d, "real", [profileId]);
   }
 
-  private move(d: WalletData, profileId: string, amount: number, kind: TxnKind, ref: string | null, extra: Pick<Txn, "note" | "by"> = {}) {
+  private move(d: WalletData, profileId: string, amount: number, kind: TxnKind, ref: string | null, extra: Pick<Txn, "note" | "by" | "heldAmount" | "heldUntil"> = {}) {
     const balance = (d.balances[profileId] ?? 0) + amount;
     if (balance < 0) {
       this.pending = [];

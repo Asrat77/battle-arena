@@ -306,8 +306,8 @@ describe("deposit hold (audit M5)", () => {
     const held = wallet.hold(["a", "b"], 100 * BIRR);
     assert.ok(held.ok);
     wallet.settle(held.escrow.id, { winner: 0, draw: false });
-    // Winnings above the held deposit are free; the deposit still waits.
-    assert.equal(wallet.withdrawable("a").amount, 80 * BIRR);
+    // b staked their own fresh deposit, so a's winnings wait as long as it would have (review R5).
+    assert.equal(wallet.withdrawable("a").amount, 0);
 
     advance(DAY);
     assert.equal(wallet.withdrawable("a").amount, 380 * BIRR);
