@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { Deposits, DEPOSIT_LIMITS, depositAccountsFromEnv, namesMatch, parseReference, httpVerifyEt, MIN_DEPOSIT, POLL_TRIES, RETRIES, type VerifyEt, type VerifyResult } from "./deposits";
+import { Deposits, DEPOSIT_LIMITS, depositAccountsFromEnv, namesMatch, parseReference, httpVerifyEt, MIN_DEPOSIT, POLL_TRIES, RETRIES, type Deposit, type VerifyEt, type VerifyResult } from "./deposits";
 import { MemoryStore } from "./store";
 import { BIRR, Wallet } from "./wallet";
 
@@ -365,6 +365,59 @@ describe("deposits: verify.et credits (audit H2)", () => {
     later(60 * 60_000);
     await deposits.submit("c", "telebirr", "CH12CRED03", PAYER);
     assert.equal(alerts(), 2);
+  });
+});
+
+describe("deposits: references and restarts (audit H3, M9)", () => {
+  test("one transfer can't be credited twice under two spellings", async () => {
+    const { deposits, wallet, calls } = setup({ CH12ABC345: paid(100), FT26314ABCDE: paid(100) });
+    assert.equal(((await deposits.submit("a", "telebirr", "CH12-ABC-345", PAYER)) as { deposit: Deposit }).deposit.status, "credited");
+    assert.deepEqual(await deposits.submit("b", "telebirr", "ch12 abc345", PAYER), { ok: false, reason: "this transaction was already used" });
+    assert.deepEqual(await deposits.submit("b", "telebirr", "CH12ABC-345", PAYER), { ok: false, reason: "this transaction was already used" });
+    assert.equal(((await deposits.submit("a", "cbe", "FT26314-ABCDE", PAYER)) as { deposit: Deposit }).deposit.status, "credited");
+    assert.equal((await deposits.submit("b", "cbe", "FT26314ABCDE", PAYER)).ok, false);
+    assert.deepEqual(
+      calls.map((c) => c.reference),
+      ["CH12ABC345", "FT26314ABCDE"],
+    );
+    assert.equal(wallet.balanceOf("a"), 200 * BIRR);
+    assert.equal(parseReference("telebirr", "ch12-abc 345"), "CH12ABC345");
+  });
+
+  test("after a restart a stuck check is released, or finished if the wallet was already credited", async () => {
+    const store = new MemoryStore();
+    const wallet = new Wallet(store, { mode: "real" });
+    // Two checks that were running when the process died, one of them credited just before.
+    const stuck = (id: string, reference: string) => ({
+      id,
+      profileId: "a",
+      bank: "telebirr",
+      reference,
+      status: "checking",
+      amount: null,
+      reason: null,
+      createdAt: 1,
+      closedAt: null,
+      payerName: PAYER,
+    });
+    store.write("deposits", {
+      list: [stuck("d1", "CH12STUCK1"), stuck("d2", "CH12DONE01")],
+      used: { "telebirr:CH12STUCK1": "d1", "telebirr:CH12DONE01": "d2", "cbe:FT26314-ABCDE": "old" },
+    });
+    wallet.deposit("a", 70 * BIRR, "d2");
+    const deposits = new Deposits(store, wallet, { verifyEt: fakeVerifyEt({ CH12STUCK1: paid(50) }).api, accounts: ACCOUNTS, sleep: async () => {} });
+    assert.deepEqual(deposits.recover(), { credited: 1, released: 1 });
+    assert.equal(deposits.get("d1")!.status, "rejected");
+    assert.match(deposits.get("d1")!.reason!, /restart/);
+    assert.equal(deposits.get("d2")!.status, "credited");
+    assert.equal(deposits.get("d2")!.amount, 70 * BIRR);
+    assert.deepEqual(deposits.payer("a"), { name: PAYER, locked: true });
+    // The released one can be pasted again; the credited one and the old hyphenated one stay used.
+    assert.equal(((await deposits.submit("a", "telebirr", "CH12STUCK1")) as { deposit: Deposit }).deposit.status, "credited");
+    assert.equal((await deposits.submit("a", "telebirr", "CH12DONE01")).ok, false);
+    assert.equal((await deposits.submit("a", "cbe", "FT26314ABCDE")).ok, false);
+    assert.equal(wallet.balanceOf("a"), 120 * BIRR);
+    assert.deepEqual(deposits.recover(), { credited: 0, released: 0 }, "nothing left to do");
   });
 });
 

@@ -269,6 +269,11 @@ export class Wallet {
     return { ok: true, balance: d.balances[profileId] };
   }
 
+  /** The credit for deposit `ref`, if the wallet has one (used after a restart). */
+  depositTxn(ref: string): Txn | null {
+    return this.data().txns.find((t) => t.kind === "deposit" && t.ref === ref) ?? null;
+  }
+
   /** Take money out for a withdrawal request (refunded if moderators reject it). Real mode only. */
   withdraw(profileId: string, amount: number, ref: string): Result<{ balance: number }> {
     if (this.mode !== "real") return { ok: false, reason: "real money is off" };

@@ -256,7 +256,12 @@ export function parseReference(bank: DepositBank, raw: unknown): string {
     const sms = text.match(/transaction number is\s*([A-Za-z0-9]{6,40})/i);
     if (sms) return sms[1].toUpperCase();
   }
-  return text.toUpperCase();
+  return normalizeReference(text);
+}
+
+/** One spelling per transfer: no spaces or hyphens, upper case. */
+export function normalizeReference(reference: string): string {
+  return reference.replace(/[\s-]/g, "").toUpperCase();
 }
 
 export class Deposits {
@@ -299,6 +304,46 @@ export class Deposits {
     return this.store.read<DepositData>(DEPOSITS, { list: [], used: {} });
   }
 
+  /**
+   * After a restart: a check that was running when the process died is either
+   * finished (the wallet already has its credit) or released so the player can
+   * paste it again. Also moves references saved before normalising to their one spelling.
+   */
+  recover(): { credited: number; released: number } {
+    const d = this.data();
+    let credited = 0;
+    let released = 0;
+    let moved = 0;
+    for (const [key, id] of Object.entries(d.used)) {
+      const [bank, ...rest] = key.split(":");
+      const norm = `${bank}:${normalizeReference(rest.join(":"))}`;
+      if (norm === key) continue;
+      delete d.used[key];
+      d.used[norm] ??= id;
+      moved++;
+    }
+    for (const x of d.list) {
+      if (x.status !== "checking") continue;
+      const txn = this.wallet.depositTxn(x.id);
+      if (txn) {
+        x.status = "credited";
+        x.amount = txn.amount;
+        if (x.payerName) (d.payers ??= {})[x.profileId] = { name: x.payerName, locked: true };
+        credited++;
+      } else {
+        x.status = "rejected";
+        x.reason = "the check was cut short by a server restart, paste the number again";
+        const key = refKey(x.bank, normalizeReference(x.reference));
+        if (d.used[key] === x.id) delete d.used[key];
+        released++;
+      }
+      x.closedAt = this.now();
+    }
+    if (credited || released) console.warn(`deposits after restart: ${credited} finished, ${released} released`);
+    if (credited || released || moved) this.store.write(DEPOSITS, d);
+    return { credited, released };
+  }
+
   /** The name this player pays from, and whether it can still be changed. */
   payer(profileId: string): { name: string; locked: boolean } | null {
     const p = this.data().payers ?? {};
@@ -332,7 +377,7 @@ export class Deposits {
     const account = bank && this.opts.accounts[bank];
     if (!bank || !account) return { ok: false, reason: "pick Telebirr or CBE" };
     const reference = parseReference(bank, rawReference);
-    if (!/^[A-Z0-9-]{6,40}$/.test(reference)) return { ok: false, reason: "that doesn't look like a transaction number" };
+    if (!/^[A-Z0-9]{6,40}$/.test(reference)) return { ok: false, reason: "that doesn't look like a transaction number" };
 
     // Reserve the reference first, so two tabs can't credit the same transfer.
     const d = this.data();
