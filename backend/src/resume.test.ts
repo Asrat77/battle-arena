@@ -171,4 +171,31 @@ describe("restart", () => {
     assert.equal(app.wallet.balanceOf(bob.profile.id), DEFAULTS.faucetAmount + 80 * BIRR);
     app.io.close();
   });
+
+  test("both dropping within a few seconds of each other is an abandoned draw (review R1 follow-up)", async () => {
+    const app = boot(new MemoryStore());
+    const { alice, bob, m, escrowId } = stakedMatch(app);
+    await new Promise<void>((resolve) => app.httpServer.listen(0, resolve));
+    const url = `http://localhost:${(app.httpServer.address() as AddressInfo).port}`;
+    const join = async (token: string) => {
+      const s = connect(url, { auth: { token }, transports: ["websocket"], forceNew: true, reconnection: false });
+      await new Promise<void>((resolve) => s.once("connect", resolve));
+      return s;
+    };
+    const wait = () => new Promise((r) => setTimeout(r, 50));
+    const a = await join(alice.token);
+    const b = await join(bob.token);
+    await wait();
+    a.disconnect();
+    await wait();
+    app.clock.advance(2_000);
+    b.disconnect();
+    await wait();
+    app.clock.advance(DISCONNECT_FORFEIT_MS - 2_000);
+    assert.deepEqual(m.cur.outcome, { winner: null, draw: true, reason: "abandoned" });
+    assert.equal(app.wallet.escrow(escrowId)?.status, "refunded");
+    assert.equal(app.wallet.balanceOf(alice.profile.id), DEFAULTS.faucetAmount);
+    assert.equal(app.wallet.balanceOf(bob.profile.id), DEFAULTS.faucetAmount);
+    app.io.close();
+  });
 });
