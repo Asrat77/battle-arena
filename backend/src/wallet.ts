@@ -40,6 +40,8 @@ export const DEFAULTS = {
   /** Play-money top-up, once per faucet window. */
   faucetAmount: 500 * BIRR,
   faucetWindowMs: 24 * 60 * 60 * 1000,
+  /** A deposit can be staked at once but withdrawn only after this long (audit M5). */
+  depositHoldMs: 24 * 60 * 60 * 1000,
 };
 
 export type WalletMode = "play" | "real";
@@ -100,6 +102,7 @@ export interface WalletOptions {
   maxStake?: number;
   faucetAmount?: number;
   faucetWindowMs?: number;
+  depositHoldMs?: number;
   /** Called after a profile's balance changes (to push it to their open tabs). */
   onChange?: (profileId: string, balance: number) => void;
   /** Append-only record of every change (audit M1). Default: in memory only. */
@@ -117,6 +120,7 @@ export class Wallet {
   readonly maxStake: number;
   readonly faucetAmount: number;
   readonly faucetWindowMs: number;
+  readonly depositHoldMs: number;
   private readonly now: () => number;
   private readonly onChange: (profileId: string, balance: number) => void;
   private readonly log: TxnLog;
@@ -145,6 +149,7 @@ export class Wallet {
     this.maxStake = opts.maxStake ?? DEFAULTS.maxStake;
     this.faucetAmount = opts.faucetAmount ?? DEFAULTS.faucetAmount;
     this.faucetWindowMs = opts.faucetWindowMs ?? DEFAULTS.faucetWindowMs;
+    this.depositHoldMs = opts.depositHoldMs ?? DEFAULTS.depositHoldMs;
     this.onChange = opts.onChange ?? (() => {});
     this.log = opts.log ?? new MemoryTxnLog();
     this.hotTxns = opts.hotTxns ?? HOT_TXNS;
@@ -374,12 +379,40 @@ export class Wallet {
     return null;
   }
 
+  /**
+   * How much real money this player can take out now: the balance minus deposits
+   * younger than the hold (audit M5), so a deposit paid with a reversible or
+   * stolen transfer can't be cashed straight back out. `heldUntil` is when the
+   * newest held deposit frees up.
+   */
+  withdrawable(profileId: string): { amount: number; held: number; heldUntil: number | null } {
+    const d = this.data("real");
+    const since = this.now() - this.depositHoldMs;
+    let held = 0;
+    let newest: number | null = null;
+    for (const t of d.txns) {
+      if (t.kind !== "deposit" || t.profileId !== profileId || t.ts <= since) continue;
+      held += t.amount;
+      newest = Math.max(newest ?? 0, t.ts);
+    }
+    const balance = own(d.balances, profileId) ?? 0;
+    return { amount: Math.max(0, balance - held), held: Math.min(held, balance), heldUntil: newest === null ? null : newest + this.depositHoldMs };
+  }
+
   /** Take money out for a withdrawal request (refunded if moderators reject it). Real mode only. */
   withdraw(profileId: string, amount: number, ref: string): Result<{ balance: number }> {
     if (this.mode !== "real") return { ok: false, reason: "real money is off" };
     if (!Number.isInteger(amount) || amount <= 0) return { ok: false, reason: "bad amount" };
     const d = this.data("real");
     if ((d.balances[profileId] ?? 0) < amount) return { ok: false, reason: "insufficient balance" };
+    const free = this.withdrawable(profileId);
+    if (amount > free.amount) {
+      const hours = Math.round(this.depositHoldMs / 3_600_000);
+      return {
+        ok: false,
+        reason: `deposits can be withdrawn ${hours} hours after they arrive; you can withdraw ${free.amount / BIRR} birr now`,
+      };
+    }
     this.move(d, profileId, -amount, "withdrawal", ref);
     this.save(d, "real", [profileId]);
     return { ok: true, balance: d.balances[profileId] };
@@ -571,6 +604,12 @@ export class Wallet {
  * second set only once real-money play is legally cleared (audit C3). Either one
  * alone keeps play money.
  */
+/** DEPOSIT_HOLD_HOURS: hours before a deposit can be withdrawn (default 24; 0 = no hold). */
+export function depositHoldFromEnv(value = process.env.DEPOSIT_HOLD_HOURS): number {
+  const n = Number(value);
+  return value !== undefined && value.trim() !== "" && Number.isFinite(n) && n >= 0 ? n * 3_600_000 : DEFAULTS.depositHoldMs;
+}
+
 export function walletModeFromEnv(value = process.env.WALLET_MODE, legalOk = process.env.REAL_MONEY_LEGAL_OK): WalletMode {
   if (value !== "real") return "play";
   if (legalOk?.trim() === "1") return "real";

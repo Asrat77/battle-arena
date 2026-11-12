@@ -126,8 +126,11 @@ export interface WalletSummary {
   depositAccounts: { bank: string; account: string }[];
   /** The name on the account this player pays deposits from; locked once a deposit is credited. */
   depositPayer?: { name: string; locked: boolean } | null;
-  /** maxAmount: the most this player can ask for right now (per-request and daily ceilings). */
-  withdrawals: { enabled: boolean; minAmount: number; maxAmount?: number; requests: Withdrawal[] };
+  /**
+   * maxAmount: the most this player can ask for right now (per-request and daily ceilings,
+   * minus deposits still on hold). held: santim from recent deposits not withdrawable until heldUntil.
+   */
+  withdrawals: { enabled: boolean; minAmount: number; maxAmount?: number; held?: number; heldUntil?: number | null; requests: Withdrawal[] };
   history: WalletTxn[];
 }
 

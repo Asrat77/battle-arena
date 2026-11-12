@@ -25,7 +25,7 @@ function busy(opts: ConstructorParameters<typeof Wallet>[1] = {}) {
   const h = play.hold([A, B], 100 * BIRR);
   assert.ok(h.ok);
   play.settle(h.escrow.id, { winner: 0, draw: false });
-  const real = new Wallet(store, { mode: "real", log, now, ...opts });
+  const real = new Wallet(store, { mode: "real", log, now, depositHoldMs: 0, ...opts });
   real.deposit(A, 300 * BIRR, "dep1");
   real.withdraw(A, 100 * BIRR, "w1");
   real.refundWithdrawal(A, 100 * BIRR, "w1");

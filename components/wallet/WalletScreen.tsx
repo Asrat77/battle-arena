@@ -119,6 +119,8 @@ export function WalletScreen() {
           balance={wallet.balance}
           minAmount={wallet.withdrawals.minAmount}
           maxAmount={wallet.withdrawals.maxAmount ?? Infinity}
+          held={wallet.withdrawals.held ?? 0}
+          heldUntil={wallet.withdrawals.heldUntil ?? null}
           requests={wallet.withdrawals.requests}
           onSubmit={withdraw}
           onCancel={cancelWithdrawal}

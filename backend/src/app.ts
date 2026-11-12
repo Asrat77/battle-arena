@@ -23,7 +23,7 @@ import { FileStore, type Store } from "./store";
 import { tournamentRoutes, Tournaments } from "./tournaments";
 import { depositAccountsFromEnv, Deposits, httpVerifyEt, type DepositOptions } from "./deposits";
 import { httpTelegram, secondApprovalFromEnv, withdrawalLimitsFromEnv, Withdrawals, type WithdrawalOptions } from "./withdrawals";
-import { Wallet, walletAdminRoutes, walletModeFromEnv, walletRoutes, type WalletOptions } from "./wallet";
+import { depositHoldFromEnv, Wallet, walletAdminRoutes, walletModeFromEnv, walletRoutes, type WalletOptions } from "./wallet";
 import { FileTxnLog, MemoryTxnLog } from "./walletLog";
 
 export interface AppOptions {
@@ -83,6 +83,7 @@ export function createApp(options: AppOptions = {}) {
   // stake is settled before recording, rewards or tournaments run.
   const wallet = new Wallet(store, {
     mode: walletModeFromEnv(),
+    depositHoldMs: depositHoldFromEnv(),
     // Every balance change, hash-chained, beside db.json (tests keep it in memory).
     log: options.store ? new MemoryTxnLog() : new FileTxnLog(process.env.WALLET_LOG_FILE || join(dirname(dataFile), "wallet-log.jsonl")),
     ...options.wallet,

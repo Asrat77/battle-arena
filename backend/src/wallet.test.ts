@@ -9,7 +9,7 @@ import { createApp } from "./app";
 import { FakeClock } from "./clock";
 import { DISCONNECT_FORFEIT_MS } from "./matches";
 import { MemoryStore } from "./store";
-import { BIRR, DEFAULTS, LEGACY_REPORT, PLATFORM_ACCOUNT, Wallet, walletModeFromEnv } from "./wallet";
+import { BIRR, DEFAULTS, depositHoldFromEnv, LEGACY_REPORT, PLATFORM_ACCOUNT, Wallet, walletModeFromEnv } from "./wallet";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -176,7 +176,7 @@ describe("play and real books (audit H6)", () => {
 
   test("withdrawal refunds go to the real book even in play mode", () => {
     const store = new MemoryStore();
-    const real = new Wallet(store, { mode: "real" });
+    const real = new Wallet(store, { mode: "real", depositHoldMs: 0 });
     real.deposit("a", 100 * BIRR, "d1");
     real.withdraw("a", 100 * BIRR, "w1");
     const play = new Wallet(store, { mode: "play" });
@@ -288,5 +288,48 @@ describe("app", () => {
       io.close();
       httpServer.close();
     }
+  });
+});
+
+describe("deposit hold (audit M5)", () => {
+  test("a deposit can be staked at once but withdrawn only after the hold", () => {
+    const { wallet, advance } = setup({ mode: "real" });
+    assert.ok(wallet.deposit("a", 300 * BIRR, "d1").ok);
+    assert.deepEqual(wallet.withdrawable("a"), { amount: 0, held: 300 * BIRR, heldUntil: 1_000_000 + DAY });
+    const r = wallet.withdraw("a", 100 * BIRR, "w1");
+    assert.equal(r.ok, false);
+    assert.match((r as { reason: string }).reason, /24 hours after they arrive; you can withdraw 0 birr now/);
+    assert.equal(wallet.balanceOf("a"), 300 * BIRR, "nothing taken");
+
+    // Staking is allowed straight away.
+    assert.ok(wallet.deposit("b", 300 * BIRR, "d2").ok);
+    const held = wallet.hold(["a", "b"], 100 * BIRR);
+    assert.ok(held.ok);
+    wallet.settle(held.escrow.id, { winner: 0, draw: false });
+    // Winnings above the held deposit are free; the deposit still waits.
+    assert.equal(wallet.withdrawable("a").amount, 80 * BIRR);
+
+    advance(DAY);
+    assert.equal(wallet.withdrawable("a").amount, 380 * BIRR);
+    assert.ok(wallet.withdraw("a", 380 * BIRR, "w2").ok);
+  });
+
+  test("losing a fresh deposit leaves nothing held beyond the balance", () => {
+    const { wallet } = setup({ mode: "real" });
+    wallet.deposit("a", 100 * BIRR, "d1");
+    wallet.deposit("b", 100 * BIRR, "d2");
+    const h = wallet.hold(["a", "b"], 100 * BIRR);
+    assert.ok(h.ok);
+    wallet.settle(h.escrow.id, { winner: 1, draw: false });
+    assert.deepEqual(wallet.withdrawable("a"), { amount: 0, held: 0, heldUntil: 1_000_000 + DAY });
+  });
+
+  test("DEPOSIT_HOLD_HOURS", () => {
+    assert.equal(depositHoldFromEnv(undefined), DAY);
+    assert.equal(depositHoldFromEnv(""), DAY);
+    assert.equal(depositHoldFromEnv("abc"), DAY);
+    assert.equal(depositHoldFromEnv("-1"), DAY);
+    assert.equal(depositHoldFromEnv("0"), 0);
+    assert.equal(depositHoldFromEnv("48"), 2 * DAY);
   });
 });
