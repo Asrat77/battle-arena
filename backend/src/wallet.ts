@@ -292,6 +292,11 @@ export class Wallet {
     return { ok: true, escrow };
   }
 
+  /** Every escrow in a book (the current mode's by default), held or closed. */
+  escrows(mode: WalletMode = this.mode): Escrow[] {
+    return Object.values(this.data(mode).escrows);
+  }
+
   bind(escrowId: string, matchId: string): void {
     const found = this.findEscrow(escrowId);
     if (!found || found.e.status !== "held") return;
