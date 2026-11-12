@@ -14,6 +14,7 @@ import { Router } from "express";
 import type { Socket } from "socket.io";
 import type { Outcome } from "../../engine/types";
 import { bearerToken, type Identity } from "./identity";
+import { own } from "./safe";
 import type { Store } from "./store";
 
 const WALLET = "wallet";
@@ -120,7 +121,7 @@ export class Wallet {
   }
 
   balanceOf(profileId: string): number {
-    return this.data().balances[profileId] ?? 0;
+    return own(this.data().balances, profileId) ?? 0;
   }
 
   /** Newest first. */
@@ -132,7 +133,7 @@ export class Wallet {
   }
 
   escrow(id: string): Escrow | null {
-    return this.data().escrows[id] ?? null;
+    return own(this.data().escrows, id) ?? null;
   }
 
   escrowForMatch(matchId: string): Escrow | null {

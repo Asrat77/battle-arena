@@ -1,4 +1,7 @@
 import { createApp } from "./app";
+import { installProcessGuards } from "./safe";
+
+installProcessGuards();
 
 const PORT = Number(process.env.PORT) || 3001;
 const { httpServer, withdrawals } = createApp();

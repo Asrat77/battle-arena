@@ -11,6 +11,7 @@ import { bearerToken, type Identity } from "./identity";
 import type { Lobby } from "./lobby";
 import { profileRoom, type Match, type MatchRuntime } from "./matches";
 import type { Recorder, StoredMatch } from "./recorder";
+import { own, profileIdFrom } from "./safe";
 import type { Store } from "./store";
 
 const FRIENDS = "friends";
@@ -144,7 +145,7 @@ export class Social {
   }
 
   accept(profileId: string, rawId: unknown) {
-    const id = typeof rawId === "string" ? rawId.trim().toLowerCase() : "";
+    const id = profileIdFrom(rawId);
     if (!this.pending().some((r) => r.from === id && r.to === profileId)) {
       return { ok: false as const, reason: "no request from that player" };
     }
@@ -155,14 +156,14 @@ export class Social {
   }
 
   decline(profileId: string, rawId: unknown) {
-    const id = typeof rawId === "string" ? rawId.trim().toLowerCase() : "";
+    const id = profileIdFrom(rawId);
     this.dropPending(id, profileId);
     return { ok: true as const };
   }
 
   /** Withdraw a request you sent. */
   cancel(profileId: string, rawId: unknown) {
-    const id = typeof rawId === "string" ? rawId.trim().toLowerCase() : "";
+    const id = profileIdFrom(rawId);
     this.dropPending(profileId, id);
     return { ok: true as const };
   }
@@ -182,7 +183,7 @@ export class Social {
 
   /** Unfriend, for both of you. Also clears any request between you. */
   remove(profileId: string, rawId: unknown) {
-    const id = typeof rawId === "string" ? rawId.trim().toLowerCase() : "";
+    const id = profileIdFrom(rawId);
     for (const [x, y] of [[profileId, id], [id, profileId]]) {
       const list = this.list(x);
       if (list.includes(y)) {
@@ -205,7 +206,7 @@ export class Social {
 
   /** Invite a friend to the room you are in. They get a toast with a Join link. */
   invite(profileId: string, rawId: unknown, rawCode: unknown) {
-    const id = typeof rawId === "string" ? rawId.trim().toLowerCase() : "";
+    const id = profileIdFrom(rawId);
     if (!this.list(profileId).includes(id)) return { ok: false as const, reason: "not on your friend list" };
     const room = typeof rawCode === "string" ? this.lobby.room(rawCode) : null;
     if (!room || !room.members.some((x) => x.profileId === profileId)) {
@@ -303,11 +304,11 @@ export class Social {
 
   private followers(profileId: string) {
     const all = this.store.read<Record<string, string[]>>(FRIENDS, {});
-    return Object.keys(all).filter((id) => all[id].includes(profileId));
+    return Object.keys(all).filter((id) => Array.isArray(all[id]) && all[id].includes(profileId));
   }
 
   private list(profileId: string): string[] {
-    return this.store.read<Record<string, string[]>>(FRIENDS, {})[profileId] ?? [];
+    return own(this.store.read<Record<string, string[]>>(FRIENDS, {}), profileId) ?? [];
   }
 
   private save(profileId: string, list: string[]) {
