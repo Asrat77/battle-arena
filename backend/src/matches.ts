@@ -13,6 +13,8 @@ import { systemClock, type Clock, type TimerHandle } from "./clock";
 import type { Store } from "./store";
 
 export const DISCONNECT_FORFEIT_MS = 30_000;
+/** Drops this close together (one network blip) count as both players leaving at once. */
+export const BOTH_GONE_TOLERANCE_MS = 5_000;
 /** After a restart, players of a resumed match get this long to reconnect. */
 export const RESUME_GRACE_MS = 120_000;
 /** Store key for matches that must survive a restart (staked ones). */
@@ -424,7 +426,7 @@ export class MatchRuntime extends EventEmitter {
       const other: Seat = seat === 0 ? 1 : 0;
       const otherUntil = m.away[other];
       const otherGone =
-        !m.bots.includes(other) && !this.isOnline(m.players[other]) && otherUntil !== null && otherUntil <= this.clock.now();
+        !m.bots.includes(other) && !this.isOnline(m.players[other]) && otherUntil !== null && otherUntil <= this.clock.now() + BOTH_GONE_TOLERANCE_MS;
       const move = otherGone ? ({ type: "abandon" } as const) : ({ type: "forfeit", seat } as const);
       this.append(m, { t: this.clock.now(), seat: "system", move });
     }, ms);
