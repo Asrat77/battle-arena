@@ -125,9 +125,10 @@ export function createApp(options: AppOptions = {}) {
     moderatorChat,
     verifyEt,
     nameOf,
+    payoutSenderName: process.env.PAYOUT_SENDER_NAME?.trim() || null,
     alsoHandle: (update) => deposits.handleUpdate(update),
     ...options.withdrawals,
-    onUpdate: (w) => io.to(profileRoom(w.profileId)).emit("wallet:withdrawal", w),
+    onUpdate: (w) => io.to(profileRoom(w.profileId)).emit("wallet:withdrawal", withdrawals.view(w)),
   });
   wallet.withdrawals = (id) => withdrawals.summary(id);
   const lobby = new Lobby(io, matches, identity, { clock: options.clock, games: options.games, wallet });

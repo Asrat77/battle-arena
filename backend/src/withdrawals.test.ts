@@ -21,7 +21,19 @@ function fakeTelegram() {
   return { api, calls, sent: () => calls.filter((c) => c.method === "sendMessage").map((c) => c.params.text as string) };
 }
 
-function setup(opts: { verify?: VerifyResult; mode?: "play" | "real" } = {}) {
+const T0 = 1_700_000_000_000;
+const ok = (over: Partial<Extract<VerifyResult, { state: "verified" }>> = {}): VerifyResult => ({
+  state: "verified",
+  amount: 100 * BIRR,
+  currency: "ETB",
+  senderName: "Battle Arena PLC",
+  itemStatus: "success",
+  paidAt: T0 + 60_000,
+  toUs: true,
+  ...over,
+});
+
+function setup(opts: { verify?: VerifyResult; mode?: "play" | "real"; payoutSenderName?: string } = {}) {
   const store = new MemoryStore();
   const wallet = new Wallet(store, { mode: opts.mode ?? "real" });
   const tg = fakeTelegram();
@@ -34,6 +46,8 @@ function setup(opts: { verify?: VerifyResult; mode?: "play" | "real" } = {}) {
     telegram: tg.api,
     moderatorChat: CHAT,
     verifyEt,
+    payoutSenderName: opts.payoutSenderName ?? null,
+    now: () => T0,
     nameOf: (id) => `Player ${id}`,
     onUpdate: (w) => updates.push(w.status),
   });
@@ -50,7 +64,9 @@ describe("withdrawals", () => {
     const r = await withdrawals.request("p", { bank: "telebirr", account: "+251 911 223 344", amount: 100 * BIRR });
     assert.ok(r.ok);
     assert.equal(r.withdrawal.account, "0911223344");
-    assert.equal(r.withdrawal.alertMessageId, 100);
+    assert.equal(withdrawals.get(r.withdrawal.id)!.alertMessageId, 100);
+    assert.equal(r.withdrawal.cancellable, true);
+    assert.equal("alertMessageId" in r.withdrawal, false, "moderator fields stay server-side");
     assert.equal(wallet.balanceOf("p"), 200 * BIRR);
     const alert = tg.calls[0];
     assert.equal(alert.params.chat_id, CHAT);
@@ -63,8 +79,8 @@ describe("withdrawals", () => {
     );
   });
 
-  test("Paid, then a reply with the transaction number, closes it", async () => {
-    const { withdrawals, tg, updates } = setup();
+  test("Paid, then a reply with a verified transaction number, closes it", async () => {
+    const { withdrawals, tg, updates } = setup({ verify: ok({ amount: 60 * BIRR }) });
     const r = await withdrawals.request("p", { bank: "cbe", account: "1000123456789", amount: 60 * BIRR });
     assert.ok(r.ok);
     await withdrawals.handleUpdate(tap(`paid:${r.withdrawal.id}`));
@@ -72,13 +88,13 @@ describe("withdrawals", () => {
     assert.ok(prompt);
     assert.match(tg.sent().at(-1)!, /Reply to this message/);
 
-    await withdrawals.handleUpdate(reply(prompt, "ft26314abcde"));
+    await withdrawals.handleUpdate(reply(prompt, "ft2631-4abcde"));
     const w = withdrawals.get(r.withdrawal.id)!;
     assert.equal(w.status, "paid");
     assert.equal(w.reference, "FT26314ABCDE");
     assert.equal(w.closedBy, "@mod");
     assert.deepEqual(updates, ["paid"]);
-    const edit = tg.calls.find((c) => c.method === "editMessageText")!;
+    const edit = tg.calls.filter((c) => c.method === "editMessageText").at(-1)!;
     assert.match(edit.params.text, /Paid by @mod/);
     assert.deepEqual(edit.params.reply_markup.inline_keyboard, []);
   });
@@ -106,7 +122,7 @@ describe("withdrawals", () => {
   });
 
   test("with verify.et, the payout must reach the player's account for the full amount", async () => {
-    const short = setup({ verify: { state: "verified", amount: 50 * BIRR, currency: "ETB", senderName: null, toUs: true } });
+    const short = setup({ verify: ok({ amount: 50 * BIRR }) });
     const r = await short.withdrawals.request("p", { bank: "telebirr", account: "0911223344", amount: 100 * BIRR });
     assert.ok(r.ok);
     await short.withdrawals.handleUpdate(tap(`paid:${r.withdrawal.id}`));
@@ -115,12 +131,106 @@ describe("withdrawals", () => {
     assert.match(short.tg.sent().at(-1)!, /was 50 birr, not 100/);
     assert.deepEqual(short.verifyCalls[0], { bank: "telebirr", reference: "CHK1A2B3C4", settlementAccount: "0911223344" });
 
-    const good = setup({ verify: { state: "verified", amount: 100 * BIRR, currency: "ETB", senderName: null, toUs: true } });
+    const good = setup({ verify: ok() });
     const g = await good.withdrawals.request("p", { bank: "telebirr", account: "0911223344", amount: 100 * BIRR });
     assert.ok(g.ok);
     await good.withdrawals.handleUpdate(tap(`paid:${g.withdrawal.id}`));
     await good.withdrawals.handleUpdate(reply(good.withdrawals.get(g.withdrawal.id)!.promptMessageId!, "CHK1A2B3C4"));
     assert.equal(good.withdrawals.get(g.withdrawal.id)!.status, "paid");
+  });
+
+  // H4: payout proof must be this payout, not any old transfer.
+  async function payWith(s: ReturnType<typeof setup>, ref: string, amount = 100 * BIRR) {
+    const r = await s.withdrawals.request("p", { bank: "telebirr", account: "0911223344", amount });
+    assert.ok(r.ok);
+    await s.withdrawals.handleUpdate(tap(`paid:${r.withdrawal.id}`));
+    await s.withdrawals.handleUpdate(reply(s.withdrawals.get(r.withdrawal.id)!.promptMessageId!, ref));
+    return s.withdrawals.get(r.withdrawal.id)!;
+  }
+
+  test("a payout number can close only one withdrawal", async () => {
+    const s = setup({ verify: ok({ amount: 100 * BIRR }) });
+    assert.equal((await payWith(s, "CHK1A2B3C4")).status, "paid");
+    const second = await payWith(s, "chk1-a2b3c4");
+    assert.equal(second.status, "pending");
+    assert.match(s.tg.sent().at(-1)!, /already used for withdrawal/);
+  });
+
+  test("a transfer made before the request doesn't count", async () => {
+    const s = setup({ verify: ok({ paidAt: T0 - 60 * 60_000 }) });
+    const w = await payWith(s, "CHK1A2B3C4");
+    assert.equal(w.status, "pending");
+    assert.match(s.tg.sent().at(-1)!, /made before the player asked/);
+    const noDate = setup({ verify: ok({ paidAt: null }) });
+    assert.equal((await payWith(noDate, "CHK1A2B3C4")).status, "pending");
+  });
+
+  test("a failed receipt status or a sender other than us doesn't count", async () => {
+    const failed = setup({ verify: ok({ itemStatus: "failed" }) });
+    assert.equal((await payWith(failed, "CHK1A2B3C4")).status, "pending");
+    const other = setup({ verify: ok({ senderName: "Someone Else" }), payoutSenderName: "Battle Arena PLC" });
+    assert.equal((await payWith(other, "CHK1A2B3C4")).status, "pending");
+    assert.match(other.tg.sent().at(-1)!, /sent by "Someone Else"/);
+    const ours = setup({ verify: ok(), payoutSenderName: "Battle Arena PLC" });
+    assert.equal((await payWith(ours, "CHK1A2B3C4")).status, "paid");
+  });
+
+  test("without verify.et, Paid alone never closes a request", async () => {
+    const s = setup();
+    const w = await payWith(s, "anything-at-all");
+    assert.equal(w.status, "pending");
+    assert.match(s.tg.sent().at(-1)!, /verify\.et isn't set up/);
+  });
+
+  // H5: a real payout verify.et can't confirm has a way out that isn't a refund.
+  test("confirm paid anyway records who and why, and never refunds", async () => {
+    const s = setup();
+    const w = await payWith(s, "CHK1A2B3C4");
+    const force = s.tg.calls.at(-1)!.params.reply_markup.inline_keyboard[0][0];
+    assert.equal(force.callback_data, `force:${w.id}`);
+    await s.withdrawals.handleUpdate(tap(`force:${w.id}`));
+    const prompt = s.withdrawals.get(w.id)!.forcePromptMessageId!;
+    await s.withdrawals.handleUpdate(reply(prompt, "ok"));
+    assert.equal(s.withdrawals.get(w.id)!.status, "pending", "a reason is required");
+    await s.withdrawals.handleUpdate(reply(prompt, "saw it in the telebirr app history"));
+    const done = s.withdrawals.get(w.id)!;
+    assert.equal(done.status, "paid");
+    assert.equal(done.reference, "CHK1A2B3C4");
+    assert.deepEqual(done.forced, { by: "@mod", reason: "saw it in the telebirr app history" });
+    assert.equal(s.wallet.balanceOf("p"), 200 * BIRR);
+    assert.match(s.tg.calls.filter((c) => c.method === "editMessageText").at(-1)!.params.text, /Not checked by verify\.et/);
+  });
+
+  test("after a payout number was given, Reject asks again before refunding", async () => {
+    const s = setup();
+    const w = await payWith(s, "CHK1A2B3C4");
+    await s.withdrawals.handleUpdate(tap(`reject:${w.id}`));
+    assert.equal(s.withdrawals.get(w.id)!.status, "pending");
+    assert.match(s.tg.sent().at(-1)!, /Reject only if NO money was sent/);
+    await s.withdrawals.handleUpdate(tap(`reject!:${w.id}`));
+    assert.equal(s.withdrawals.get(w.id)!.status, "rejected");
+    assert.equal(s.wallet.balanceOf("p"), 300 * BIRR);
+  });
+
+  test("the player can cancel until a moderator taps Paid", async () => {
+    const s = setup();
+    const a = await s.withdrawals.request("p", { bank: "telebirr", account: "0911223344", amount: 100 * BIRR });
+    assert.ok(a.ok);
+    assert.deepEqual(await s.withdrawals.cancel("someone-else", a.withdrawal.id), { ok: false, reason: "no such withdrawal" });
+    assert.deepEqual(await s.withdrawals.cancel("p", a.withdrawal.id), { ok: true });
+    assert.equal(s.wallet.balanceOf("p"), 300 * BIRR);
+    assert.equal(s.withdrawals.get(a.withdrawal.id)!.status, "cancelled");
+    assert.deepEqual(s.updates, ["cancelled"]);
+    // Taps on a cancelled request do nothing but say so.
+    await s.withdrawals.handleUpdate(tap(`reject:${a.withdrawal.id}`));
+    assert.equal(s.wallet.balanceOf("p"), 300 * BIRR);
+    assert.match(s.tg.sent().at(-1)!, /cancelled by the player/);
+
+    const b = await s.withdrawals.request("p", { bank: "telebirr", account: "0911223344", amount: 100 * BIRR });
+    assert.ok(b.ok, "a new request is allowed after cancelling");
+    await s.withdrawals.handleUpdate(tap(`paid:${b.withdrawal.id}`));
+    assert.deepEqual(await s.withdrawals.cancel("p", b.withdrawal.id), { ok: false, reason: "a moderator is already sending it" });
+    assert.equal(s.withdrawals.forPlayer("p")[0].cancellable, false);
   });
 
   test("refuses bad input, a short balance, a second open request, and play mode", async () => {

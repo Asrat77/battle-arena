@@ -2,7 +2,7 @@
 
 // Cash out to your own Telebirr or CBE account. The amount leaves the wallet
 // straight away; a moderator sends it by hand and marks it paid (or rejects
-// it, which puts it back).
+// it, which puts it back). Until a moderator picks it up the player can cancel.
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
@@ -16,6 +16,7 @@ const STATUS: Record<Withdrawal["status"], { label: string; tone: "pend" | "rec"
   pending: { label: "Waiting", tone: "pend" },
   paid: { label: "Paid", tone: "rec" },
   rejected: { label: "Returned", tone: "bad" },
+  cancelled: { label: "Cancelled", tone: "bad" },
 };
 
 export function WithdrawForm({
@@ -23,11 +24,13 @@ export function WithdrawForm({
   minAmount,
   requests,
   onSubmit,
+  onCancel,
 }: {
   balance: number;
   minAmount: number;
   requests: Withdrawal[];
   onSubmit: (bank: string, account: string, amount: number) => Promise<WithdrawalResult>;
+  onCancel: (id: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
 }) {
   const toast = useToast();
   const [bank, setBank] = useState<"telebirr" | "cbe">("telebirr");
@@ -36,6 +39,15 @@ export function WithdrawForm({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const waiting = requests.find((w) => w.status === "pending");
+  const [cancelling, setCancelling] = useState(false);
+
+  const cancel = async (id: string) => {
+    setCancelling(true);
+    const res = await onCancel(id);
+    setCancelling(false);
+    if (!res.ok) return toast.show({ icon: "warning", tone: "warn", body: res.reason });
+    toast.show({ icon: "refresh", body: "Withdrawal cancelled. The money is back in your wallet." });
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,10 +70,19 @@ export function WithdrawForm({
         Withdraw
       </h2>
       {waiting ? (
-        <p className="text-small text-ink-2">
-          Your withdrawal of <b className="text-ink">{formatBirr(waiting.amount)} birr</b> to {BANK_NAMES[waiting.bank]} {waiting.account} is
-          with the moderators. You’ll see it here once it’s paid.
-        </p>
+        <div className="flex flex-col gap-3">
+          <p className="text-small text-ink-2">
+            Your withdrawal of <b className="text-ink">{formatBirr(waiting.amount)} birr</b> to {BANK_NAMES[waiting.bank]} {waiting.account} is
+            with the moderators.{" "}
+            {waiting.cancellable ? "You can cancel it until a moderator starts sending it." : "A moderator is sending it now."} You’ll see it here
+            once it’s paid.
+          </p>
+          {waiting.cancellable && (
+            <Button type="button" variant="ghost" icon="refresh" loading={cancelling} onClick={() => cancel(waiting.id)}>
+              Cancel withdrawal
+            </Button>
+          )}
+        </div>
       ) : (
         <form onSubmit={submit} className="flex flex-col gap-3" noValidate>
           <Segmented

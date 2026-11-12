@@ -148,10 +148,12 @@ export interface Withdrawal {
   bank: "telebirr" | "cbe";
   account: string;
   amount: number;
-  status: "pending" | "paid" | "rejected";
+  status: "pending" | "paid" | "rejected" | "cancelled";
   reference: string | null;
   createdAt: number;
   closedAt: number | null;
+  /** No moderator has picked it up yet, so the player can still cancel it. */
+  cancellable: boolean;
 }
 
 export type WithdrawalResult = { ok: true; withdrawal: Withdrawal } | { ok: false; reason: string };

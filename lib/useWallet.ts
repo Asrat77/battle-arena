@@ -74,5 +74,18 @@ export function useWallet() {
     [socket, refresh],
   );
 
-  return { wallet, busy, faucet, deposit, withdraw, refresh };
+  /** Take back a withdrawal no moderator has picked up yet. */
+  const cancelWithdrawal = useCallback(
+    (id: string) =>
+      new Promise<{ ok: true } | { ok: false; reason: string }>((resolve) => {
+        if (!socket) return resolve({ ok: false, reason: "Not connected" });
+        socket.emit("wallet:withdraw-cancel", { id }, (res: { ok: true } | { ok: false; reason: string }) => {
+          if (res.ok) refresh();
+          resolve(res);
+        });
+      }),
+    [socket, refresh],
+  );
+
+  return { wallet, busy, faucet, deposit, withdraw, cancelWithdrawal, refresh };
 }
