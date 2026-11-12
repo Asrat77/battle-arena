@@ -121,4 +121,25 @@ describe("restart", () => {
     socket.disconnect();
     app.io.close();
   });
+
+  test("a throwing end listener can't stop the stake from being paid (M7)", () => {
+    const app = boot(new MemoryStore());
+    const { m, escrowId } = stakedMatch(app);
+    // Put a broken listener first, ahead of the wallet's.
+    app.matches.prependListener("end", () => {
+      throw new Error("recorder blew up");
+    });
+    const original = console.error;
+    console.error = () => {};
+    try {
+      while (!m.cur.outcome) {
+        const seat: 0 | 1 = (m.cur.state as { turn: 0 | 1 }).turn;
+        assert.equal(app.matches.move(m.players[seat], m.id, { type: seat === 0 ? "point" : "pass" }), null);
+      }
+    } finally {
+      console.error = original;
+    }
+    assert.equal(app.wallet.escrow(escrowId)?.status, "settled");
+    app.io.close();
+  });
 });
