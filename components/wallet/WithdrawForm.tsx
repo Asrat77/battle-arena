@@ -22,12 +22,14 @@ const STATUS: Record<Withdrawal["status"], { label: string; tone: "pend" | "rec"
 export function WithdrawForm({
   balance,
   minAmount,
+  maxAmount,
   requests,
   onSubmit,
   onCancel,
 }: {
   balance: number;
   minAmount: number;
+  maxAmount: number;
   requests: Withdrawal[];
   onSubmit: (bank: string, account: string, amount: number) => Promise<WithdrawalResult>;
   onCancel: (id: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
@@ -55,6 +57,7 @@ export function WithdrawForm({
     if (!account.trim()) return setError(bank === "telebirr" ? "Enter your Telebirr number." : "Enter your CBE account number.");
     if (!Number.isFinite(santim) || santim <= 0) return setError("Enter how much to withdraw.");
     if (santim > balance) return setError("That’s more than your balance.");
+    if (santim > maxAmount) return setError(`You can withdraw up to ${formatBirr(maxAmount)} birr right now.`);
     setSending(true);
     setError(null);
     const res = await onSubmit(bank, account, santim);
@@ -108,19 +111,19 @@ export function WithdrawForm({
           />
           <Field
             label="Amount (birr)"
-            hint={`At least ${formatBirr(minAmount)} birr. You have ${formatBirr(balance)}.`}
+            hint={`At least ${formatBirr(minAmount)} birr${Number.isFinite(maxAmount) ? `, at most ${formatBirr(maxAmount)} right now` : ""}. You have ${formatBirr(balance)}.`}
             inputMode="decimal"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             error={error}
             disabled={sending}
             trailing={
-              <button type="button" className="text-small font-semibold text-ink-2 hover:text-ink" onClick={() => setAmount(String(balance / SANTIM_PER_BIRR))}>
+              <button type="button" className="text-small font-semibold text-ink-2 hover:text-ink" onClick={() => setAmount(String(Math.min(balance, maxAmount) / SANTIM_PER_BIRR))}>
                 Max
               </button>
             }
           />
-          <Button type="submit" variant="sec" block loading={sending} icon="envelope" disabled={balance < minAmount}>
+          <Button type="submit" variant="sec" block loading={sending} icon="envelope" disabled={balance < minAmount || maxAmount < minAmount}>
             Request withdrawal
           </Button>
           <p className="text-small text-ink-3">A moderator sends the money by hand, usually within a day. If they can’t, it comes back to your wallet.</p>

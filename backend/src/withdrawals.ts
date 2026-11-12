@@ -25,6 +25,9 @@ import { BIRR, type Wallet } from "./wallet";
 
 const WITHDRAWALS = "withdrawals";
 export const MIN_WITHDRAWAL = 50 * BIRR;
+/** Ceilings (WITHDRAWAL_MAX_BIRR, WITHDRAWAL_DAILY_MAX_BIRR): one request, and one player's requests in 24 hours. */
+export const WITHDRAWAL_LIMITS = { perRequest: 2_000 * BIRR, perDay: 5_000 * BIRR };
+const DAY_MS = 24 * 60 * 60_000;
 const BANKS: Record<DepositBank, string> = { telebirr: "Telebirr", cbe: "CBE" };
 /** Clock difference we allow between verify.et's receipt time and ours. */
 export const CLOCK_SKEW_MS = 5 * 60_000;
@@ -95,6 +98,8 @@ export interface WithdrawalOptions {
   verifyEt?: VerifyEt | null;
   /** Telegram user ids allowed to act (TELEGRAM_MODERATORS). Default: the owner of a one-to-one moderator chat. */
   moderators?: Moderators;
+  /** Ceilings in santim; defaults WITHDRAWAL_LIMITS. */
+  limits?: Partial<typeof WITHDRAWAL_LIMITS>;
   /** Payouts above this many santim need a second moderator; null turns that off. */
   secondApprovalAbove?: number | null;
   /** Name on our payout account; when set, the payout receipt's sender must match it. */
@@ -117,6 +122,20 @@ export function normalizeAccount(bank: DepositBank, raw: unknown): string | null
   return /^\d{10,16}$/.test(digits) ? digits : null;
 }
 
+/** WITHDRAWAL_MAX_BIRR / WITHDRAWAL_DAILY_MAX_BIRR, in santim; unset or unreadable values keep the defaults. */
+export function withdrawalLimitsFromEnv(env: Record<string, string | undefined> = process.env): Partial<typeof WITHDRAWAL_LIMITS> {
+  const read = (raw: string | undefined) => {
+    const n = Number(raw);
+    return raw && Number.isFinite(n) && n > 0 ? Math.round(n * BIRR) : undefined;
+  };
+  const out: Partial<typeof WITHDRAWAL_LIMITS> = {};
+  const perRequest = read(env.WITHDRAWAL_MAX_BIRR);
+  const perDay = read(env.WITHDRAWAL_DAILY_MAX_BIRR);
+  if (perRequest) out.perRequest = perRequest;
+  if (perDay) out.perDay = perDay;
+  return out;
+}
+
 /** SECOND_APPROVAL_ABOVE_BIRR: a number of birr, or "off". Unset or unreadable: the default. */
 export function secondApprovalFromEnv(raw: string | undefined): number | null {
   if (raw?.trim().toLowerCase() === "off") return null;
@@ -132,6 +151,7 @@ export class Withdrawals {
   private readonly nameOf: (profileId: string) => string;
   private readonly moderators: Moderators;
   private readonly secondApprovalAbove: number | null;
+  private readonly limits: typeof WITHDRAWAL_LIMITS;
   private polling = false;
   private offset = 0;
 
@@ -144,6 +164,7 @@ export class Withdrawals {
     this.onUpdate = opts.onUpdate ?? (() => {});
     this.nameOf = opts.nameOf ?? ((id) => id);
     this.moderators = opts.moderators ?? moderatorList(null, opts.moderatorChat);
+    this.limits = { ...WITHDRAWAL_LIMITS, ...opts.limits };
     this.secondApprovalAbove = opts.secondApprovalAbove === undefined ? SECOND_APPROVAL_ABOVE : opts.secondApprovalAbove;
   }
 
@@ -204,9 +225,40 @@ export class Withdrawals {
     if (!w || w.profileId !== profileId) return { ok: false, reason: "no such withdrawal" };
     if (w.status !== "pending") return { ok: false, reason: "that withdrawal is already closed" };
     if (w.pickedUpBy) return { ok: false, reason: "a moderator is already sending it" };
-    this.wallet.refundWithdrawal(w.profileId, w.amount, w.id);
-    await this.close(w, { status: "cancelled", closedBy: "player" });
+    await this.closeAndRefund(w, { status: "cancelled", closedBy: "player" });
     return { ok: true };
+  }
+
+  /**
+   * Close first, then refund: if the process dies in between, recover() finds a
+   * closed request without its refund and pays it. (The other order could leave
+   * a refunded request open, which a moderator might then pay out too.)
+   */
+  private async closeAndRefund(w: Withdrawal, changes: Partial<Withdrawal>) {
+    const closing = this.close(w, changes);
+    this.wallet.refundWithdrawal(w.profileId, w.amount, w.id);
+    await closing;
+  }
+
+  /**
+   * After a restart: a request saved but never debited (the process died in
+   * between) is dropped, and a rejected or cancelled one whose refund never
+   * happened is refunded now.
+   */
+  recover() {
+    const list = this.list();
+    const kept = list.filter((w) => {
+      if (w.status !== "pending" || this.wallet.txnFor("withdrawal", w.id)) return true;
+      console.warn(`withdrawal ${w.id}: saved but never taken from the wallet; dropped`);
+      return false;
+    });
+    if (kept.length !== list.length) this.save(kept);
+    for (const w of kept) {
+      if ((w.status === "rejected" || w.status === "cancelled") && this.wallet.txnFor("withdrawal", w.id) && !this.wallet.txnFor("withdrawal-refund", w.id)) {
+        console.warn(`withdrawal ${w.id}: ${w.status} but never refunded; refunding`);
+        this.wallet.refundWithdrawal(w.profileId, w.amount, w.id);
+      }
+    }
   }
 
   async request(
@@ -221,8 +273,14 @@ export class Withdrawals {
     const amount = input.amount;
     if (typeof amount !== "number" || !Number.isInteger(amount)) return { ok: false, reason: "enter an amount" };
     if (amount < MIN_WITHDRAWAL) return { ok: false, reason: `the smallest withdrawal is ${birr(MIN_WITHDRAWAL)} birr` };
+    if (amount > this.limits.perRequest) return { ok: false, reason: `the most you can withdraw at once is ${birr(this.limits.perRequest)} birr` };
     if (this.list().some((w) => w.profileId === profileId && w.status === "pending")) {
       return { ok: false, reason: "you already have a withdrawal waiting" };
+    }
+    const today = this.withdrawnToday(profileId);
+    if (today + amount > this.limits.perDay) {
+      const left = Math.max(0, this.limits.perDay - today);
+      return { ok: false, reason: `you can withdraw up to ${birr(this.limits.perDay)} birr a day; ${birr(left)} birr left for now` };
     }
 
     const w: Withdrawal = {
@@ -239,11 +297,16 @@ export class Withdrawals {
       alertMessageId: null,
       promptMessageId: null,
     };
-    const taken = this.wallet.withdraw(profileId, amount, w.id);
-    if (!taken.ok) return { ok: false, reason: taken.reason };
+    // Saved before the wallet debit, so a crash in between can't lose a debited
+    // request; recover() drops a saved one that was never debited.
     const list = this.list();
     list.push(w);
     this.save(list);
+    const taken = this.wallet.withdraw(profileId, amount, w.id);
+    if (!taken.ok) {
+      this.save(this.list().filter((x) => x.id !== w.id));
+      return { ok: false, reason: taken.reason };
+    }
 
     try {
       const msg = await this.opts.telegram!.call("sendMessage", {
@@ -354,8 +417,7 @@ export class Withdrawals {
           reply_markup: { inline_keyboard: [[{ text: "❌ Nothing was sent, refund", callback_data: `reject!:${w.id}` }]] },
         });
       } else if (action === "reject" || action === "reject!") {
-        this.wallet.refundWithdrawal(w.profileId, w.amount, w.id);
-        await this.close(w, { status: "rejected", closedBy: who });
+        await this.closeAndRefund(w, { status: "rejected", closedBy: who });
       } else if (action === "paid") {
         if (!w.pickedUpBy) this.patch(w.id, { pickedUpBy: who });
         const prompt = await this.say(`Reply to this message with the ${BANKS[w.bank]} transaction number for withdrawal ${w.id} (${birr(w.amount)} birr to ${w.account}).`, {
@@ -499,7 +561,16 @@ export class Withdrawals {
 
   /** What the wallet screen needs. */
   summary(profileId: string) {
-    return { enabled: this.enabled, minAmount: MIN_WITHDRAWAL, requests: this.forPlayer(profileId) };
+    const left = Math.max(0, this.limits.perDay - this.withdrawnToday(profileId));
+    return { enabled: this.enabled, minAmount: MIN_WITHDRAWAL, maxAmount: Math.min(this.limits.perRequest, left), requests: this.forPlayer(profileId) };
+  }
+
+  /** Santim this player asked for in the last 24 hours (not counting returned or cancelled requests). */
+  private withdrawnToday(profileId: string): number {
+    const since = this.now() - DAY_MS;
+    return this.list()
+      .filter((w) => w.profileId === profileId && w.createdAt > since && (w.status === "pending" || w.status === "paid"))
+      .reduce((sum, w) => sum + w.amount, 0);
   }
 
   /** wallet:withdraw { bank, account, amount } over the signed-in socket. */

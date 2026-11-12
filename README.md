@@ -124,6 +124,7 @@ The server reads `.env.local`, then `.env` (both git-ignored).
 | `TELEGRAM_MODERATOR_CHAT` | server | Chat id of the moderators' group (add the bot to the group; group ids start with `-`). Only this chat can mark withdrawals paid or rejected, and approve or reject deposits held for review |
 | `TELEGRAM_MODERATORS` | server | Telegram user ids (comma-separated) allowed to tap Paid / Reject / Approve and answer prompts in the moderator chat. Unset: only the owner of a one-to-one chat (positive chat id); in a group nobody, so set it |
 | `SECOND_APPROVAL_ABOVE_BIRR` | server | Withdrawals above this need a second moderator from the list to approve (default 1000; `off` turns it off) |
+| `WITHDRAWAL_MAX_BIRR` / `WITHDRAWAL_DAILY_MAX_BIRR` | server | Ceilings for one withdrawal and for one player's withdrawals in 24 hours (defaults 2000 and 5000 birr) |
 | `PAYOUT_SENDER_NAME` | server | Optional. Name on the account moderators pay withdrawals from; when set, a payout receipt must show this sender before the request closes as paid |
 | `TELEGRAM_API_URL` | server | Telegram Bot API base URL, default `https://api.telegram.org` (point it at a stub for local testing) |
 | `NEXT_PUBLIC_API_URL` | web | Server URL, default `http://localhost:3001` |

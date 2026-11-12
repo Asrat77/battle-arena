@@ -21,7 +21,7 @@ import { guardSocket } from "./safe";
 import { FileStore, type Store } from "./store";
 import { tournamentRoutes, Tournaments } from "./tournaments";
 import { depositAccountsFromEnv, Deposits, httpVerifyEt, type DepositOptions } from "./deposits";
-import { httpTelegram, secondApprovalFromEnv, Withdrawals, type WithdrawalOptions } from "./withdrawals";
+import { httpTelegram, secondApprovalFromEnv, withdrawalLimitsFromEnv, Withdrawals, type WithdrawalOptions } from "./withdrawals";
 import { Wallet, walletModeFromEnv, walletRoutes, type WalletOptions } from "./wallet";
 
 export interface AppOptions {
@@ -130,11 +130,14 @@ export function createApp(options: AppOptions = {}) {
     nameOf,
     payoutSenderName: process.env.PAYOUT_SENDER_NAME?.trim() || null,
     moderators,
+    limits: withdrawalLimitsFromEnv(),
     secondApprovalAbove: secondApprovalFromEnv(process.env.SECOND_APPROVAL_ABOVE_BIRR),
     alsoHandle: (update) => deposits.handleUpdate(update),
     ...options.withdrawals,
     onUpdate: (w) => io.to(profileRoom(w.profileId)).emit("wallet:withdrawal", withdrawals.view(w)),
   });
+  // A withdrawal the last process saved but never debited, or closed but never refunded.
+  withdrawals.recover();
   wallet.withdrawals = (id) => withdrawals.summary(id);
   const lobby = new Lobby(io, matches, identity, { clock: options.clock, games: options.games, wallet });
   app.use(lobbyRoutes(lobby));

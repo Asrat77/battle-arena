@@ -126,7 +126,8 @@ export interface WalletSummary {
   depositAccounts: { bank: string; account: string }[];
   /** The name on the account this player pays deposits from; locked once a deposit is credited. */
   depositPayer?: { name: string; locked: boolean } | null;
-  withdrawals: { enabled: boolean; minAmount: number; requests: Withdrawal[] };
+  /** maxAmount: the most this player can ask for right now (per-request and daily ceilings). */
+  withdrawals: { enabled: boolean; minAmount: number; maxAmount?: number; requests: Withdrawal[] };
   history: WalletTxn[];
 }
 
