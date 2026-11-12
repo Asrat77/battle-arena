@@ -3,9 +3,10 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import type { VerifyEt, VerifyResult } from "./deposits";
+import { moderatorList } from "./moderators";
 import { MemoryStore } from "./store";
 import { BIRR, Wallet } from "./wallet";
-import { MIN_WITHDRAWAL, normalizeAccount, Withdrawals, type TelegramApi } from "./withdrawals";
+import { MIN_WITHDRAWAL, normalizeAccount, SECOND_APPROVAL_ABOVE, secondApprovalFromEnv, Withdrawals, type TelegramApi } from "./withdrawals";
 
 const CHAT = "-100123";
 
@@ -33,7 +34,7 @@ const ok = (over: Partial<Extract<VerifyResult, { state: "verified" }>> = {}): V
   ...over,
 });
 
-function setup(opts: { verify?: VerifyResult; mode?: "play" | "real"; payoutSenderName?: string } = {}) {
+function setup(opts: { verify?: VerifyResult; mode?: "play" | "real"; payoutSenderName?: string; secondApprovalAbove?: number | null; mods?: string } = {}) {
   const store = new MemoryStore();
   const wallet = new Wallet(store, { mode: opts.mode ?? "real" });
   const tg = fakeTelegram();
@@ -47,6 +48,8 @@ function setup(opts: { verify?: VerifyResult; mode?: "play" | "real"; payoutSend
     moderatorChat: CHAT,
     verifyEt,
     payoutSenderName: opts.payoutSenderName ?? null,
+    moderators: moderatorList(opts.mods ?? "1,2", CHAT),
+    secondApprovalAbove: opts.secondApprovalAbove === undefined ? null : opts.secondApprovalAbove,
     now: () => T0,
     nameOf: (id) => `Player ${id}`,
     onUpdate: (w) => updates.push(w.status),
@@ -55,8 +58,11 @@ function setup(opts: { verify?: VerifyResult; mode?: "play" | "real"; payoutSend
   return { wallet, withdrawals, tg, verifyCalls, updates };
 }
 
-const tap = (data: string, chat = CHAT) => ({ update_id: 1, callback_query: { id: "cb", data, from: { username: "mod" }, message: { chat: { id: chat } } } });
-const reply = (to: number, text: string, chat = CHAT) => ({ update_id: 2, message: { chat: { id: chat }, text, from: { username: "mod" }, reply_to_message: { message_id: to } } });
+const tap = (data: string, chat = CHAT, from = 1) => ({ update_id: 1, callback_query: { id: "cb", data, from: { id: from, username: from === 1 ? "mod" : `mod${from}` }, message: { chat: { id: chat } } } });
+const reply = (to: number, text: string, chat = CHAT, from = 1) => ({
+  update_id: 2,
+  message: { chat: { id: chat }, text, from: { id: from, username: from === 1 ? "mod" : `mod${from}` }, reply_to_message: { message_id: to } },
+});
 
 describe("withdrawals", () => {
   test("a request takes the money and alerts moderators with buttons", async () => {
@@ -256,7 +262,7 @@ describe("withdrawals", () => {
   test("/pending lists open requests", async () => {
     const { withdrawals, tg } = setup();
     await withdrawals.request("p", { bank: "telebirr", account: "0911223344", amount: 70 * BIRR });
-    await withdrawals.handleUpdate({ update_id: 3, message: { chat: { id: CHAT }, text: "/pending" } });
+    await withdrawals.handleUpdate({ update_id: 3, message: { chat: { id: CHAT }, from: { id: 1 }, text: "/pending" } });
     assert.match(tg.sent().at(-1)!, /70 birr/);
   });
 
@@ -274,10 +280,79 @@ describe("withdrawals", () => {
     const withdrawals = new Withdrawals(store, wallet, {
       telegram: fakeTelegram().api,
       moderatorChat: CHAT,
+      moderators: moderatorList("1", CHAT),
       alsoHandle: async (u) => void seen.push(u),
     });
     await withdrawals.handleUpdate(tap("dep-ok:abc"));
     await withdrawals.handleUpdate(tap("dep-ok:abc", "-999"));
-    assert.equal(seen.length, 1, "only updates from the moderators' chat");
+    await withdrawals.handleUpdate(tap("dep-ok:abc", CHAT, 666));
+    assert.equal(seen.length, 1, "only updates from listed moderators in the moderators' chat");
+  });
+
+  // M3: only listed moderators act, and big payouts need two of them.
+  test("someone in the chat but not on the moderator list can't pay, reject or approve", async () => {
+    const s = setup({ verify: ok() });
+    const r = await s.withdrawals.request("p", { bank: "telebirr", account: "0911223344", amount: 100 * BIRR });
+    assert.ok(r.ok);
+    await s.withdrawals.handleUpdate(tap(`reject:${r.withdrawal.id}`, CHAT, 666));
+    await s.withdrawals.handleUpdate(tap(`paid:${r.withdrawal.id}`, CHAT, 666));
+    const w = s.withdrawals.get(r.withdrawal.id)!;
+    assert.equal(w.status, "pending");
+    assert.equal(w.pickedUpBy ?? null, null);
+    assert.equal(s.wallet.balanceOf("p"), 200 * BIRR);
+    assert.match(s.tg.calls.at(-1)!.params.text, /not on the moderator list/);
+    // A listed moderator's prompt can't be answered by an outsider either.
+    await s.withdrawals.handleUpdate(tap(`paid:${r.withdrawal.id}`));
+    await s.withdrawals.handleUpdate(reply(s.withdrawals.get(r.withdrawal.id)!.promptMessageId!, "CHK1A2B3C4", CHAT, 666));
+    assert.equal(s.withdrawals.get(r.withdrawal.id)!.status, "pending");
+  });
+
+  test("moderatorList: an explicit list, a one-to-one chat owner, or nobody in a group", () => {
+    assert.ok(moderatorList("11, 22", "-100").allows(22));
+    assert.ok(!moderatorList("11, 22", "-100").allows(33));
+    assert.ok(moderatorList("", "5551").allows("5551"));
+    assert.equal(moderatorList(undefined, "-100").count, 0);
+    assert.ok(!moderatorList(undefined, "-100").allows(undefined));
+  });
+
+  test("above the limit, a second, different moderator must approve the payout", async () => {
+    const s = setup({ verify: ok({ amount: 250 * BIRR }), secondApprovalAbove: 200 * BIRR });
+    const w = await payWith(s, "CHK1A2B3C4", 250 * BIRR);
+    assert.equal(w.status, "pending");
+    assert.equal(w.approval!.by, "@mod");
+    const approve = s.tg.calls.at(-1)!.params.reply_markup.inline_keyboard[0][0];
+    assert.equal(approve.callback_data, `approve:${w.id}`);
+    await s.withdrawals.handleUpdate(tap(`approve:${w.id}`, CHAT, 1));
+    assert.equal(s.withdrawals.get(w.id)!.status, "pending", "the same moderator can't approve twice");
+    assert.match(s.tg.sent().at(-1)!, /needs a different moderator/);
+    await s.withdrawals.handleUpdate(tap(`approve:${w.id}`, CHAT, 2));
+    const done = s.withdrawals.get(w.id)!;
+    assert.equal(done.status, "paid");
+    assert.equal(done.reference, "CHK1A2B3C4");
+    assert.equal(done.closedBy, "@mod + @mod2");
+    // Below the limit one moderator is enough.
+    const small = setup({ verify: ok(), secondApprovalAbove: 200 * BIRR });
+    assert.equal((await payWith(small, "CHK9Z8Y7X6")).status, "paid");
+  });
+
+  test("forced confirmations above the limit also need a second moderator", async () => {
+    const s = setup({ secondApprovalAbove: 50 * BIRR, mods: "1" });
+    const w = await payWith(s, "CHK1A2B3C4");
+    await s.withdrawals.handleUpdate(tap(`force:${w.id}`));
+    await s.withdrawals.handleUpdate(reply(s.withdrawals.get(w.id)!.forcePromptMessageId!, "checked the app history"));
+    const waiting = s.withdrawals.get(w.id)!;
+    assert.equal(waiting.status, "pending");
+    assert.deepEqual(waiting.approval!.forced, { by: "@mod", reason: "checked the app history" });
+    assert.match(s.tg.sent().at(-1)!, /Only one moderator is on TELEGRAM_MODERATORS/);
+    // Reject still asks first, since a number was given.
+    await s.withdrawals.handleUpdate(tap(`reject:${w.id}`));
+    assert.equal(s.withdrawals.get(w.id)!.status, "pending");
+  });
+
+  test("secondApprovalFromEnv", () => {
+    assert.equal(secondApprovalFromEnv(undefined), SECOND_APPROVAL_ABOVE);
+    assert.equal(secondApprovalFromEnv("off"), null);
+    assert.equal(secondApprovalFromEnv("2500"), 2500 * BIRR);
+    assert.equal(secondApprovalFromEnv("nonsense"), SECOND_APPROVAL_ABOVE);
   });
 });

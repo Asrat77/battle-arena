@@ -19,6 +19,7 @@
 
 import { randomBytes } from "node:crypto";
 import type { Socket } from "socket.io";
+import { type Moderators, telegramName } from "./moderators";
 import { RateLimiter } from "./rateLimit";
 import type { Store } from "./store";
 import { BIRR, type Wallet } from "./wallet";
@@ -182,6 +183,8 @@ export interface ModeratorChat {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Bot API JSON
   call(method: string, params: Record<string, unknown>): Promise<any>;
   chatId: string;
+  /** Telegram user ids allowed to approve or reject (TELEGRAM_MODERATORS). */
+  allowed: Moderators;
 }
 
 export interface DepositOptions {
@@ -589,7 +592,12 @@ export class Deposits {
     if (String(cb.message?.chat?.id ?? "") !== String(mods.chatId)) return;
     const [action, id] = String(cb.data ?? "").split(":");
     if (action !== "dep-ok" && action !== "dep-no") return;
-    const who = cb.from?.username ? `@${cb.from.username}` : (cb.from?.first_name ?? "a moderator");
+    if (!mods.allowed.allows(cb.from?.id)) {
+      console.warn(`deposit ${id}: ${cb.from?.id} tapped ${action} but isn't on TELEGRAM_MODERATORS`);
+      await mods.call("answerCallbackQuery", { callback_query_id: cb.id, text: "You're not on the moderator list." }).catch(() => {});
+      return;
+    }
+    const who = telegramName(cb.from);
     await mods.call("answerCallbackQuery", { callback_query_id: cb.id }).catch(() => {});
     const x = this.resolve(id, action === "dep-ok", who);
     if (x?.alertMessageId) {

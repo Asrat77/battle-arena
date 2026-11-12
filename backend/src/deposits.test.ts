@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { Deposits, DEPOSIT_LIMITS, depositAccountsFromEnv, namesMatch, parseReference, httpVerifyEt, MIN_DEPOSIT, POLL_TRIES, RETRIES, type Deposit, type VerifyEt, type VerifyResult } from "./deposits";
+import { moderatorList } from "./moderators";
 import { MemoryStore } from "./store";
 import { BIRR, Wallet } from "./wallet";
 
@@ -179,7 +180,7 @@ function fakeTelegram() {
   let nextId = 100;
   return {
     sent,
-    chat: { chatId: "-42", call: async (method: string, params: Record<string, unknown>) => (sent.push({ method, params }), { message_id: nextId++ }) },
+    chat: { chatId: "-42", allowed: moderatorList("7", "-42"), call: async (method: string, params: Record<string, unknown>) => (sent.push({ method, params }), { message_id: nextId++ }) },
   };
 }
 
@@ -196,8 +197,8 @@ function guarded(answers: Record<string, VerifyResult | VerifyResult[]>, opts: {
     moderators: tg.chat,
     limits: { perAccount: 100 },
   });
-  const tap = (data: string, chat = "-42") =>
-    deposits.handleUpdate({ callback_query: { id: "cb", data, from: { username: "mod" }, message: { chat: { id: chat } } } });
+  const tap = (data: string, chat = "-42", fromId = 7) =>
+    deposits.handleUpdate({ callback_query: { id: "cb", data, from: { id: fromId, username: "mod" }, message: { chat: { id: chat } } } });
   return { wallet, deposits, tg, tap };
 }
 
@@ -216,9 +217,13 @@ describe("deposits: who paid and when (audit H1, M4, M10)", () => {
     assert.equal(deposits.get(thief.deposit.id)!.alertMessageId, 100);
     // The real payer is blocked while it's in review...
     assert.equal((await deposits.submit("owner", "telebirr", "CH12THEFT1", PAYER)).ok, false);
-    // ...a tap from another chat does nothing, a moderator's reject frees it.
+    // ...a tap from another chat or from someone off the moderator list does nothing (M3)...
     await tap(`dep-no:${thief.deposit.id}`, "-1");
     assert.equal(deposits.get(thief.deposit.id)!.status, "review");
+    await tap(`dep-ok:${thief.deposit.id}`, "-42", 666);
+    assert.equal(deposits.get(thief.deposit.id)!.status, "review");
+    assert.equal(wallet.balanceOf("thief"), 0);
+    // ...a moderator's reject frees it.
     await tap(`dep-no:${thief.deposit.id}`);
     assert.equal(deposits.get(thief.deposit.id)!.status, "rejected");
     assert.equal(deposits.get(thief.deposit.id)!.closedBy, "@mod");
