@@ -4,7 +4,8 @@
 // - the same two players can play only so many staked matches a day,
 // - each player can put only so much at stake a day,
 // - an account must be some hours old, and have a password, before it stakes,
-// - a pair whose stakes keep flowing one way is flagged to the moderators.
+// - a pair whose stakes keep flowing one way is flagged to the moderators, and so
+//   is a player who keeps losing to several accounts (a ring; review R5).
 // Play money has no cash value, so none of this applies to it.
 
 import { BIRR, type Escrow, type Wallet } from "./wallet";
@@ -23,6 +24,8 @@ export const STAKE_LIMITS = {
 /** One-way flow flag: this many settled matches in FLOW_WINDOW_MS, all won by the same player. */
 export const FLOW_MIN_MATCHES = 4;
 export const FLOW_WINDOW_MS = 7 * DAY_MS;
+/** Per player: lost every one of at least FLOW_MIN_MATCHES in the window, to this many different accounts. */
+export const FLOW_MIN_OPPONENTS = 2;
 
 export interface StakeLimitOptions {
   limits?: Partial<typeof STAKE_LIMITS>;
@@ -105,17 +108,32 @@ export class StakeLimits {
   }
 
   /**
-   * After a real-money match settles: if one player of this pair won every one of
-   * their last FLOW_MIN_MATCHES or more staked matches in a week, tell the moderators.
-   * Returns the alert text when it flagged.
+   * After a real-money match settles, look for money flowing one way:
+   * - one player of this pair won every one of their last FLOW_MIN_MATCHES or more
+   *   staked matches in a week;
+   * - the loser lost every one of FLOW_MIN_MATCHES or more staked matches in a week,
+   *   to FLOW_MIN_OPPONENTS or more different accounts (chip dumping to a ring).
+   * Tells the moderators. Returns the alert text when it flagged.
    */
   afterSettle(escrow: Escrow): string | null {
-    if (escrow.status !== "settled") return null;
+    if (escrow.status !== "settled" || escrow.winner === null) return null;
+    const texts = [this.pairFlow(escrow), this.playerFlow(escrow.players[escrow.winner === 0 ? 1 : 0])].filter((t): t is string => t !== null);
+    for (const text of texts) {
+      console.warn(text);
+      this.opts.alert?.(text);
+    }
+    return texts.length ? texts.join("\n\n") : null;
+  }
+
+  private settledSince(since: number, filter: (e: Escrow) => boolean): Escrow[] {
+    return this.wallet.escrows("real").filter((e) => e.status === "settled" && e.closedAt !== null && e.closedAt > since && filter(e));
+  }
+
+  private pairFlow(escrow: Escrow): string | null {
     const [a, b] = escrow.players;
     const key = [a, b].sort().join(":");
-    const since = this.now() - FLOW_WINDOW_MS;
     if ((this.flagged.get(key) ?? 0) > this.now() - DAY_MS) return null;
-    const games = this.wallet.escrows("real").filter((e) => samePair(e, a, b) && e.closedAt !== null && e.closedAt > since && e.status === "settled");
+    const games = this.settledSince(this.now() - FLOW_WINDOW_MS, (e) => samePair(e, a, b));
     if (games.length < FLOW_MIN_MATCHES) return null;
     const winners = new Set(games.map((e) => e.players[e.winner!]));
     if (winners.size !== 1) return null;
@@ -123,10 +141,26 @@ export class StakeLimits {
     const loser = winner === a ? b : a;
     const net = games.reduce((sum, e) => sum + this.wallet.payout(e.stake, e.feeBps).prize - e.stake, 0);
     const name = this.opts.nameOf ?? ((id: string) => id);
-    const text = `⚠️ One-way stakes: ${name(winner)} won all ${games.length} staked matches against ${name(loser)} in the last 7 days (about ${birr(net)} birr moved one way). Check for collusion before paying out withdrawals.`;
     this.flagged.set(key, this.now());
-    console.warn(text);
-    this.opts.alert?.(text);
-    return text;
+    return `⚠️ One-way stakes: ${name(winner)} won all ${games.length} staked matches against ${name(loser)} in the last 7 days (about ${birr(net)} birr moved one way). Check for collusion before paying out withdrawals.`;
+  }
+
+  private playerFlow(loser: string): string | null {
+    const key = `player:${loser}`;
+    if ((this.flagged.get(key) ?? 0) > this.now() - DAY_MS) return null;
+    const games = this.settledSince(this.now() - FLOW_WINDOW_MS, (e) => e.players.includes(loser));
+    if (games.length < FLOW_MIN_MATCHES) return null;
+    if (games.some((e) => e.players[e.winner!] === loser)) return null;
+    const opponents = new Map<string, number>();
+    for (const e of games) {
+      const w = e.players[e.winner!];
+      opponents.set(w, (opponents.get(w) ?? 0) + e.stake);
+    }
+    if (opponents.size < FLOW_MIN_OPPONENTS) return null;
+    const lost = games.reduce((sum, e) => sum + e.stake, 0);
+    const name = this.opts.nameOf ?? ((id: string) => id);
+    const to = [...opponents].map(([p, s]) => `${name(p)} (${birr(s)})`).join(", ");
+    this.flagged.set(key, this.now());
+    return `⚠️ One-way stakes: ${name(loser)} lost all ${games.length} staked matches in the last 7 days, ${birr(lost)} birr in total, to ${opponents.size} accounts: ${to}. Possible chip dumping; check before paying out withdrawals.`;
   }
 }

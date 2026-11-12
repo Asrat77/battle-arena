@@ -437,9 +437,10 @@ export class Withdrawals {
         return;
       }
       const given = w.approval?.reference ?? w.unverified?.reference;
-      if (action === "reject" && given) {
-        // A payout number was given: maybe money went out. A refund now would pay twice.
-        await this.say(`Withdrawal ${w.id}: ${given} was given as its payout. Reject only if NO money was sent; the player gets ${birr(w.amount)} birr back.`, {
+      if (action === "reject" && (given || w.pickedUpBy)) {
+        // Paid was tapped (maybe with a payout number): money may have gone out. A refund now would pay twice (review R6).
+        const what = given ? `${given} was given as its payout` : `${w.pickedUpBy} tapped Paid on it`;
+        await this.say(`Withdrawal ${w.id}: ${what}. Reject only if NO money was sent; the player gets ${birr(w.amount)} birr back.`, {
           reply_markup: { inline_keyboard: [[{ text: "❌ Nothing was sent, refund", callback_data: `reject!:${w.id}` }]] },
         });
       } else if (action === "reject" || action === "reject!") {

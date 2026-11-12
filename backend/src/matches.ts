@@ -15,6 +15,12 @@ import type { Store } from "./store";
 export const DISCONNECT_FORFEIT_MS = 30_000;
 /** After a restart, players of a resumed match get this long to reconnect. */
 export const RESUME_GRACE_MS = 120_000;
+/**
+ * Two players whose away clocks run out within this long of each other dropped
+ * together (a network blip, a server-side cut): neither is "first", so it is an
+ * abandoned draw rather than a forfeit by whoever happened to register first.
+ */
+export const SIMULTANEOUS_DROP_MS = 5_000;
 /** Store key for matches that must survive a restart (staked ones). */
 const LIVE = "liveMatches";
 
@@ -413,21 +419,37 @@ export class MatchRuntime extends EventEmitter {
     if (m.timers.disconnect[seat] || m.cur.outcome) return;
     m.away[seat] = this.clock.now() + ms;
     this.io.to(this.allRooms(m)).emit("match:presence", this.presencePayload(m));
-    m.timers.disconnect[seat] = this.clock.setTimeout(() => {
-      m.timers.disconnect[seat] = undefined;
+    m.timers.disconnect[seat] = this.clock.setTimeout(() => this.awayRanOut(m, seat), ms);
+  }
+
+  /**
+   * A seat's away clock ran out. The first to leave forfeits, even if the other player
+   * has dropped since: their own clock is still running, so they still win. When both
+   * clocks run out together (both were away from the start, nobody came back after a
+   * restart, or both dropped within SIMULTANEOUS_DROP_MS) it is an abandoned draw
+   * (audit M6, review R1 and its follow-up).
+   */
+  private awayRanOut(m: Match, seat: Seat) {
+    m.timers.disconnect[seat] = undefined;
+    if (m.cur.outcome) return;
+    if (this.isOnline(m.players[seat])) {
       m.away[seat] = null;
-      if (this.isOnline(m.players[seat])) return;
-      // The first to leave forfeits, even if the other player has dropped since: their
-      // own clock is still running, so they still win. Only when both clocks run out
-      // together (both were away from the start, or nobody came back after a restart)
-      // is it an abandoned draw (audit M6, review R1).
-      const other: Seat = seat === 0 ? 1 : 0;
-      const otherUntil = m.away[other];
-      const otherGone =
-        !m.bots.includes(other) && !this.isOnline(m.players[other]) && otherUntil !== null && otherUntil <= this.clock.now();
-      const move = otherGone ? ({ type: "abandon" } as const) : ({ type: "forfeit", seat } as const);
-      this.append(m, { t: this.clock.now(), seat: "system", move });
-    }, ms);
+      return;
+    }
+    const now = this.clock.now();
+    const other: Seat = seat === 0 ? 1 : 0;
+    const otherUntil = m.away[other];
+    const otherAway = !m.bots.includes(other) && !this.isOnline(m.players[other]) && otherUntil !== null;
+    if (otherAway && otherUntil > now && otherUntil - now <= SIMULTANEOUS_DROP_MS) {
+      // They dropped at nearly the same moment: wait for the other clock. If they come
+      // back first, this seat still forfeits then; if not, it is a draw.
+      m.away[seat] = otherUntil;
+      m.timers.disconnect[seat] = this.clock.setTimeout(() => this.awayRanOut(m, seat), otherUntil - now);
+      return;
+    }
+    m.away[seat] = null;
+    const move = otherAway && otherUntil <= now ? ({ type: "abandon" } as const) : ({ type: "forfeit", seat } as const);
+    this.append(m, { t: now, seat: "system", move });
   }
 
   private finish(m: Match) {

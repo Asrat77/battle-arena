@@ -171,4 +171,60 @@ describe("restart", () => {
     assert.equal(app.wallet.balanceOf(bob.profile.id), DEFAULTS.faucetAmount + 80 * BIRR);
     app.io.close();
   });
+  test("both dropping within milliseconds is an abandoned draw, not a forfeit by whoever registered first", async () => {
+    const app = boot(new MemoryStore());
+    const { alice, bob, m, escrowId } = stakedMatch(app);
+    await new Promise<void>((resolve) => app.httpServer.listen(0, resolve));
+    const url = `http://localhost:${(app.httpServer.address() as AddressInfo).port}`;
+    const join = async (token: string) => {
+      const s = connect(url, { auth: { token }, transports: ["websocket"], forceNew: true, reconnection: false });
+      await new Promise<void>((resolve) => s.once("connect", resolve));
+      return s;
+    };
+    const wait = () => new Promise((r) => setTimeout(r, 50));
+    const a = await join(alice.token);
+    const b = await join(bob.token);
+    await wait();
+    a.disconnect();
+    await wait();
+    app.clock.advance(3);
+    b.disconnect();
+    await wait();
+    app.clock.advance(DISCONNECT_FORFEIT_MS - 3);
+    assert.equal(m.cur.outcome, null, "Alice's clock ran out first, but Bob's is 3 ms behind: wait for it");
+    app.clock.advance(10);
+    assert.deepEqual(m.cur.outcome, { winner: null, draw: true, reason: "abandoned" });
+    assert.equal(app.wallet.escrow(escrowId)?.status, "refunded");
+    app.io.close();
+  });
+
+  test("within the near-simultaneous window, the one who comes back still wins", async () => {
+    const app = boot(new MemoryStore());
+    const { alice, bob, m } = stakedMatch(app);
+    await new Promise<void>((resolve) => app.httpServer.listen(0, resolve));
+    const url = `http://localhost:${(app.httpServer.address() as AddressInfo).port}`;
+    const join = async (token: string) => {
+      const s = connect(url, { auth: { token }, transports: ["websocket"], forceNew: true, reconnection: false });
+      await new Promise<void>((resolve) => s.once("connect", resolve));
+      return s;
+    };
+    const wait = () => new Promise((r) => setTimeout(r, 50));
+    const a = await join(alice.token);
+    const b = await join(bob.token);
+    await wait();
+    a.disconnect();
+    await wait();
+    app.clock.advance(1_000);
+    b.disconnect();
+    await wait();
+    app.clock.advance(DISCONNECT_FORFEIT_MS - 500);
+    assert.equal(m.cur.outcome, null);
+    const b2 = await join(bob.token);
+    await wait();
+    app.clock.advance(1_000);
+    const aliceSeat = m.players.indexOf(alice.profile.id);
+    assert.deepEqual(m.cur.outcome, { winner: aliceSeat === 0 ? 1 : 0, draw: false, reason: "forfeit" });
+    b2.disconnect();
+    app.io.close();
+  });
 });

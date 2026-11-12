@@ -377,8 +377,10 @@ describe("withdrawals", () => {
     const a = await s.withdrawals.request("p", { bank: "telebirr", account: "0911223344", amount: 150 * BIRR });
     assert.ok(a.ok);
     await s.withdrawals.handleUpdate(tap(`paid:${a.withdrawal.id}`));
-    // Rejected (refunded), so a second request is allowed.
+    // Rejected (refunded), so a second request is allowed. After Paid, Reject needs its confirm step (review R6).
     await s.withdrawals.handleUpdate(tap(`reject:${a.withdrawal.id}`));
+    assert.equal(s.withdrawals.get(a.withdrawal.id)!.status, "pending");
+    await s.withdrawals.handleUpdate(tap(`reject!:${a.withdrawal.id}`));
     const b = await s.withdrawals.request("p", { bank: "telebirr", account: "0911223344", amount: 150 * BIRR });
     assert.ok(b.ok, "a returned request doesn't count toward the day");
     await s.withdrawals.cancel("p", b.withdrawal.id);
