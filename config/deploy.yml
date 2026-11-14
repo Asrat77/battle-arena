@@ -28,6 +28,9 @@ servers:
         TRUST_PROXY: "1"
       secret:
         - LEDGER_PRIVATE_KEY
+        # Neon Postgres: pooled URL for the app, direct URL for `npm run migrate`.
+        - DATABASE_URL
+        - DATABASE_URL_UNPOOLED
         # Staked matches (see README). WALLET_MODE=real needs REAL_MONEY_LEGAL_OK=1 too (see deploy/README.md).
         - WALLET_MODE
         - VERIFY_ET_KEY
