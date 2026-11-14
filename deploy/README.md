@@ -42,6 +42,21 @@ export KAMAL_REGISTRY_PASSWORD=$(gh auth token)   # needs write:packages
 kamal deploy
 ```
 
+### Database (Neon Postgres)
+
+The Neon project is linked by `neon.ts`. `neon deploy` (or `neon env pull`)
+writes `DATABASE_URL` (pooled, used by the app) and `DATABASE_URL_UNPOOLED`
+(direct, used by migrations) into `.env.local`. The secrets file reads both
+from there, like the other settings. Apply schema changes with:
+
+```sh
+npm run migrate    # runs migrations/*.sql once each, in order
+```
+
+`/health` on the API reports `"database": "ok"` or `"error"` when
+`DATABASE_URL` is set. The app still stores data in the file store; the Postgres
+`kv` table is not used yet.
+
 ### Real money stays off by default
 
 `WALLET_MODE=real` alone does nothing: the server also needs

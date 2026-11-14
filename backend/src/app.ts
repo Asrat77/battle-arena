@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { checkDb, dbFromEnv, type Db } from "./db";
 // .env.local (never committed) wins over .env, as in Next.js.
 dotenv.config({ path: [".env.local", ".env"] });
 import { createServer } from "node:http";
@@ -29,6 +30,8 @@ import { StakeLimits, stakeLimitsFromEnv, type StakeLimitOptions } from "./stake
 import { VerifyBudget, verifyBudgetFromEnv } from "./verifyBudget";
 
 export interface AppOptions {
+  /** Postgres pool; defaults to one from DATABASE_URL. Pass null to run without. */
+  db?: Db | null;
   store?: Store;
   ledger?: LedgerOptions;
   clock?: Clock;
@@ -42,6 +45,7 @@ export interface AppOptions {
 export function createApp(options: AppOptions = {}) {
   const origin = process.env.FRONTEND_URL || "http://localhost:3000";
   const dataFile = process.env.DATA_FILE || "data/db.json";
+  const db = options.db === undefined ? dbFromEnv() : options.db;
   const store = options.store ?? new FileStore(dataFile);
   // Bound once the socket server exists: a rename or new picture reaches the owner's open tabs.
   let onProfileChange: (profile: Profile) => void = () => {};
@@ -57,8 +61,10 @@ export function createApp(options: AppOptions = {}) {
   app.use(cors({ origin, credentials: true }));
   app.use(express.json());
 
-  app.get("/health", (_req, res) => {
-    res.json({ ok: true });
+  // Liveness stays 200 even if the database is down: nothing reads it yet, and a
+  // failing health check would block deploys. `database` is reported when configured.
+  app.get("/health", async (_req, res) => {
+    res.json(db ? { ok: true, database: await checkDb(db) } : { ok: true });
   });
   app.use(identityRoutes(identity));
   app.use(ledgerRoutes(ledger));
