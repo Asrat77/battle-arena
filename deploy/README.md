@@ -54,8 +54,11 @@ npm run migrate    # runs migrations/*.sql once each, in order
 ```
 
 `/health` on the API reports `"database": "ok"` or `"error"` when
-`DATABASE_URL` is set. The app still stores data in the file store; the Postgres
-`kv` table is not used yet.
+`DATABASE_URL` is set (and `pendingWrites` when Postgres is the store). The api
+keeps its data in `db.json` unless `STORE=postgres` is also set, which moves it
+to the Postgres `kv` table; having `DATABASE_URL` alone changes nothing about
+where data lives. `STORE` is not in `config/deploy.yml` yet. Moving existing
+data over: see `deploy/neon-cutover.md`.
 
 ### Real money stays off by default
 

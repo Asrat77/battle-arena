@@ -10,7 +10,8 @@
     "lint": "next lint",
     "server": "tsx backend/src/index.ts",
     "migrate": "tsx backend/src/migrate.ts",
-    "test": "tsx --test \"**/*.test.ts\""
+    "test": "tsx --test \"**/*.test.ts\"",
+    "import:json": "tsx backend/src/importJson.ts"
   },
   "dependencies": {
     "@noble/curves": "^1.9.7",

@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import { checkDb, dbFromEnv, type Db } from "./db";
+import { PgStore } from "./pgStore";
 // .env.local (never committed) wins over .env, as in Next.js.
 dotenv.config({ path: [".env.local", ".env"] });
 import { createServer } from "node:http";
@@ -61,10 +62,14 @@ export function createApp(options: AppOptions = {}) {
   app.use(cors({ origin, credentials: true }));
   app.use(express.json());
 
-  // Liveness stays 200 even if the database is down: nothing reads it yet, and a
-  // failing health check would block deploys. `database` is reported when configured.
+  // Liveness stays 200 even if the database is down: a failing health check would block
+  // deploys. `database` (and, with PgStore, `pendingWrites`) is reported when configured.
   app.get("/health", async (_req, res) => {
-    res.json(db ? { ok: true, database: await checkDb(db) } : { ok: true });
+    const pg = store instanceof PgStore ? store.status() : null;
+    if (!db) return res.json({ ok: true });
+    // database "error" if the ping fails or buffered writes cannot be saved.
+    const database = pg?.lastError ? "error" : await checkDb(db);
+    res.json(pg ? { ok: true, database, pendingWrites: pg.pendingWrites, ...(pg.lastError ? { writeError: pg.lastError } : {}) } : { ok: true, database });
   });
   app.use(identityRoutes(identity));
   app.use(ledgerRoutes(ledger));
