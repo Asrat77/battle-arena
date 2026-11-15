@@ -43,7 +43,7 @@ export interface AppOptions {
   withdrawals?: Partial<Omit<WithdrawalOptions, "onUpdate">>;
   stakeLimits?: Partial<StakeLimitOptions>;
   /** Test hooks for the admin routes: clock and ADMIN_TOKEN getter. */
-  admin?: Pick<AdminDeps, "now" | "token">;
+  admin?: Pick<AdminDeps, "now" | "token" | "telegram">;
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -216,7 +216,27 @@ export function createApp(options: AppOptions = {}) {
   // Every /api/admin/* route (wallet reconcile, fees and adjust included) sits in this one
   // router behind one guard. Mounted last, once every module it reads exists; no other
   // router serves /api/admin paths.
-  app.use(adminRoutes({ store, wallet, identity, deposits, withdrawals, recorder, matches, lobby, rewards, social, tournaments, ledger, io, ...options.admin }));
+  app.use(
+    adminRoutes({
+      store,
+      wallet,
+      identity,
+      deposits,
+      withdrawals,
+      recorder,
+      matches,
+      lobby,
+      rewards,
+      social,
+      tournaments,
+      ledger,
+      io,
+      db,
+      verifyBudget,
+      telegram: { configured: telegram !== null, moderatorChat: moderatorChat !== null, moderators: moderators.count },
+      ...options.admin,
+    }),
+  );
 
   // Every "end" listener is attached now, so resumed matches settle like any other.
   // Staked matches are saved after each move and pick up where they were; a stake

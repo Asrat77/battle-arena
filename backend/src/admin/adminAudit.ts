@@ -48,6 +48,11 @@ export class AdminAudit {
     return entry;
   }
 
+  /** Every kept entry, newest first (a copy). */
+  all(): AuditEntry[] {
+    return [...this.store.read<AuditEntry[]>(AUDIT_KEY, [])].reverse();
+  }
+
   /** Newest first. `limit` is clamped to 1..200. */
   page(page = 0, limit = 50): { rows: AuditEntry[]; total: number } {
     const all = this.store.read<AuditEntry[]>(AUDIT_KEY, []);
