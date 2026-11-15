@@ -43,21 +43,26 @@ export class Recorder extends EventEmitter {
   }
 
   get(matchId: string): StoredMatch | null {
-    return own(this.all(), matchId) ?? null;
+    return own(this.stored(), matchId) ?? null;
+  }
+
+  /** Every finished match, in no particular order (admin lists). */
+  all(): StoredMatch[] {
+    return Object.values(this.stored());
   }
 
   forPlayer(profileId: string): StoredMatch[] {
-    return Object.values(this.all())
+    return this.all()
       .filter((s) => s.record.players.includes(profileId))
       .sort((a, b) => b.record.endedAt - a.record.endedAt);
   }
 
-  private all(): Record<string, StoredMatch> {
+  private stored(): Record<string, StoredMatch> {
     return this.store.read<Record<string, StoredMatch>>(MATCHES, {});
   }
 
   private save(matchId: string, change: (s: StoredMatch) => StoredMatch) {
-    const all = this.all();
+    const all = this.stored();
     if (!all[matchId]) return;
     this.store.write(MATCHES, { ...all, [matchId]: change(all[matchId]) });
   }
@@ -90,7 +95,7 @@ export class Recorder extends EventEmitter {
       resultIndex: null,
     };
     this.commitIndex.delete(m.id);
-    this.store.write(MATCHES, { ...this.all(), [m.id]: stored });
+    this.store.write(MATCHES, { ...this.stored(), [m.id]: stored });
 
     const payload: ResultPayload = { matchId: m.id, winner: record.outcome.winner, ts: record.endedAt, resultHash: hash };
     void this.ledger.append("result", payload).then((block) => {

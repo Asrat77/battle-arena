@@ -415,6 +415,11 @@ export class Deposits {
     return this.data().list.find((x) => x.id === id) ?? null;
   }
 
+  /** A player's deposits with every moderator field (sender, receiver, review reason), newest first. Admin only. */
+  forAdmin(profileId: string, limit = 20): Deposit[] {
+    return this.history(profileId, limit);
+  }
+
   history(profileId: string, limit = 20): Deposit[] {
     return this.data()
       .list.filter((x) => x.profileId === profileId)

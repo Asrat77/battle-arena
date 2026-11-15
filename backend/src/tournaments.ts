@@ -277,6 +277,13 @@ export class Tournaments {
       .map((t) => this.payload(t));
   }
 
+  /** Every tournament, link-only and finished ones included, newest first (admin). */
+  adminList() {
+    return Object.values(this.all())
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((t) => this.payload(t));
+  }
+
   // ---- bracket ----
 
   private fillBots(t: Tournament) {
