@@ -16,7 +16,7 @@ import {
   depositMatches,
   escrowRow,
   filterTxns,
-  LogCache,
+  type LogCache,
   logTxnRows,
   msQuery,
   orderMoney,
@@ -37,9 +37,8 @@ export const REASON_MAX = 300;
 const oneOf = <T extends string>(raw: unknown, allowed: readonly T[]): T | null =>
   typeof raw === "string" && (allowed as readonly string[]).includes(raw) ? (raw as T) : null;
 
-export function adminMoneyRoutes(deps: AdminDeps, audit: AdminAudit): Router {
+export function adminMoneyRoutes(deps: AdminDeps, audit: AdminAudit, log: LogCache): Router {
   const { wallet, identity, deposits, withdrawals } = deps;
-  const log = new LogCache(() => wallet.logEntries(), deps.now);
   const router = Router();
 
   /** Profile lookups, remembered for one request (a page of rows names the same players often). */

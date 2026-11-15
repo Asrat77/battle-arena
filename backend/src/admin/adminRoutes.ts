@@ -4,6 +4,7 @@
 // everything else. Nothing under /api/admin may be mounted outside this router.
 import { Router } from "express";
 import type { Server } from "socket.io";
+import type { Db } from "../db";
 import type { Deposits } from "../deposits";
 import type { Identity } from "../identity";
 import type { Ledger } from "../ledger";
@@ -14,10 +15,13 @@ import type { Rewards } from "../rewards";
 import type { Social } from "../social";
 import type { Store } from "../store";
 import type { Tournaments } from "../tournaments";
+import type { VerifyBudget } from "../verifyBudget";
 import { walletAdminRoutes, type Wallet } from "../wallet";
 import type { Withdrawals } from "../withdrawals";
 import { AdminAudit } from "./adminAudit";
 import { AdminAuth } from "./adminAuth";
+import { adminInsightRoutes } from "./adminInsights";
+import { LogCache } from "./adminLedger";
 import { adminMoneyRoutes } from "./adminMoney";
 import { adminPeopleRoutes } from "./adminPeople";
 
@@ -35,6 +39,10 @@ export interface AdminDeps {
   tournaments: Tournaments;
   ledger: Ledger;
   io: Server;
+  /** For the system page: the Postgres pool (null or missing: none), the verify.et budget, and Telegram flags (booleans and counts only). */
+  db?: Db | null;
+  verifyBudget?: VerifyBudget | null;
+  telegram?: { configured: boolean; moderatorChat: boolean; moderators: number };
   /** Test hooks: time and the admin token (default Date.now and process.env.ADMIN_TOKEN). */
   now?: () => number;
   token?: () => string | undefined;
@@ -69,7 +77,10 @@ export function adminRoutes(deps: AdminDeps): Router {
 
   router.use(walletAdminRoutes(deps.wallet, audit));
   router.use(adminPeopleRoutes(deps));
-  router.use(adminMoneyRoutes(deps, audit));
+  // One cache in front of the wallet log, shared by every admin route that reads it.
+  const log = new LogCache(() => deps.wallet.logEntries(), deps.now);
+  router.use(adminMoneyRoutes(deps, audit, log));
+  router.use(adminInsightRoutes(deps, audit, auth, log));
 
   // Guarded but unknown: JSON, not Express's HTML page.
   router.use("/api/admin", (_req, res) => res.status(404).json({ error: "not found" }));
