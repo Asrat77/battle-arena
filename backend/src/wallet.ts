@@ -14,7 +14,7 @@
 // withdrawable birr (audit H6). Deposits, withdrawals and their refunds always
 // touch the real book; stakes and the faucet use the book of the current mode.
 
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import type { Socket } from "socket.io";
 import type { Outcome } from "../../engine/types";
@@ -22,6 +22,8 @@ import { bearerToken, type Identity } from "./identity";
 import { own, profileIdFrom } from "./safe";
 import type { Store } from "./store";
 import { MemoryTxnLog, type TxnLog, verifyChain } from "./walletLog";
+import { actorOf, adminCaller } from "./admin/adminAuth";
+import type { AdminAudit } from "./admin/adminAudit";
 
 /** Before the split (audit H6) both kinds of money shared this one key. */
 const LEGACY = "wallet";
@@ -662,29 +664,19 @@ export function walletModeFromEnv(value = process.env.WALLET_MODE, legalOk = pro
   return "play";
 }
 
-/** True when `given` is the admin token. Off (always false) unless the token is at least 24 characters. */
-export function isAdmin(given: unknown, token = process.env.ADMIN_TOKEN): boolean {
-  if (!token || token.length < 24 || typeof given !== "string") return false;
-  const a = createHash("sha256").update(given).digest();
-  const b = createHash("sha256").update(token).digest();
-  return timingSafeEqual(a, b);
-}
+export { isAdmin } from "./admin/adminAuth";
 
 /**
- * Admin-only wallet routes, behind the X-Admin-Token header (ADMIN_TOKEN). Without
- * ADMIN_TOKEN they answer 404, as if they weren't there.
+ * Admin-only wallet routes. They carry no guard of their own: adminRoutes mounts them
+ * behind the shared admin guard (X-Admin-Token or X-Admin-Session; 404 without ADMIN_TOKEN).
+ * Never mount this router on its own.
  * - GET  /api/admin/wallet/reconcile   log vs stored balances (audit M1)
  * - GET  /api/admin/wallet/fees?book=  platform fee report (audit L1)
  * - POST /api/admin/wallet/adjust      {book, profileId, amount (santim), reason, by}
+ *   With a session, `by` is the signed-in admin's name and the body's `by` is ignored.
  */
-export function walletAdminRoutes(wallet: Wallet, token: () => string | undefined = () => process.env.ADMIN_TOKEN): Router {
+export function walletAdminRoutes(wallet: Wallet, audit: AdminAudit): Router {
   const router = Router();
-  router.use("/api/admin/wallet", (req, res, next) => {
-    const t = token();
-    if (!t || t.length < 24) return res.status(404).json({ error: "not found" });
-    if (!isAdmin(req.headers["x-admin-token"], t)) return res.status(401).json({ error: "admin token required" });
-    next();
-  });
   router.get("/api/admin/wallet/reconcile", (_req, res) => {
     res.json(wallet.reconcile());
   });
@@ -694,10 +686,13 @@ export function walletAdminRoutes(wallet: Wallet, token: () => string | undefine
   });
   router.post("/api/admin/wallet/adjust", (req, res) => {
     const { book, profileId, amount, reason, by } = req.body ?? {};
-    const who = typeof by === "string" && by.trim() ? `admin:${by.trim().slice(0, 40)}` : "admin";
+    const caller = adminCaller(res);
+    const name = caller.via === "session" ? caller.name : typeof by === "string" ? by.trim().slice(0, 40) : "";
+    const who = name ? `admin:${name}` : "admin";
     const r = wallet.adjust(book, profileId, amount, reason, who);
     if (!r.ok) return res.status(400).json({ error: r.reason });
     console.warn(`wallet: ${who} adjusted ${book} ${profileId} by ${amount} santim: ${r.txn.note}`);
+    audit.add({ actor: actorOf(caller), action: "wallet-adjust", target: profileId, detail: { book, amount, reason: r.txn.note ?? null, txn: r.txn.id, by: who }, ip: req.ip });
     res.json({ balance: r.balance, txn: r.txn });
   });
   return router;
