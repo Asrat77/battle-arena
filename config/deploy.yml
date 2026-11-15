@@ -41,6 +41,7 @@ servers:
         - TELEGRAM_MODERATOR_CHAT
         - REAL_MONEY_LEGAL_OK
         - ADMIN_TOKEN
+        - STORE
     proxy:
       host: api.34.252.38.138.sslip.io
       app_port: 3001
