@@ -197,6 +197,14 @@ export class Withdrawals {
     return this.list().find((w) => w.id === id) ?? null;
   }
 
+  /** A player's requests with moderator notes, newest first. Admin only. */
+  forAdmin(profileId: string, limit = 20): Withdrawal[] {
+    return this.list()
+      .filter((w) => w.profileId === profileId)
+      .slice(-limit)
+      .reverse();
+  }
+
   /** A player's own requests, without moderator-only notes. */
   forPlayer(profileId: string, limit = 10) {
     return this.list()

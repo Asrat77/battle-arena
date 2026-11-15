@@ -440,6 +440,27 @@ export class Identity {
     return { hasPassword: Boolean(stored?.passwordHash), usernameChangeAt: at > this.now() ? at : null };
   }
 
+  /** Every profile, public fields only (admin list). */
+  all(): Profile[] {
+    return Object.values(this.profiles()).map(toProfile);
+  }
+
+  /**
+   * Per profile: how many sessions are still valid and when the newest one was issued
+   * (admin). Only counts and times leave here, never a token hash.
+   */
+  sessionStats(): Map<string, { open: number; lastAt: number }> {
+    const stats = new Map<string, { open: number; lastAt: number }>();
+    for (const session of Object.values(this.sessions())) {
+      if (!session || typeof session !== "object") continue;
+      const s = stats.get(session.id) ?? { open: 0, lastAt: 0 };
+      if (this.live(session)) s.open++;
+      s.lastAt = Math.max(s.lastAt, session.at);
+      stats.set(session.id, s);
+    }
+    return stats;
+  }
+
   get(id: string): Profile | null {
     const stored = typeof id === "string" ? own(this.profiles(), id.toLowerCase()) : undefined;
     return stored ? toProfile(stored) : null;

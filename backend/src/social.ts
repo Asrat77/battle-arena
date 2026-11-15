@@ -231,6 +231,11 @@ export class Social {
     return this.list(profileId).map((id) => this.presence(id));
   }
 
+  /** How many friends a profile has (admin). */
+  friendCount(profileId: string): number {
+    return this.list(profileId).length;
+  }
+
   presence(profileId: string): Presence {
     const match = this.matches.activeFor(profileId)[0];
     const online = this.socketCount(profileId) > 0;

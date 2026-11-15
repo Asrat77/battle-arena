@@ -236,6 +236,33 @@ export class Wallet {
       .reverse();
   }
 
+  /** A balance in one book, whatever the current mode (admin). */
+  balanceIn(book: WalletMode, profileId: string): number {
+    return own(this.data(book).balances, profileId) ?? 0;
+  }
+
+  /** Every balance in one book, as a copy (admin lists). */
+  balancesIn(book: WalletMode): Record<string, number> {
+    return { ...this.data(book).balances };
+  }
+
+  /** One book's stored (hot) history for a profile, newest first (admin). */
+  historyIn(book: WalletMode, profileId: string, limit = 50): Txn[] {
+    return this.data(book)
+      .txns.filter((t) => t.profileId === profileId)
+      .slice(-limit)
+      .reverse();
+  }
+
+  /** The escrow bound to a match in either book, with its book (admin). */
+  escrowOfMatch(matchId: string): { book: WalletMode; escrow: Escrow } | null {
+    for (const book of this.modes()) {
+      const escrow = Object.values(this.data(book).escrows).find((x) => x.matchId === matchId);
+      if (escrow) return { book, escrow };
+    }
+    return null;
+  }
+
   escrow(id: string): Escrow | null {
     return this.findEscrow(id)?.e ?? null;
   }
