@@ -197,6 +197,22 @@ export class Withdrawals {
     return this.list().find((w) => w.id === id) ?? null;
   }
 
+  /** Every request, oldest first, with moderator notes (a copy). Admin only. */
+  all(): Withdrawal[] {
+    return [...this.list()];
+  }
+
+  /** Limits and minimum, for the admin site. Santim; secondApprovalAbove null when off. */
+  config() {
+    return {
+      enabled: this.enabled,
+      minAmount: MIN_WITHDRAWAL,
+      perRequest: this.limits.perRequest,
+      perDay: this.limits.perDay,
+      secondApprovalAbove: this.secondApprovalAbove,
+    };
+  }
+
   /** A player's requests with moderator notes, newest first. Admin only. */
   forAdmin(profileId: string, limit = 20): Withdrawal[] {
     return this.list()

@@ -8,7 +8,7 @@ export const AUDIT_KEY = "adminAudit";
 export const AUDIT_KEEP = 2000;
 export const AUDIT_PAGE_MAX = 200;
 
-export type AdminAction = "signin" | "signin-failed" | "signout" | "wallet-adjust";
+export type AdminAction = "signin" | "signin-failed" | "signout" | "wallet-adjust" | "deposit-resolve";
 export type AuditDetail = Record<string, string | number | boolean | null>;
 
 export interface AuditEntry {
