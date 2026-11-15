@@ -25,10 +25,11 @@ import { FileStore, type Store } from "./store";
 import { tournamentRoutes, Tournaments } from "./tournaments";
 import { depositAccountsFromEnv, Deposits, httpVerifyEt, type DepositOptions } from "./deposits";
 import { httpTelegram, secondApprovalFromEnv, withdrawalLimitsFromEnv, Withdrawals, type WithdrawalOptions } from "./withdrawals";
-import { depositHoldFromEnv, Wallet, walletAdminRoutes, walletModeFromEnv, walletRoutes, type WalletOptions } from "./wallet";
+import { depositHoldFromEnv, Wallet, walletModeFromEnv, walletRoutes, type WalletOptions } from "./wallet";
 import { FileTxnLog, MemoryTxnLog } from "./walletLog";
 import { StakeLimits, stakeLimitsFromEnv, type StakeLimitOptions } from "./stakeLimits";
 import { VerifyBudget, verifyBudgetFromEnv } from "./verifyBudget";
+import { adminRoutes, type AdminDeps } from "./admin/adminRoutes";
 
 export interface AppOptions {
   /** Postgres pool; defaults to one from DATABASE_URL. Pass null to run without. */
@@ -41,6 +42,8 @@ export interface AppOptions {
   deposits?: Partial<Omit<DepositOptions, "onUpdate">>;
   withdrawals?: Partial<Omit<WithdrawalOptions, "onUpdate">>;
   stakeLimits?: Partial<StakeLimitOptions>;
+  /** Test hooks for the admin routes: clock and ADMIN_TOKEN getter. */
+  admin?: Pick<AdminDeps, "now" | "token">;
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -121,7 +124,6 @@ export function createApp(options: AppOptions = {}) {
   const recorder = new Recorder(store, ledger, matches);
   app.use(matchRoutes(recorder, matches));
   app.use(walletRoutes(wallet, identity));
-  app.use(walletAdminRoutes(wallet));
   const verifyKey = process.env.VERIFY_ET_KEY;
   // Every verify.et check is counted against a shared daily/monthly budget (review R3).
   const verifyBudget = new VerifyBudget(store, verifyBudgetFromEnv());
@@ -211,6 +213,10 @@ export function createApp(options: AppOptions = {}) {
     onChampion: (id, tournamentId, ts) => rewards.tournamentWon(id, tournamentId, ts),
   });
   app.use(tournamentRoutes(tournaments));
+  // Every /api/admin/* route (wallet reconcile, fees and adjust included) sits in this one
+  // router behind one guard. Mounted last, once every module it reads exists; no other
+  // router serves /api/admin paths.
+  app.use(adminRoutes({ store, wallet, identity, deposits, withdrawals, recorder, matches, lobby, rewards, social, tournaments, ledger, io, ...options.admin }));
 
   // Every "end" listener is attached now, so resumed matches settle like any other.
   // Staked matches are saved after each move and pick up where they were; a stake
