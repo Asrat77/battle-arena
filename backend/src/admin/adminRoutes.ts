@@ -18,6 +18,7 @@ import { walletAdminRoutes, type Wallet } from "../wallet";
 import type { Withdrawals } from "../withdrawals";
 import { AdminAudit } from "./adminAudit";
 import { AdminAuth } from "./adminAuth";
+import { adminMoneyRoutes } from "./adminMoney";
 import { adminPeopleRoutes } from "./adminPeople";
 
 export interface AdminDeps {
@@ -68,6 +69,7 @@ export function adminRoutes(deps: AdminDeps): Router {
 
   router.use(walletAdminRoutes(deps.wallet, audit));
   router.use(adminPeopleRoutes(deps));
+  router.use(adminMoneyRoutes(deps, audit));
 
   // Guarded but unknown: JSON, not Express's HTML page.
   router.use("/api/admin", (_req, res) => res.status(404).json({ error: "not found" }));

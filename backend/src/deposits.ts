@@ -415,6 +415,11 @@ export class Deposits {
     return this.data().list.find((x) => x.id === id) ?? null;
   }
 
+  /** Every deposit, oldest first, with every moderator field (a copy). Admin only. */
+  all(): Deposit[] {
+    return [...this.data().list];
+  }
+
   /** A player's deposits with every moderator field (sender, receiver, review reason), newest first. Admin only. */
   forAdmin(profileId: string, limit = 20): Deposit[] {
     return this.history(profileId, limit);
@@ -701,11 +706,29 @@ export class Deposits {
     const who = telegramName(cb.from);
     await mods.call("answerCallbackQuery", { callback_query_id: cb.id }).catch(() => {});
     const x = this.resolve(id, action === "dep-ok", who);
-    if (x?.alertMessageId) {
-      await mods
-        .call("editMessageText", { chat_id: mods.chatId, message_id: x.alertMessageId, text: this.alertText(x, x.reviewWhy ?? undefined), reply_markup: { inline_keyboard: [] } })
-        .catch(() => {});
-    }
+    if (x) await this.clearAlert(x);
+  }
+
+  /**
+   * Approve or reject a deposit in review from the admin site: the same as the Telegram
+   * buttons, then the alert in the moderators' chat loses its buttons (best effort: a
+   * Telegram failure is logged, never thrown). Null when the deposit is not in review.
+   * The Telegram call starts before this returns; it is not waited for.
+   */
+  resolveFromAdmin(id: string, approve: boolean, by: string): Deposit | null {
+    const x = this.resolve(id, approve, by);
+    // Not awaited: the money has moved, a slow or failing Telegram must not hold up the answer.
+    if (x) void this.clearAlert(x).catch((err) => console.warn(`deposit ${id}: could not update the telegram alert`, err));
+    return x;
+  }
+
+  /** Rewrite a closed deposit's alert with who closed it, and remove its buttons. */
+  private async clearAlert(x: Deposit) {
+    const mods = this.opts.moderators;
+    if (!mods || !x.alertMessageId) return;
+    await mods
+      .call("editMessageText", { chat_id: mods.chatId, message_id: x.alertMessageId, text: this.alertText(x, x.reviewWhy ?? undefined), reply_markup: { inline_keyboard: [] } })
+      .catch(() => {});
   }
 
   /** wallet:deposit { bank, reference, payerName } over the signed-in socket. */

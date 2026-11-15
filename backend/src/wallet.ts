@@ -21,7 +21,7 @@ import type { Outcome } from "../../engine/types";
 import { bearerToken, type Identity } from "./identity";
 import { own, profileIdFrom } from "./safe";
 import type { Store } from "./store";
-import { MemoryTxnLog, type TxnLog, verifyChain } from "./walletLog";
+import { type LogEntry, MemoryTxnLog, type TxnLog, verifyChain } from "./walletLog";
 import { actorOf, adminCaller } from "./admin/adminAuth";
 import type { AdminAudit } from "./admin/adminAudit";
 
@@ -252,6 +252,24 @@ export class Wallet {
       .txns.filter((t) => t.profileId === profileId)
       .slice(-limit)
       .reverse();
+  }
+
+  /** One book's stored transactions, oldest first, as a copy (admin). Game kinds are trimmed to the newest per profile. */
+  txnsIn(book: WalletMode): Txn[] {
+    return [...this.data(book).txns];
+  }
+
+  /**
+   * Every entry of the hash-chained log, read only (admin). The file log re-reads its
+   * whole file on each call, so admin code reads it through a short cache.
+   */
+  logEntries(): LogEntry[] {
+    return [...this.log.entries()];
+  }
+
+  /** What real money the old shared book held (LEGACY_REPORT), or null (admin). */
+  legacyReport(): unknown {
+    return this.store.read<unknown>(LEGACY_REPORT, null);
   }
 
   /** The escrow bound to a match in either book, with its book (admin). */
