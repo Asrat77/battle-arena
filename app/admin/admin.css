@@ -1,0 +1,185 @@
+/* Admin console palette: neutral greys and one orange. It overrides the player
+   app's colour variables inside .admin (and on <html> while an admin page is
+   showing, so the page background and overscroll match), so the usual Tailwind
+   names (bg-sf, text-ink-2, border-line, text-accent...) pick it up. Dark only:
+   html:has(.admin) outranks the player .light theme class. */
+
+html:has(.admin),
+.admin {
+  --bg: 23 23 23;
+  --sf: 32 32 32;
+  --sf2: 41 41 41;
+  --sf3: 54 54 54;
+  --ln: 58 58 58;
+  --ink: 245 245 245;
+  --ink2: 163 163 163;
+  --ink3: 128 128 128;
+  --acc: 242 107 29;
+  --act: 242 107 29;
+  --on-act: 255 255 255;
+  --rec: 52 199 123;
+  --pend: 245 165 36;
+  --bad: 240 82 82;
+  --rec-s: rgb(52 199 123 / 0.12);
+  --pend-s: rgb(245 165 36 / 0.12);
+  --bad-s: rgb(240 82 82 / 0.12);
+  /* Admin-only: the lighter orange of a second chart series, and the grid's empty cell. */
+  --acc2: 250 164 112;
+  --cell: 46 46 46;
+  --scrim: rgb(0 0 0 / 0.6);
+  --edge: rgb(255 255 255 / 0.06);
+  color-scheme: dark;
+}
+
+html:has(.admin) body {
+  background: rgb(var(--bg));
+}
+
+.admin {
+  font-size: 14px;
+  line-height: 1.45;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: rgb(var(--bg));
+  color: rgb(var(--ink));
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Card and table labels: mono, uppercase, tracked. */
+.admin .label {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(var(--ink2));
+}
+
+.admin .num {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.admin ::selection {
+  background: rgb(242 107 29 / 0.35);
+}
+
+/* Thin, dark scrollbars on desktop. */
+.admin * {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--sf3)) transparent;
+}
+
+/* Loading skeleton shimmer. */
+@keyframes admin-shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+.admin .skeleton {
+  background: linear-gradient(90deg, rgb(var(--sf2)) 0%, rgb(var(--sf3)) 50%, rgb(var(--sf2)) 100%);
+  background-size: 200% 100%;
+  animation: admin-shimmer 1.4s ease-in-out infinite;
+}
+
+/* The "live" pill's pulsing dot. */
+@keyframes admin-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  80%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+.admin .ping::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: currentColor;
+  animation: admin-ping 1.6s ease-out infinite;
+}
+
+/* Overlays: fade the scrim, slide the panel. */
+@keyframes admin-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes admin-in-right {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+@keyframes admin-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes admin-in-up {
+  from {
+    transform: translateY(32px);
+    opacity: 0;
+  }
+}
+@keyframes admin-pop {
+  from {
+    transform: translateY(6px) scale(0.98);
+    opacity: 0;
+  }
+}
+.admin .anim-fade {
+  animation: admin-fade 0.16s ease-out;
+}
+.admin .anim-right {
+  animation: admin-in-right 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.admin .anim-left {
+  animation: admin-in-left 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.admin .anim-up {
+  animation: admin-in-up 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.admin .anim-pop {
+  animation: admin-pop 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Drawer: a bottom sheet on phones, from the right on desktop. Dialog: up on phones, pop on desktop. */
+.admin .anim-sheet {
+  animation: admin-in-up 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.admin .anim-dialog {
+  animation: admin-in-up 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (min-width: 768px) {
+  .admin .anim-sheet {
+    animation-name: admin-in-right;
+  }
+}
+@media (min-width: 640px) {
+  .admin .anim-dialog {
+    animation: admin-pop 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin .skeleton,
+  .admin .ping::after,
+  .admin .anim-fade,
+  .admin .anim-right,
+  .admin .anim-left,
+  .admin .anim-up,
+  .admin .anim-pop,
+  .admin .anim-sheet,
+  .admin .anim-dialog {
+    animation: none !important;
+  }
+}

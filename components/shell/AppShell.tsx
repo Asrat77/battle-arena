@@ -24,6 +24,12 @@ import { activeTab, BARE_ON_MOBILE, hasDock, TABS } from "./nav";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "/";
+  // The admin console brings its own shell: no player header, dock, banners or inbox.
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) return <>{children}</>;
+  return <PlayerShell pathname={pathname}>{children}</PlayerShell>;
+}
+
+function PlayerShell({ children, pathname }: { children: React.ReactNode; pathname: string }) {
   const { profile } = useSession();
   const { points, online } = useShellCounts();
   const dock = Boolean(profile) && hasDock(pathname);
