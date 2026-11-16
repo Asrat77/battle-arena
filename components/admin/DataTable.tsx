@@ -1,8 +1,10 @@
 "use client";
 
 // The admin table. Desktop (md+): a dense table with mono uppercase headers,
-// optional controlled sorting and a row link. Phones: each row is a stacked
-// card with the `primary` columns on top and the rest as a key/value list.
+// optional controlled sorting and a row link. Phones: each row is a compact
+// card (about 80 px): line 1 holds the `primary` columns (first on the left,
+// the others on the right), line 2 up to three `secondary` values inline in
+// small muted text separated by middots. Everything else is hidden on phones.
 // Handles loading (skeleton rows), empty, error (with retry) and paging.
 
 import Link from "next/link";
@@ -13,6 +15,13 @@ import { EmptyState } from "./EmptyState";
 import { Icon } from "./icons";
 import { Skeleton } from "./Skeleton";
 
+export type PhoneRole = "primary" | "secondary" | "hidden";
+
+/** The phone role of a column; the older `primary` and `hideOnMobile` flags still count. */
+export function phoneRole<T>(c: Pick<Column<T>, "phone" | "primary" | "hideOnMobile">): PhoneRole {
+  return c.phone ?? (c.primary ? "primary" : "hidden");
+}
+
 export interface Column<T> {
   key: string;
   header: string;
@@ -21,9 +30,16 @@ export interface Column<T> {
   align?: "left" | "right";
   /** Sortable: the API sort key this column stands for. */
   sortKey?: string;
-  /** Shown on top of the phone card (the first one large, left; the second on the right). */
+  /**
+   * Where the column goes on a phone card: "primary" (line 1: the first on the left, the rest on the right),
+   * "secondary" (line 2, small and muted, at most three per card) or "hidden" (the default).
+   */
+  phone?: PhoneRole;
+  /** Short text before a secondary value on the phone card, e.g. "moves" gives "12 moves". */
+  phoneLabel?: string;
+  /** Same as phone: "primary". */
   primary?: boolean;
-  /** Left out of the phone card. */
+  /** Same as phone: "hidden". */
   hideOnMobile?: boolean;
   /** Extra classes for th and td, e.g. a width ("w-[140px]"). */
   className?: string;
@@ -82,8 +98,8 @@ export function DataTable<T>({
   const showSkeleton = loading && list.length === 0 && !error;
   const errorText = typeof error === "string" ? error : error?.message;
   const linked = Boolean(rowHref || onRowClick);
-  const primary = columns.filter((c) => c.primary);
-  const rest = columns.filter((c) => !c.primary && !c.hideOnMobile);
+  const [first, ...otherPrimary] = columns.filter((c) => phoneRole(c) === "primary");
+  const secondary = columns.filter((c) => phoneRole(c) === "secondary").slice(0, 3);
 
   const open = (row: T, e: React.MouseEvent) => {
     // Let links and buttons inside the row do their own thing.
@@ -207,8 +223,8 @@ export function DataTable<T>({
       {/* Phone cards */}
       <ul className="divide-y divide-line md:hidden" aria-label={caption} aria-busy={loading || undefined}>
         {showSkeleton &&
-          Array.from({ length: Math.min(skeletonRows, 4) }, (_, i) => (
-            <li key={i} className="space-y-2.5 px-4 py-4">
+          Array.from({ length: Math.min(skeletonRows, 6) }, (_, i) => (
+            <li key={i} className="space-y-2 px-4 py-3">
               <div className="flex justify-between">
                 <Skeleton className="h-4 w-32" />
                 <Skeleton className="h-4 w-16" />
@@ -216,32 +232,36 @@ export function DataTable<T>({
               <Skeleton className="h-3 w-48" />
             </li>
           ))}
-        {list.map((row) => {
-          const [first, second, ...others] = primary;
-          return (
-            <li
-              key={rowKey(row)}
-              onClick={linked ? (e) => open(row, e) : undefined}
-              className={`px-4 py-3.5 ${linked ? "cursor-pointer active:bg-sf-2" : ""} ${loading ? "opacity-60" : ""}`}
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="min-w-0 flex-1">{first?.cell(row)}</div>
-                {second && <div className="flex-none text-right">{second.cell(row)}</div>}
-                {linked && <div className="-mr-1 flex-none">{rowAction(row)}</div>}
-              </div>
-              {(others.length > 0 || rest.length > 0) && (
-                <dl className="mt-2.5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
-                  {[...others, ...rest].map((c) => (
-                    <div key={c.key} className="contents">
-                      <dt className="label self-center !text-[10.5px] !text-ink-3">{c.header}</dt>
-                      <dd className="min-w-0 justify-self-end text-right text-ink">{c.cell(row)}</dd>
-                    </div>
+        {list.map((row) => (
+          <li
+            key={rowKey(row)}
+            onClick={linked ? (e) => open(row, e) : undefined}
+            className={`px-4 py-2.5 ${linked ? "cursor-pointer active:bg-sf-2" : ""} ${loading ? "opacity-60" : ""}`}
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="min-w-0 flex-1">{first?.cell(row)}</div>
+              {otherPrimary.length > 0 && (
+                <div className="flex flex-none items-center gap-2 text-right">
+                  {otherPrimary.map((c) => (
+                    <div key={c.key}>{c.cell(row)}</div>
                   ))}
-                </dl>
+                </div>
               )}
-            </li>
-          );
-        })}
+              {linked && <div className="-mr-1 flex-none">{rowAction(row)}</div>}
+            </div>
+            {secondary.length > 0 && (
+              <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] leading-[18px] text-ink-3 [&_*]:!text-[12px]">
+                {secondary.map((c, i) => (
+                  <span key={c.key} className="inline-flex min-w-0 items-center gap-1.5">
+                    {i > 0 && <span aria-hidden>·</span>}
+                    <span className="min-w-0 truncate text-ink-2 [&_.num]:font-normal">{c.cell(row)}</span>
+                    {c.phoneLabel && <span className="-ml-0.5">{c.phoneLabel}</span>}
+                  </span>
+                ))}
+              </div>
+            )}
+          </li>
+        ))}
       </ul>
       <div className="md:hidden">{body}</div>
 
