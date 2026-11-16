@@ -95,8 +95,8 @@ ssh ubuntu@34.252.38.138 'sudo sh -c "ls -t /var/lib/docker/volumes/battle-arena
 
 Every balance change is also appended to `/data/wallet-log.jsonl`, each line
 hash-linked to the one before, so a changed or deleted line is detectable. Back
-it up with `db.json` and never edit it. With `ADMIN_TOKEN` set (not in
-`config/deploy.yml` yet; add it like `REAL_MONEY_LEGAL_OK` above):
+it up with `db.json` and never edit it. With `ADMIN_TOKEN` set (it is a secret
+in `config/deploy.yml`, filled from `.kamal/secrets`):
 
 ```sh
 H="X-Admin-Token: $ADMIN_TOKEN"; API=https://api.34.252.38.138.sslip.io
@@ -112,3 +112,51 @@ transactions in `db.json`; the log keeps them all.
 
 If writing `db.json` ever fails (disk full), the change is undone in memory
 and the request fails, so balances never drift from what is on disk.
+
+## Admin site
+
+The admin site lives at `https://34.252.38.138.sslip.io/admin` (the web app). It
+reads and changes data through the API's `/api/admin/*` routes. Nothing here is
+deployed by the code change that added it: it goes live with the next `kamal deploy`.
+
+**How sign-in works.** An admin opens `/admin/login`, types their name and the
+`ADMIN_TOKEN` once, and the web server (not the browser) sends it to the API. The
+API answers with a random session id that lives in its memory for 12 hours. The
+web server keeps that id in an httpOnly, same-site-strict cookie (`ba_admin`,
+path `/admin`) and calls the API for the browser through `/admin/api/*`. The token
+is never stored, logged, put in a URL or sent to the browser; `ADMIN_TOKEN` is not
+in the browser bundle. Sessions are in memory, so every API restart (a deploy,
+a crash) signs all admins out. Sign-ins and sign-outs are in the audit log.
+
+**Setting it up.**
+- `ADMIN_TOKEN` must be set on the API and be at least 24 characters. If it is
+  unset or shorter, every `/api/admin/*` route answers 404 as if it did not exist.
+  Make one with `openssl rand -base64 36`.
+- The web container needs no new environment: it already has `NEXT_PUBLIC_API_URL`
+  (baked into the image) and uses it to reach the API. `ADMIN_API_URL` is optional
+  and only for pointing the web server at an internal API address.
+
+**Sign-in limit.** 10 wrong tokens in 15 minutes from one address lock sign-in
+with a 429 until the window passes or the API restarts. All sign-ins reach the API
+from the web server, so they share one address: 10 wrong tries by anyone lock
+every admin out for up to 15 minutes. Restarting the API clears it (and signs
+everyone out anyway).
+
+**Rotating `ADMIN_TOKEN`.**
+1. Put the new value in `.kamal/secrets` (or wherever `ADMIN_TOKEN` comes from).
+2. Run `kamal deploy` (this version has no `env push`; a deploy uploads the env).
+3. The API restart ends every old session, and the old token stops working.
+   Admins sign in again with the new one. Do this after the token has been
+   printed or pasted anywhere it should not be.
+
+**What the site can change.** Almost everything is read-only: players, matches,
+tournaments, activity, wallet, withdrawals, reconcile, audit log, system health.
+Withdrawals are read-only on purpose: payouts stay in Telegram with its checks.
+Two things can be written, both recorded in the audit log with who did it:
+- a manual wallet adjustment (the Adjust dialog on the wallet and player pages,
+  same as `POST /api/admin/wallet/adjust` above; needs a note);
+- approving or rejecting a deposit that is in review.
+
+The browser may only make those two writes (the web server refuses any other
+write), and both need the site's own Origin and an `X-Admin-CSRF` header.
+There are no bans or password resets.
