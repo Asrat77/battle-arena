@@ -1,14 +1,17 @@
-// /admin/wallet: placeholder until its task builds the screen.
+// /admin/wallet: totals, the liabilities check, the ledger (transactions, escrows,
+// adjustments) and the adjustment dialog (also opened by ?adjust=<id|platform>).
 
 import type { Metadata } from "next";
-import { ComingScreen } from "@/components/admin/ComingScreen";
+import { Suspense } from "react";
+import { WalletScreen } from "./WalletScreen";
 
 export const metadata: Metadata = { title: "Wallet and ledger" };
 
 export default function Page() {
+  // Tabs, filters, page and ?adjust live in the URL (useSearchParams needs Suspense).
   return (
-    <ComingScreen title="Wallet and ledger" subtitle="Balances, escrow and every wallet transaction." icon="wallet">
-      {"Summary cards, the transaction log with filters, escrows, and new adjustments."}
-    </ComingScreen>
+    <Suspense fallback={null}>
+      <WalletScreen />
+    </Suspense>
   );
 }

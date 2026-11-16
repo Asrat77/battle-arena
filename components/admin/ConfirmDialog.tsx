@@ -18,6 +18,7 @@ export function ConfirmDialog({
   tone = "primary",
   confirmText,
   confirmTextLabel,
+  confirmDisabled = false,
   onConfirm,
   onClose,
 }: {
@@ -30,6 +31,8 @@ export function ConfirmDialog({
   /** When set, the admin must type exactly this before Confirm enables. */
   confirmText?: string;
   confirmTextLabel?: string;
+  /** Keep Confirm off until the caller's own fields (e.g. a written reason) are valid. */
+  confirmDisabled?: boolean;
   /** May return a promise; a thrown Error's message is shown and the dialog stays open. */
   onConfirm(): void | Promise<void>;
   onClose(): void;
@@ -40,24 +43,28 @@ export function ConfirmDialog({
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // State updates land after a render; a ref also stops a double click or a held Enter.
+  const inflight = useRef(false);
 
   useEffect(() => {
     if (open) {
       setTyped("");
       setError(null);
       setBusy(false);
+      inflight.current = false;
     }
   }, [open]);
 
-  const close = () => !busy && onClose();
+  const close = () => !inflight.current && onClose();
   useFocusTrap(ref, open, close);
   useScrollLock(open);
   if (!open) return null;
 
-  const ready = !confirmText || typed.trim() === confirmText;
+  const ready = (!confirmText || typed.trim() === confirmText) && !confirmDisabled;
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ready || busy) return;
+    if (!ready || inflight.current) return;
+    inflight.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -65,6 +72,7 @@ export function ConfirmDialog({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
+      inflight.current = false;
       setBusy(false);
     }
   };
@@ -92,7 +100,7 @@ export function ConfirmDialog({
                 {title}
               </h2>
               {children && (
-                <div id={bodyId} className="mt-1.5 text-[13px] leading-relaxed text-ink-2">
+                <div id={bodyId} className="mt-1.5 min-w-0 text-[13px] leading-relaxed text-ink-2">
                   {children}
                 </div>
               )}

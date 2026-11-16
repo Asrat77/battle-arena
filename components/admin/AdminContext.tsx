@@ -14,6 +14,8 @@ export interface AdminSession {
   mode: Book | null;
   /** Live counts from GET overview `now`, refreshed every minute; null until loaded. */
   now: Overview["now"] | null;
+  /** Reload the live counts now (after a write that changes a badge, e.g. a deposit resolved). */
+  refreshCounts(): void;
   signOut(): Promise<void>;
 }
 

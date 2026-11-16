@@ -318,7 +318,8 @@ export function PixelBars({
             : ""}
         </p>
       </div>
-      <table className="sr-only">
+      <div className="sr-only">
+      <table>
         <caption>{title}</caption>
         <thead>
           <tr>
@@ -341,6 +342,7 @@ export function PixelBars({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

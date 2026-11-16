@@ -192,7 +192,24 @@ export interface Reconcile {
   ok: boolean;
   entries: number;
   chain: "intact" | { at: number; reason: string };
-  books: { book: Book; ok: boolean; txns: number; total: number; held: number; mismatches: unknown[]; escrows: unknown[] }[];
+  books: {
+    book: Book;
+    ok: boolean;
+    txns: number;
+    total: number;
+    held: number;
+    mismatches: { profileId: string; stored: number; logged: number }[];
+    escrows: { id: string; status: string; off: number }[];
+  }[];
+}
+
+/** GET wallet/fees (byDay keys are UTC days) */
+export interface FeeReport {
+  book: Book;
+  balance: number;
+  collected: number;
+  byDay: Record<string, { fees: number; matches: number }>;
+  adjustments: { amount: number; note?: string; by?: string; ts: number }[];
 }
 
 /** GET system */

@@ -36,7 +36,7 @@ export function Tooltip({
         role="tooltip"
         className={`pointer-events-none absolute left-1/2 z-50 w-max max-w-[240px] -translate-x-1/2 rounded-md border border-line bg-sf-2 px-2.5 py-1.5 text-left text-[12px] font-normal normal-case leading-snug tracking-normal text-ink shadow-[0_8px_24px_rgb(0_0_0/.4)] transition-opacity duration-100 ${
           side === "top" ? "bottom-[calc(100%+6px)]" : "top-[calc(100%+6px)]"
-        } ${open ? "opacity-100" : "invisible opacity-0"}`}
+        } ${open ? "opacity-100" : "hidden"}`}
       >
         {content}
       </span>
