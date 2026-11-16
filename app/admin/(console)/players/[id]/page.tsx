@@ -1,15 +1,17 @@
-// /admin/players/[id]: placeholder until the players task builds the detail screen.
+// /admin/players/[id]: one player's profile, balances, matches, wallet, deposits and withdrawals.
 
 import type { Metadata } from "next";
-import { ComingScreen } from "@/components/admin/ComingScreen";
+import { Suspense } from "react";
+import { PlayerScreen } from "./PlayerScreen";
 
 export const metadata: Metadata = { title: "Player" };
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  // The screen keeps the tab in ?tab= (useSearchParams needs Suspense).
   return (
-    <ComingScreen title="Player" subtitle={`Player id ${decodeURIComponent(id)}`} icon="players">
-      {"Profile, balances, matches, wallet, deposits and withdrawals for one player, with Adjust balance."}
-    </ComingScreen>
+    <Suspense fallback={null}>
+      <PlayerScreen id={decodeURIComponent(id)} />
+    </Suspense>
   );
 }

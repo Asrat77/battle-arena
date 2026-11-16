@@ -83,7 +83,7 @@ export interface UserDetail {
     overall: { rating: number; wins: number; losses: number; draws: number };
     games: Record<string, { rating: number; wins: number; losses: number; draws: number }>;
     streak: number;
-    badges: string[];
+    badges: { id: string; name: string; earnedAt: number }[];
   };
   perGame: GameTally[];
   matches: number;
@@ -93,6 +93,8 @@ export interface UserDetail {
   withdrawals: AdminWithdrawal[];
   friendCount: number;
   openSessions: number;
+  /** Newest sign-in of any session, or null when there was none. */
+  lastSignInAt: number | null;
 }
 
 /** GET matches/live rows */

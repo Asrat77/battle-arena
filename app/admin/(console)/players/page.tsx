@@ -1,14 +1,16 @@
-// /admin/players: placeholder until its task builds the screen.
+// /admin/players: search, filters, sortable table and CSV export.
 
 import type { Metadata } from "next";
-import { ComingScreen } from "@/components/admin/ComingScreen";
+import { Suspense } from "react";
+import { PlayersScreen } from "./PlayersScreen";
 
 export const metadata: Metadata = { title: "Players" };
 
 export default function Page() {
+  // The screen keeps q, filter, sort, dir and page in the URL (useSearchParams needs Suspense).
   return (
-    <ComingScreen title="Players" subtitle="Everyone who has played, with balances and activity." icon="players">
-      {"Search, filters, a sortable player table and CSV export."}
-    </ComingScreen>
+    <Suspense fallback={null}>
+      <PlayersScreen />
+    </Suspense>
   );
 }

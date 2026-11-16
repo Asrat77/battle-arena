@@ -108,6 +108,7 @@ export function adminPeopleRoutes(deps: AdminDeps): Router {
     const mine = recorder.forPlayer(id);
     const escrows = escrowsByMatch();
     const r = rewards.player(id);
+    const sessions = identity.sessionStats().get(id);
     res.json({
       profile,
       account: identity.account(id),
@@ -124,7 +125,8 @@ export function adminPeopleRoutes(deps: AdminDeps): Router {
       deposits: deposits.forAdmin(id, MONEY_ROWS),
       withdrawals: withdrawals.forAdmin(id, MONEY_ROWS),
       friendCount: social.friendCount(id),
-      openSessions: identity.sessionStats().get(id)?.open ?? 0,
+      openSessions: sessions?.open ?? 0,
+      lastSignInAt: sessions?.lastAt || null,
     });
   });
 
