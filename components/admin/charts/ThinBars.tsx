@@ -1,6 +1,6 @@
 "use client";
 
-// Thin rounded orange bars over grey tracks (the inspiration's right panel).
+// Thin rounded gold bars over grey tracks (the inspiration's right panel).
 // "vertical": one bar per item along the bottom (days), with a hover/focus
 // tooltip. "horizontal": a labelled list (games, banks) with the value on the
 // right. Both carry an sr-only table.
