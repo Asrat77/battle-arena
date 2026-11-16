@@ -1,5 +1,5 @@
 // The tiny bars inside a KPI card: thin grey bars with the latest one in
-// orange, as in the inspiration's top cards. Decorative next to the KPI's own
+// gold, as in the inspiration's top cards. Decorative next to the KPI's own
 // number, so it is a labelled image for screen readers, not a table.
 
 export function MiniBars({

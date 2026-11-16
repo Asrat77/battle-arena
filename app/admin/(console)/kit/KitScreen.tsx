@@ -167,7 +167,7 @@ export function KitScreen() {
         </div>
       </Section>
 
-      <Section title="PixelBars" note="Two stacked series, hover or focus and use the arrow keys. 30 days with orange + grey; 90 days with two orange tones groups days on narrow screens.">
+      <Section title="PixelBars" note="Two stacked series, hover or focus and use the arrow keys. 30 days with gold + grey; 90 days with two gold tones groups days on narrow screens.">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <Card title="Active players" info="Sample: returning and new players per day.">
             <PixelBars title="Sample active players per day" data={days30} series={[{ name: "Returning" }, { name: "New", tone: "grey" }]} />

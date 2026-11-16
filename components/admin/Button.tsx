@@ -1,6 +1,6 @@
 "use client";
 
-// Admin buttons: primary (the one orange action), secondary, ghost and danger,
+// Admin buttons: primary (the one gold action), secondary, ghost and danger,
 // in sm (32 px, 40 on phones) and md (36 px, 44 on phones) so touch targets stay
 // big enough. `href` renders a Link with the same look.
 

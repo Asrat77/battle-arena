@@ -1,4 +1,4 @@
-/* Admin console palette: neutral greys and one orange. It overrides the player
+/* Admin console palette: the player app's dark palette (warm neutrals, gold accent). It overrides the player
    app's colour variables inside .admin (and on <html> while an admin page is
    showing, so the page background and overscroll match), so the usual Tailwind
    names (bg-sf, text-ink-2, border-line, text-accent...) pick it up. Dark only:
@@ -6,28 +6,32 @@
 
 html:has(.admin),
 .admin {
-  --bg: 23 23 23;
-  --sf: 32 32 32;
-  --sf2: 41 41 41;
-  --sf3: 54 54 54;
-  --ln: 58 58 58;
-  --ink: 245 245 245;
-  --ink2: 163 163 163;
-  --ink3: 128 128 128;
-  --acc: 242 107 29;
-  --act: 242 107 29;
-  --on-act: 255 255 255;
-  --rec: 52 199 123;
-  --pend: 245 165 36;
-  --bad: 240 82 82;
-  --rec-s: rgb(52 199 123 / 0.12);
-  --pend-s: rgb(245 165 36 / 0.12);
-  --bad-s: rgb(240 82 82 / 0.12);
-  /* Admin-only: the lighter orange of a second chart series, and the grid's empty cell. */
-  --acc2: 250 164 112;
-  --cell: 46 46 46;
+  --bg: 12 10 9;
+  --sf: 22 19 17;
+  --sf2: 32 27 24;
+  --sf3: 43 36 32;
+  --ln: 42 36 33;
+  --ink: 247 243 239;
+  --ink2: 168 160 154;
+  --ink3: 142 135 129;
+  --acc: 243 181 66;
+  --act: 243 181 66;
+  --on-act: 22 16 10;
+  --you: 143 184 255;
+  --opp: 255 143 115;
+  --pend: 230 172 98;
+  --rec: 120 198 154;
+  --bad: 240 146 141;
+  --you-s: rgb(143 184 255 / 0.14);
+  --opp-s: rgb(255 143 115 / 0.14);
+  --pend-s: rgb(230 172 98 / 0.14);
+  --rec-s: rgb(120 198 154 / 0.14);
+  --bad-s: rgb(240 146 141 / 0.14);
+  /* Admin-only: the lighter gold of a second chart series, and the grid's empty cell. */
+  --acc2: 250 214 140;
+  --cell: 38 32 28;
   --scrim: rgb(0 0 0 / 0.6);
-  --edge: rgb(255 255 255 / 0.06);
+  --edge: rgb(255 255 255 / 0.07);
   color-scheme: dark;
 }
 
@@ -62,7 +66,7 @@ html:has(.admin) body {
 }
 
 .admin ::selection {
-  background: rgb(242 107 29 / 0.35);
+  background: rgb(243 181 66 / 0.35);
 }
 
 /* Thin, dark scrollbars on desktop. */

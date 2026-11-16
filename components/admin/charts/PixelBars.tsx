@@ -21,7 +21,7 @@ export interface PixelPoint {
 
 export interface PixelSeries {
   name: string;
-  /** primary = orange; soft = light orange; grey = light grey. The first series defaults to primary. */
+  /** primary = gold; soft = light gold; grey = light grey. The first series defaults to primary. */
   tone?: "primary" | "soft" | "grey";
 }
 
