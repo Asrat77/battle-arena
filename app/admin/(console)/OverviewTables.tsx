@@ -34,19 +34,20 @@ export function TransactionsCard({
 }) {
   const { data, error, loading, reload } = query;
   const cols: Column<TxnRow>[] = [
-    { key: "ts", header: "Time", cell: (t) => <TimeAgo ts={t.ts} mode="date" className="text-ink-2" /> },
+    { key: "ts", header: "Time", phone: "secondary", cell: (t) => <TimeAgo ts={t.ts} mode="date" className="text-ink-2" /> },
     {
       key: "player",
       header: "Player",
       primary: true,
       cell: (t) => <PlayerCell id={t.profileId} name={t.name} username={t.username} />,
     },
-    { key: "kind", header: "Kind", cell: (t) => <StatusPill tone={kindTone(t.kind)}>{kindLabel(t.kind)}</StatusPill> },
+    { key: "kind", header: "Kind", phone: "secondary", cell: (t) => <StatusPill tone={kindTone(t.kind)}>{kindLabel(t.kind)}</StatusPill> },
     { key: "amount", header: "Amount", align: "right", primary: true, cell: (t) => <Money santim={t.amount} book={book} signed unit={false} /> },
     { key: "balance", header: "Balance", align: "right", cell: (t) => <Money santim={t.balance} book={book} unit={false} className="text-ink-2" /> },
     {
       key: "ref",
       header: "Ref",
+      phone: "secondary",
       cell: (t) =>
         t.ref ? (
           <CopyButton value={t.ref} label="Copy reference" className="whitespace-nowrap">

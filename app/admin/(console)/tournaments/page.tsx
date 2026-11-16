@@ -1,14 +1,16 @@
-// /admin/tournaments: placeholder until its task builds the screen.
+// /admin/tournaments: every tournament with status, players, host and champion.
 
 import type { Metadata } from "next";
-import { ComingScreen } from "@/components/admin/ComingScreen";
+import { Suspense } from "react";
+import { TournamentsScreen } from "./TournamentsScreen";
 
 export const metadata: Metadata = { title: "Tournaments" };
 
 export default function Page() {
+  // The screen keeps the status filter and page in the URL (useSearchParams needs Suspense).
   return (
-    <ComingScreen title="Tournaments" subtitle="Brackets, players and champions." icon="tournaments">
-      {"Every tournament with its status, game, size, players and champion."}
-    </ComingScreen>
+    <Suspense fallback={null}>
+      <TournamentsScreen />
+    </Suspense>
   );
 }

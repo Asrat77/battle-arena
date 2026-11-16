@@ -119,18 +119,14 @@ export function PlayersScreen() {
         primary: true,
         sortKey: "name",
         cell: (u) => (
-          <div className="min-w-0">
-            <PlayerCell id={u.id} name={u.name} username={u.username} avatar={u.avatar} />
-            <div className="mt-1.5 md:hidden">
-              <PresencePill status={u.status} />
-            </div>
-          </div>
+          <PlayerCell id={u.id} name={u.name} username={u.username} avatar={u.avatar} />
         ),
       },
-      { key: "status", header: "Status", hideOnMobile: true, cell: (u) => <PresencePill status={u.status} /> },
+      { key: "status", header: "Status", phone: "secondary", cell: (u) => <PresencePill status={u.status} /> },
       {
         key: "type",
         header: "Type",
+        phone: "secondary",
         cell: (u) => <span className={u.hasPassword ? "text-ink" : "text-ink-3"}>{u.hasPassword ? "Registered" : "Guest"}</span>,
       },
       {
@@ -148,8 +144,8 @@ export function PlayersScreen() {
           </div>
         ),
       },
-      { key: "matches", header: "Matches", align: "right", sortKey: "matches", cell: (u) => <span className="num">{num(u.matches)}</span> },
-      { key: "lastMatch", header: "Last match", sortKey: "lastMatch", cell: (u) => <TimeAgo ts={u.lastMatchAt} className="text-ink-2" /> },
+      { key: "matches", header: "Matches", phone: "secondary", phoneLabel: "matches", align: "right", sortKey: "matches", cell: (u) => <span className="num">{num(u.matches)}</span> },
+      { key: "lastMatch", header: "Last match", phone: "secondary", sortKey: "lastMatch", cell: (u) => <TimeAgo ts={u.lastMatchAt} className="text-ink-2" /> },
       { key: "signin", header: "Last sign-in", cell: (u) => <TimeAgo ts={u.lastSignInAt} className="text-ink-2" /> },
       { key: "joined", header: "Joined", sortKey: "joined", cell: (u) => <span className="whitespace-nowrap text-ink-2">{dateShort(u.createdAt, true)}</span> },
     ],

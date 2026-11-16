@@ -48,11 +48,13 @@ function Stat({ label, children, sub }: { label: string; children: React.ReactNo
 
 function matchColumns(profileId: string): Column<MatchRow>[] {
   return [
-    { key: "time", header: "Time", cell: (m) => <TimeAgo ts={m.endedAt} mode="date" className="text-ink-2" /> },
+    { key: "time", header: "Time", phone: "secondary", cell: (m) => <TimeAgo ts={m.endedAt} mode="date" className="text-ink-2" /> },
     { key: "game", header: "Game", primary: true, cell: (m) => <span className="font-medium text-ink">{m.gameName}</span> },
     {
       key: "opponent",
       header: "Opponent",
+      phone: "secondary",
+      phoneLabel: "opponent",
       cell: (m) => {
         const o = opponentOf(m, profileId);
         return o ? <PlayerCell id={o.profileId} name={o.name} username={o.username} bot={o.bot} size="sm" /> : dash;
@@ -67,11 +69,12 @@ function matchColumns(profileId: string): Column<MatchRow>[] {
         return r ? <StatusPill tone={RESULT_TONE[r]}>{RESULT_LABELS[r]}</StatusPill> : dash;
       },
     },
-    { key: "duration", header: "Duration", align: "right", cell: (m) => <span className="num font-normal text-ink-2">{duration(m.durationMs)}</span> },
+    { key: "duration", header: "Duration", phone: "secondary", align: "right", cell: (m) => <span className="num font-normal text-ink-2">{duration(m.durationMs)}</span> },
     { key: "moves", header: "Moves", align: "right", cell: (m) => <span className="num font-normal text-ink-2">{num(m.moves)}</span> },
     {
       key: "stake",
       header: "Stake",
+      phone: "secondary",
       align: "right",
       cell: (m) => {
         if (!m.stake) return <span className="text-ink-3">Free</span>;
@@ -127,9 +130,9 @@ export function OverviewPanel({ detail }: { detail: UserDetail }) {
   const played = o.wins + o.losses + o.draws;
   const cols: Column<GameTally>[] = [
     { key: "game", header: "Game", primary: true, cell: (g) => <span className="font-medium text-ink">{gameLabel(g.gameId, detail.recentMatches)}</span> },
-    { key: "played", header: "Played", align: "right", cell: (g) => <span className="num">{num(g.played)}</span> },
-    { key: "wins", header: "Wins", align: "right", cell: (g) => <span className="num">{num(g.wins)}</span> },
-    { key: "losses", header: "Losses", align: "right", cell: (g) => <span className="num">{num(g.losses)}</span> },
+    { key: "played", header: "Played", phone: "secondary", phoneLabel: "played", align: "right", cell: (g) => <span className="num">{num(g.played)}</span> },
+    { key: "wins", header: "Wins", phone: "secondary", phoneLabel: "wins", align: "right", cell: (g) => <span className="num">{num(g.wins)}</span> },
+    { key: "losses", header: "Losses", phone: "secondary", phoneLabel: "losses", align: "right", cell: (g) => <span className="num">{num(g.losses)}</span> },
     { key: "draws", header: "Draws", align: "right", cell: (g) => <span className="num">{num(g.draws)}</span> },
     {
       key: "rate",
@@ -215,13 +218,14 @@ export function OverviewPanel({ detail }: { detail: UserDetail }) {
 export function WalletPanel({ detail, book, onBook }: { detail: UserDetail; book: Book; onBook(b: Book): void }) {
   const txns = detail.txns[book];
   const cols: Column<Txn>[] = [
-    { key: "time", header: "Time", cell: (t) => <TimeAgo ts={t.ts} mode="date" className="text-ink-2" /> },
+    { key: "time", header: "Time", phone: "secondary", cell: (t) => <TimeAgo ts={t.ts} mode="date" className="text-ink-2" /> },
     { key: "kind", header: "Kind", primary: true, cell: (t) => <StatusPill tone={kindTone(t.kind)}>{kindLabel(t.kind)}</StatusPill> },
     { key: "amount", header: "Amount", align: "right", primary: true, cell: (t) => <Money santim={t.amount} book={book} signed unit={false} /> },
-    { key: "balance", header: "Balance after", align: "right", cell: (t) => <Money santim={t.balance} book={book} unit={false} className="text-ink-2" /> },
+    { key: "balance", header: "Balance after", phone: "secondary", phoneLabel: "after", align: "right", cell: (t) => <Money santim={t.balance} book={book} unit={false} className="text-ink-2" /> },
     {
       key: "ref",
       header: "Ref",
+      phone: "secondary",
       cell: (t) =>
         t.ref ? (
           <CopyButton value={t.ref} label="Copy reference" className="whitespace-nowrap">
@@ -284,11 +288,12 @@ export function WalletPanel({ detail, book, onBook }: { detail: UserDetail; book
 
 export function DepositsPanel({ rows }: { rows: AdminDeposit[] }) {
   const cols: Column<AdminDeposit>[] = [
-    { key: "time", header: "Time", cell: (d) => <TimeAgo ts={d.createdAt} mode="date" className="text-ink-2" /> },
-    { key: "bank", header: "Bank", cell: (d) => bankLabel(d.bank) },
+    { key: "time", header: "Time", phone: "secondary", cell: (d) => <TimeAgo ts={d.createdAt} mode="date" className="text-ink-2" /> },
+    { key: "bank", header: "Bank", phone: "secondary", cell: (d) => bankLabel(d.bank) },
     {
       key: "ref",
       header: "Reference",
+      phone: "secondary",
       cell: (d) => (
         <CopyButton value={d.reference} label="Copy reference" className="whitespace-nowrap">
           {shortId(d.reference, 8, 4)}
@@ -377,11 +382,12 @@ function Flags({ w }: { w: AdminWithdrawal }) {
 
 export function WithdrawalsPanel({ rows }: { rows: AdminWithdrawal[] }) {
   const cols: Column<AdminWithdrawal>[] = [
-    { key: "time", header: "Time", cell: (w) => <TimeAgo ts={w.createdAt} mode="date" className="text-ink-2" /> },
-    { key: "bank", header: "Bank", cell: (w) => bankLabel(w.bank) },
+    { key: "time", header: "Time", phone: "secondary", cell: (w) => <TimeAgo ts={w.createdAt} mode="date" className="text-ink-2" /> },
+    { key: "bank", header: "Bank", phone: "secondary", cell: (w) => bankLabel(w.bank) },
     {
       key: "account",
       header: "Account",
+      phone: "secondary",
       cell: (w) => (
         <CopyButton value={w.account} label="Copy account" className="whitespace-nowrap">
           {w.account}

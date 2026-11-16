@@ -131,9 +131,9 @@ export function KitScreen() {
     { key: "player", header: "Player", primary: true, cell: (t) => <PlayerCell {...t.player} href={t.player.bot ? null : undefined} /> },
     { key: "amount", header: "Amount", align: "right", primary: true, sortKey: "amount", cell: (t) => <Money santim={t.amount} signed /> },
     { key: "id", header: "Txn", cell: (t) => <CopyButton value={t.id}>{shortId(t.id)}</CopyButton>, className: "w-[150px]" },
-    { key: "kind", header: "Kind", cell: (t) => <span className="font-mono text-[12.5px] text-ink-2">{t.kind}</span> },
-    { key: "status", header: "Status", cell: (t) => <StatusPill status={t.status} /> },
-    { key: "ts", header: "When", align: "right", sortKey: "ts", cell: (t) => <TimeAgo ts={t.ts} mode="date" className="text-ink-2" /> },
+    { key: "kind", header: "Kind", phone: "secondary", cell: (t) => <span className="font-mono text-[12.5px] text-ink-2">{t.kind}</span> },
+    { key: "status", header: "Status", phone: "secondary", cell: (t) => <StatusPill status={t.status} /> },
+    { key: "ts", header: "When", phone: "secondary", align: "right", sortKey: "ts", cell: (t) => <TimeAgo ts={t.ts} mode="date" className="text-ink-2" /> },
   ];
 
   return (
@@ -211,7 +211,7 @@ export function KitScreen() {
         </div>
       </Section>
 
-      <Section title="DataTable" note="Sortable headers (Amount, When), row links, pager. On phones each row becomes a card: primary columns on top, the rest as key/value.">
+      <Section title="DataTable" note="Sortable headers (Amount, When), row links, pager. On phones each row becomes a compact card: primary columns on line 1, up to three secondary values on line 2 (muted, middots), the rest hidden.">
         <Card
           title="Recent transactions"
           info="Sample rows."

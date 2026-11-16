@@ -1,14 +1,16 @@
-// /admin/activity: placeholder until its task builds the screen.
+// /admin/activity: the merged live feed (sign-ups, matches, money, tournaments, admin) with type chips.
 
 import type { Metadata } from "next";
-import { ComingScreen } from "@/components/admin/ComingScreen";
+import { Suspense } from "react";
+import { ActivityScreen } from "./ActivityScreen";
 
 export const metadata: Metadata = { title: "Activity" };
 
 export default function Page() {
+  // The screen keeps the type filter in the URL (useSearchParams needs Suspense).
   return (
-    <ComingScreen title="Activity" subtitle="Everything that happens, newest first." icon="activity">
-      {"A live feed of sign-ups, matches, deposits, withdrawals, adjustments, tournaments and admin actions, with type filters."}
-    </ComingScreen>
+    <Suspense fallback={null}>
+      <ActivityScreen />
+    </Suspense>
   );
 }
