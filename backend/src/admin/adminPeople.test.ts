@@ -246,6 +246,7 @@ describe("admin players and matches read API", () => {
     assert.deepEqual(body.withdrawals, []);
     assert.equal(body.friendCount, 0);
     assert.equal(body.openSessions, 2);
+    assert.equal(typeof body.lastSignInAt, "number");
 
     const b = (await get(`/api/admin/users/${bob.id}`)).body;
     assert.equal(b.balances.real, 50 * BIRR);
