@@ -358,7 +358,8 @@ export function DepositsPanel({ rows }: { rows: AdminDeposit[] }) {
 
 // ---------------------------------------------------------------- withdrawals
 
-function Flags({ w }: { w: AdminWithdrawal }) {
+/** Forced / Unverified / Waiting for second approval, with who and why (also used by the withdrawals screen). */
+export function Flags({ w }: { w: AdminWithdrawal }) {
   const flags: { key: string; label: string; detail?: string; tone: string }[] = [];
   if (w.forced) flags.push({ key: "forced", label: "Forced", detail: `${w.forced.by}: ${w.forced.reason}`, tone: "border-pending/50 text-pending" });
   if (w.unverified) flags.push({ key: "unv", label: "Unverified", detail: w.unverified.why, tone: "border-mismatch/50 text-mismatch" });

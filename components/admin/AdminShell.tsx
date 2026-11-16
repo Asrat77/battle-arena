@@ -36,6 +36,8 @@ function useConsoleData() {
     return () => ctrl.abort();
   }, []);
 
+  const [countsTick, setCountsTick] = useState(0);
+  const refreshCounts = useCallback(() => setCountsTick((t) => t + 1), []);
   useEffect(() => {
     let ctrl = new AbortController();
     const load = () => {
@@ -52,7 +54,7 @@ function useConsoleData() {
       ctrl.abort();
       window.clearInterval(id);
     };
-  }, []);
+  }, [countsTick]);
 
   // Back to the login page the moment the session ends.
   useEffect(() => {
@@ -63,12 +65,12 @@ function useConsoleData() {
     return () => window.clearTimeout(t);
   }, [who.expiresAt]);
 
-  return { who, mode, now };
+  return { who, mode, now, refreshCounts };
 }
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { who, mode, now } = useConsoleData();
+  const { who, mode, now, refreshCounts } = useConsoleData();
   const [menu, setMenu] = useState(false);
   const [search, setSearch] = useState(false);
   const [leaf, setLeaf] = useState<string | null>(null);
@@ -105,6 +107,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       expiresAt: who.expiresAt,
       mode,
       now,
+      refreshCounts,
       signOut: async () => {
         try {
           await adminSession.signOut();
@@ -114,7 +117,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         window.location.assign("/admin/login");
       },
     }),
-    [who, mode, now],
+    [who, mode, now, refreshCounts],
   );
 
   return (

@@ -1,15 +1,34 @@
 "use client";
 
-// The "Adjust balance" button of the player page. For now it opens the wallet
-// screen with the player preselected (/admin/wallet?adjust=<id>); the adjustment
-// dialog replaces the inside of this component without changing its props.
+// The "Adjust balance" button of the player page: opens the adjustment dialog
+// locked to this player. `onDone` lets the page reload after a write.
 
-import { ButtonLink } from "./Button";
+import { useState } from "react";
+import type { Book } from "@/lib/admin/format";
+import { AdjustDialog } from "./AdjustDialog";
+import { Button } from "./Button";
 
-export function AdjustBalanceButton({ profileId, size = "md", className = "" }: { profileId: string; size?: "sm" | "md"; className?: string }) {
+export function AdjustBalanceButton({
+  profileId,
+  size = "md",
+  className = "",
+  book,
+  onDone,
+}: {
+  profileId: string;
+  size?: "sm" | "md";
+  className?: string;
+  /** The book to start on (default: the global switch). */
+  book?: Book;
+  onDone?(): void;
+}) {
+  const [open, setOpen] = useState(false);
   return (
-    <ButtonLink href={`/admin/wallet?adjust=${encodeURIComponent(profileId)}`} variant="secondary" size={size} icon="wallet" className={className}>
-      Adjust balance
-    </ButtonLink>
+    <>
+      <Button variant="secondary" size={size} icon="wallet" className={className} onClick={() => setOpen(true)}>
+        Adjust balance
+      </Button>
+      <AdjustDialog open={open} preset={{ profileId, lockAccount: true, book }} onClose={() => setOpen(false)} onDone={() => onDone?.()} />
+    </>
   );
 }

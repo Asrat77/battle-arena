@@ -36,7 +36,8 @@ export function ThinBars({
 }) {
   const max = Math.max(1, ...data.map((d) => Math.max(d.value, d.track ?? 0)));
   const table = (
-    <table className="sr-only">
+    <div className="sr-only">
+      <table>
       <caption>{title}</caption>
       <tbody>
         {data.map((d) => (
@@ -47,6 +48,7 @@ export function ThinBars({
         ))}
       </tbody>
     </table>
+    </div>
   );
 
   if (orientation === "horizontal") {

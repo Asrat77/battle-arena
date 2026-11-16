@@ -153,7 +153,8 @@ export function DataTable<T>({
   return (
     <div className={`min-w-0 ${className}`}>
       {/* Desktop table */}
-      <div className="hidden overflow-x-auto md:block">
+      {/* relative: keeps absolutely placed bits (sr-only text) inside the scroll box */}
+      <div className="relative hidden overflow-x-auto md:block">
         <table className="w-full border-collapse text-[13.5px]" aria-busy={loading || undefined}>
           <caption className="sr-only">{caption}</caption>
           <thead>

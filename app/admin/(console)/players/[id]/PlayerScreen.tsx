@@ -37,7 +37,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-function PlayerHeader({ d }: { d: UserDetail }) {
+function PlayerHeader({ d, onAdjusted }: { d: UserDetail; onAdjusted(): void }) {
   const p = d.profile;
   const registered = d.account.hasPassword;
   return (
@@ -61,7 +61,7 @@ function PlayerHeader({ d }: { d: UserDetail }) {
           <ButtonLink href={`/profile/${encodeURIComponent(p.id)}`} target="_blank" rel="noopener noreferrer" variant="secondary" icon="external">
             Open public profile
           </ButtonLink>
-          <AdjustBalanceButton profileId={p.id} />
+          <AdjustBalanceButton profileId={p.id} onDone={onAdjusted} />
         </div>
       </div>
       <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-line pt-4 sm:grid-cols-4">
@@ -201,7 +201,7 @@ export function PlayerScreen({ id }: { id: string }) {
   };
   return (
     <>
-      <PlayerHeader d={d} />
+      <PlayerHeader d={d} onAdjusted={reload} />
       {d.status === "in-match" && d.matchId && (
         <div role="status" className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[10px] border border-recorded/40 bg-recorded/10 px-4 py-3 lg:mb-5">
           <StatusPill tone="live">In a live match</StatusPill>
