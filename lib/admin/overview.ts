@@ -3,7 +3,7 @@
 // labels for wallet transaction kinds. No React and no fetching, so it is tested alone.
 
 import type { CsvColumn } from "./csv";
-import { birr, compactBirr, compact, dayLabel, num, type Book } from "./format";
+import { birr, compactBirr, compact, dayLabel, num, plural, type Book } from "./format";
 import type { Overview, SeriesDay, Tally } from "./types";
 
 /** Deposits minus withdrawals for one day (santim, signed). */
@@ -198,8 +198,6 @@ export interface AttentionItem {
 export interface ReconcileLite {
   ok: boolean;
 }
-
-const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 function tallyItem(id: "deposits" | "withdrawals", t: Tally): AttentionItem | null {
   if (t.count <= 0) return null;

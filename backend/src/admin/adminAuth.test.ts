@@ -236,6 +236,21 @@ describe("admin audit", () => {
     assert.equal(log.page(0, 1000).rows.length, 200);
   });
 
+  test("GET /audit filters by action and by actor, target or ip text", async () => {
+    const s = await start();
+    const h = { "x-admin-session": (await s.signIn("Dawit")).body.session };
+    await s.signIn("Sara", "wrong-token-" + "x".repeat(10));
+    new AdminAudit(s.store).add({ actor: "Sara", action: "wallet-adjust", target: "player-77", ip: "10.1.2.3" });
+    const by = async (qs: string) => (await s.call("GET", "/api/admin/audit?" + qs, h)).body;
+    assert.deepEqual((await by("action=signin-failed")).rows.map((x: any) => x.action), ["signin-failed"]);
+    assert.equal((await by("action=signin,wallet-adjust")).total, 2);
+    assert.equal((await by("q=SARA")).total, 1);
+    assert.equal((await by("q=player-77")).rows[0].action, "wallet-adjust");
+    assert.equal((await by("q=10.1.2")).total, 1);
+    assert.equal((await by("action=signout")).total, 0);
+    assert.equal((await by("")).total, 3);
+  });
+
   test("keeps the newest 2000 entries", () => {
     const store = new MemoryStore();
     const log = new AdminAudit(store);

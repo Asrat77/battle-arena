@@ -30,6 +30,16 @@ export function unitFor(book: Book): string {
 }
 
 /** "1,234" */
+/** "1 match" / "2 matches": the singular for exactly 1, the plural otherwise (the count itself is not included). */
+export function plural(n: number, one: string, many: string = `${one}s`): string {
+  return n === 1 ? one : many;
+}
+
+/** "12 matches" with thousands grouping. */
+export function count(n: number, one: string, many?: string): string {
+  return `${num(n)} ${plural(n, one, many)}`;
+}
+
 export function num(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "–";
   const s = grouped0.format(Math.abs(n));

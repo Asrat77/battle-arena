@@ -55,12 +55,12 @@ export function TopBar({ onOpenMenu, onOpenSearch, leaf }: { onOpenMenu(): void;
         <button
           type="button"
           onClick={onOpenSearch}
-          aria-label="Search players"
+          aria-label="Search"
           aria-keyshortcuts={mac ? "Meta+K" : "Control+K"}
           className="flex h-11 w-11 flex-none items-center justify-center rounded-lg text-ink-2 hover:bg-sf-2 hover:text-ink md:h-9 md:w-[260px] md:justify-start md:gap-2 md:border md:border-line md:bg-sf md:px-3 md:text-left md:text-[13px] md:text-ink-3 lg:w-[300px]"
         >
           <Icon name="search" size={16} />
-          <span className="hidden flex-1 md:inline">Search players…</span>
+          <span className="hidden flex-1 md:inline">Search players, deposits, matches…</span>
           <span className="hidden items-center gap-1 md:flex" aria-hidden>
             <kbd className="flex h-5 min-w-[20px] items-center justify-center rounded border border-line bg-sf-2 px-1 font-mono text-[10.5px] text-ink-2">{mac ? "⌘" : "Ctrl"}</kbd>
             <kbd className="flex h-5 min-w-[20px] items-center justify-center rounded border border-line bg-sf-2 px-1 font-mono text-[10.5px] text-ink-2">K</kbd>

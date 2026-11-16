@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   const up = await callApi("session", { method: "POST", headers: { "x-admin-token": token }, body: { name } });
   if (!up) return unreachable();
   if (up.status === 401 || up.status === 404) return json({ error: "That token is not right." }, 401);
-  if (up.status === 429) return json({ error: "Too many failed attempts. Try again in about 15 minutes." }, 429);
+  if (up.status === 429) return json({ error: "Too many failed attempts. Sign-in is paused for about 15 minutes." }, 429);
   if (up.status === 400) return json({ error: errorOf(up.body, "Check your name.") }, 400);
   const body = up.body as { session?: unknown; name?: unknown; expiresAt?: unknown } | null;
   if (up.status !== 200 || typeof body?.session !== "string" || typeof body.expiresAt !== "number") {

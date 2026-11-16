@@ -36,7 +36,7 @@ export interface Column<T> {
    */
   phone?: PhoneRole;
   /** Short text before a secondary value on the phone card, e.g. "moves" gives "12 moves". */
-  phoneLabel?: string;
+  phoneLabel?: string | ((row: T) => string);
   /** Same as phone: "primary". */
   primary?: boolean;
   /** Same as phone: "hidden". */
@@ -256,7 +256,7 @@ export function DataTable<T>({
                   <span key={c.key} className="inline-flex min-w-0 items-center gap-1.5">
                     {i > 0 && <span aria-hidden>·</span>}
                     <span className="min-w-0 truncate text-ink-2 [&_.num]:font-normal">{c.cell(row)}</span>
-                    {c.phoneLabel && <span className="-ml-0.5">{c.phoneLabel}</span>}
+                    {c.phoneLabel && <span className="-ml-0.5">{typeof c.phoneLabel === "function" ? c.phoneLabel(row) : c.phoneLabel}</span>}
                   </span>
                 ))}
               </div>

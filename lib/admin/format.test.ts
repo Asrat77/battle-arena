@@ -97,3 +97,12 @@ test("short ids keep the head and tail", () => {
   assert.equal(shortId("abc"), "abc");
   assert.equal(shortId(""), "–");
 });
+
+test("plural and count pick the right form", async () => {
+  const { plural, count } = await import("./format");
+  assert.equal(plural(1, "match", "matches"), "match");
+  assert.equal(plural(0, "match", "matches"), "matches");
+  assert.equal(plural(2, "deposit"), "deposits");
+  assert.equal(count(1, "player"), "1 player");
+  assert.equal(count(1234, "live match", "live matches"), "1,234 live matches");
+});

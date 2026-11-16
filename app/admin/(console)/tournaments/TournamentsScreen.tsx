@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/admin/Card";
 import { DataTable, type Column } from "@/components/admin/DataTable";
 import { FilterChips } from "@/components/admin/FilterChips";
+import { ExportButton } from "@/components/admin/ExportButton";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { PlayerCell } from "@/components/admin/PlayerCell";
 import { Skeleton } from "@/components/admin/Skeleton";
@@ -25,6 +26,7 @@ import {
   tournamentPlayers,
   type TournamentStatusFilter,
 } from "@/lib/admin/matches";
+import { TOURNAMENT_CSV_COLUMNS, exportFilename } from "@/lib/admin/exports";
 import { collectAll } from "@/lib/admin/players";
 import type { Page, TournamentRow } from "@/lib/admin/types";
 
@@ -141,7 +143,18 @@ export function TournamentsScreen() {
 
   return (
     <>
-      <PageHeader title="Tournaments" subtitle="Every tournament, open, running or finished." />
+      <PageHeader
+        title="Tournaments"
+        subtitle="Every tournament, open, running or finished."
+        actions={
+          <ExportButton<TournamentRow>
+            filename={exportFilename("tournaments", [status === "all" ? null : status])}
+            columns={TOURNAMENT_CSV_COLUMNS}
+            disabled={shown.length === 0}
+            load={async () => shown}
+          />
+        }
+      />
       <div className="mb-4 grid grid-cols-3 gap-2.5 sm:gap-4 lg:mb-5">
         <Stat label="Total" value={counts.total} sub="all time" loading={loading} />
         <Stat label="Active" value={counts.open + counts.running} sub={`${counts.open} open, ${counts.running} live`} loading={loading} />

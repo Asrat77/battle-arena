@@ -1,14 +1,10 @@
-// /admin/system: placeholder until its task builds the screen.
+// /admin/system: health checks, server facts and configuration (counts and flags only, no secrets).
 
 import type { Metadata } from "next";
-import { ComingScreen } from "@/components/admin/ComingScreen";
+import { SystemScreen } from "./SystemScreen";
 
 export const metadata: Metadata = { title: "System health" };
 
 export default function Page() {
-  return (
-    <ComingScreen title="System health" subtitle="Store, ledger, wallet log and configuration." icon="system">
-      {"Health cards and configuration, with no secrets."}
-    </ComingScreen>
-  );
+  return <SystemScreen />;
 }
