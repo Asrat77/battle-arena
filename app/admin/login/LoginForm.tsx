@@ -14,10 +14,12 @@ import { safeNext } from "@/lib/admin/proxyRules";
 
 const NAME_KEY = "admin.name";
 
-function message(err: unknown): { field: "token" | "name" | null; text: string } {
+type Problem = { field: "token" | "name" | null; text: string; locked?: boolean };
+
+function message(err: unknown): Problem {
   if (err instanceof AdminApiError) {
     if (err.status === 401) return { field: "token", text: "That token is not right. Check it and try again." };
-    if (err.status === 429) return { field: null, text: "Too many failed attempts. Try again in about 15 minutes." };
+    if (err.status === 429) return { field: null, locked: true, text: "Too many wrong tokens from this connection. Sign-in is paused for about 15 minutes. Waiting is the only fix; trying again now will not help." };
     if (err.status === 400) return { field: /name/i.test(err.message) ? "name" : "token", text: err.message };
     if (err.status === 0 || err.status >= 500) return { field: null, text: "The admin server can't be reached right now. Try again in a minute." };
     return { field: null, text: err.message };
@@ -30,7 +32,7 @@ export function LoginForm() {
   const [name, setName] = useState("");
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<{ field: "token" | "name" | null; text: string } | null>(null);
+  const [error, setError] = useState<Problem | null>(null);
   const tokenRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -117,13 +119,25 @@ export function LoginForm() {
               hint="Shown in the audit log next to everything you do."
               error={error?.field === "name" ? error.text : null}
             />
-            {error && !error.field && (
+            {error?.locked && (
+              <div role="alert" className="rounded-lg border border-pending/50 bg-pending/10 px-3 py-3 text-[13px] text-ink">
+                <p className="flex items-center gap-2 font-medium">
+                  <Icon name="clock" size={16} className="text-pending" />
+                  Sign-in is locked for now
+                </p>
+                <p className="mt-1.5 text-ink-2">{error.text}</p>
+                <button type="button" onClick={() => setError(null)} className="mt-2.5 flex h-11 items-center text-[13px] font-medium text-accent hover:underline lg:h-8">
+                  I waited, let me try again
+                </button>
+              </div>
+            )}
+            {error && !error.field && !error.locked && (
               <p role="alert" className="flex items-start gap-2 rounded-lg border border-mismatch/40 bg-mismatch-soft px-3 py-2.5 text-[13px] text-mismatch">
                 <Icon name="alert" size={16} className="mt-px" />
                 {error.text}
               </p>
             )}
-            <Button type="submit" variant="primary" loading={busy} className="w-full">
+            <Button type="submit" variant="primary" loading={busy} disabled={Boolean(error?.locked)} className="w-full">
               {busy ? "Signing in…" : "Sign in"}
             </Button>
           </form>

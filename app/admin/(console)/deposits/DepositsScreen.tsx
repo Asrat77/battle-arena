@@ -18,6 +18,7 @@ import { Drawer } from "@/components/admin/Drawer";
 import { TextArea } from "@/components/admin/Field";
 import { Icon } from "@/components/admin/icons";
 import { Money } from "@/components/admin/Money";
+import { ExportButton } from "@/components/admin/ExportButton";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { PlayerCell } from "@/components/admin/PlayerCell";
 import { SearchInput } from "@/components/admin/SearchInput";
@@ -40,7 +41,8 @@ import {
   type DepositTab,
   type NameMatch,
 } from "@/lib/admin/money";
-import { bankLabel, depositAmount } from "@/lib/admin/players";
+import { DEPOSIT_CSV_COLUMNS, exportFilename } from "@/lib/admin/exports";
+import { bankLabel, collectAll, depositAmount } from "@/lib/admin/players";
 import type { AdminDeposit, Page } from "@/lib/admin/types";
 
 const dash = <span className="text-ink-3">–</span>;
@@ -352,7 +354,20 @@ export function DepositsScreen() {
 
   return (
     <>
-      <PageHeader title="Deposits" subtitle={counts.review ? `${num(counts.review)} waiting for a decision.` : "Receipts players submitted, checked by verify.et."} />
+      <PageHeader
+        title="Deposits"
+        subtitle={counts.review ? `${num(counts.review)} waiting for a decision.` : "Receipts players submitted, checked by verify.et."}
+        actions={
+          <ExportButton<AdminDeposit>
+            filename={exportFilename("deposits", [tab === "all" ? null : tab, q ? "search" : null])}
+            columns={DEPOSIT_CSV_COLUMNS}
+            disabled={!list.data || list.data.total === 0}
+            load={(onProgress, isCancelled) =>
+              collectAll<AdminDeposit>((p, limit) => adminGet<Page<AdminDeposit>>("deposits", { status: tab === "all" ? null : tab, q, page: p, limit }), { onProgress, isCancelled })
+            }
+          />
+        }
+      />
 
       <p className="mb-4 flex items-start gap-2 rounded-[10px] border border-line bg-sf px-4 py-3 text-[13px] text-ink-2">
         <Icon name="info" size={16} className="mt-0.5 flex-none text-ink-3" />

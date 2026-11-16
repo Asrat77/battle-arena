@@ -72,7 +72,8 @@ export function adminRoutes(deps: AdminDeps): Router {
 
   router.get("/api/admin/audit", (req, res) => {
     const { page, limit } = pageQuery(req.query);
-    res.json(audit.page(page, limit));
+    const text = (v: unknown) => (typeof v === "string" ? v.slice(0, 80) : "");
+    res.json(audit.page(page, limit, { action: text(req.query.action).split(","), q: text(req.query.q) }));
   });
 
   router.use(walletAdminRoutes(deps.wallet, audit));

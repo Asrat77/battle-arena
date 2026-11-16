@@ -19,7 +19,7 @@ import { StatusPill } from "@/components/admin/StatusPill";
 import { TimeAgo } from "@/components/admin/TimeAgo";
 import { adminGet, useAdminQuery } from "@/lib/admin/api";
 import { downloadCsv } from "@/lib/admin/csv";
-import { dateShort, num } from "@/lib/admin/format";
+import { dateShort, num, plural } from "@/lib/admin/format";
 import {
   FILTERS,
   FILTER_LABELS,
@@ -144,7 +144,7 @@ export function PlayersScreen() {
           </div>
         ),
       },
-      { key: "matches", header: "Matches", phone: "secondary", phoneLabel: "matches", align: "right", sortKey: "matches", cell: (u) => <span className="num">{num(u.matches)}</span> },
+      { key: "matches", header: "Matches", phone: "secondary", phoneLabel: (u) => plural(u.matches, "match", "matches"), align: "right", sortKey: "matches", cell: (u) => <span className="num">{num(u.matches)}</span> },
       { key: "lastMatch", header: "Last match", phone: "secondary", sortKey: "lastMatch", cell: (u) => <TimeAgo ts={u.lastMatchAt} className="text-ink-2" /> },
       { key: "signin", header: "Last sign-in", cell: (u) => <TimeAgo ts={u.lastSignInAt} className="text-ink-2" /> },
       { key: "joined", header: "Joined", sortKey: "joined", cell: (u) => <span className="whitespace-nowrap text-ink-2">{dateShort(u.createdAt, true)}</span> },

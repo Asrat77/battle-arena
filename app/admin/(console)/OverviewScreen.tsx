@@ -21,7 +21,7 @@ import { Skeleton } from "@/components/admin/Skeleton";
 import { Segmented } from "@/components/admin/Tabs";
 import { downloadCsv } from "@/lib/admin/csv";
 import { useAdminQuery } from "@/lib/admin/api";
-import { addisHour, compact, compactBirr, dayLabel, num, unitFor } from "@/lib/admin/format";
+import { addisHour, compact, compactBirr, count, dayLabel, num, unitFor } from "@/lib/admin/format";
 import {
   CSV_COLUMNS,
   METRICS,
@@ -123,7 +123,7 @@ export function OverviewScreen() {
         subtitle={
           data ? (
             <>
-              {num(data.now.online)} online now · {num(data.now.liveMatches)} live {data.now.liveMatches === 1 ? "match" : "matches"} · {num(data.totals.players)} players in total
+              {num(data.now.online)} online now · {count(data.now.liveMatches, "live match", "live matches")} · {count(data.totals.players, "player")} in total
             </>
           ) : (
             "How Battle Arena is doing."

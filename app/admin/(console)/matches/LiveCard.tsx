@@ -10,7 +10,7 @@ import { Icon } from "@/components/admin/icons";
 import { Skeleton } from "@/components/admin/Skeleton";
 import { StatusPill } from "@/components/admin/StatusPill";
 import { type AdminQuery } from "@/lib/admin/api";
-import { num } from "@/lib/admin/format";
+import { num, plural } from "@/lib/admin/format";
 import { liveElapsed } from "@/lib/admin/matches";
 import type { LiveMatchRow } from "@/lib/admin/types";
 import { useEffect, useState } from "react";
@@ -51,7 +51,7 @@ function LiveRow({ m, now, onOpen }: { m: LiveMatchRow; now: number; onOpen(id: 
         <div>
           <dt className="sr-only">Moves</dt>
           <dd>
-            <span className="num font-normal text-ink">{num(m.moves)}</span> moves
+            <span className="num font-normal text-ink">{num(m.moves)}</span> {plural(m.moves, "move", "moves")}
           </dd>
         </div>
         <div>

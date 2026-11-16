@@ -15,10 +15,13 @@ import { EmptyState } from "@/components/admin/EmptyState";
 import { FilterChips } from "@/components/admin/FilterChips";
 import { Icon } from "@/components/admin/icons";
 import { Money } from "@/components/admin/Money";
+import { ExportButton } from "@/components/admin/ExportButton";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { PlayerCell } from "@/components/admin/PlayerCell";
 import { Skeleton } from "@/components/admin/Skeleton";
 import { adminGet, AdminApiError } from "@/lib/admin/api";
+import { ACTIVITY_CSV_COLUMNS, exportFilename } from "@/lib/admin/exports";
+import { collectAll } from "@/lib/admin/players";
 import {
   FEED_FILTERS,
   FEED_LABELS,
@@ -230,6 +233,14 @@ export function ActivityScreen() {
               {paused ? "Paused" : "Live"}
               {updatedAt && !paused && <span className="font-normal text-ink-3 max-sm:hidden">· every 30 s</span>}
             </span>
+            <ExportButton<ActivityRow>
+              filename={exportFilename("activity", [filter === "all" ? null : filter])}
+              columns={ACTIVITY_CSV_COLUMNS}
+              disabled={initial || total === 0}
+              load={(onProgress, isCancelled) =>
+                collectAll<ActivityRow>((p, limit) => adminGet<Page<ActivityRow>>("activity", { type: typeParam, page: p, limit }), { onProgress, isCancelled })
+              }
+            />
             <Button size="sm" icon={paused ? "refresh" : "clock"} aria-pressed={paused} onClick={() => setPaused((p) => !p)}>
               {paused ? "Resume" : "Pause"}
             </Button>

@@ -15,6 +15,7 @@ import { DataTable, type Column } from "@/components/admin/DataTable";
 import { Drawer } from "@/components/admin/Drawer";
 import { Icon } from "@/components/admin/icons";
 import { Money } from "@/components/admin/Money";
+import { ExportButton } from "@/components/admin/ExportButton";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { PlayerCell } from "@/components/admin/PlayerCell";
 import { SearchInput } from "@/components/admin/SearchInput";
@@ -26,7 +27,8 @@ import { InfoTip } from "@/components/admin/Tooltip";
 import { adminGet, useAdminQuery } from "@/lib/admin/api";
 import { birr, dateTime, duration, fullDate, num, shortId } from "@/lib/admin/format";
 import { LEDGER_PAGE_SIZE, WITHDRAWAL_TABS, WITHDRAWAL_TAB_LABELS, oldest, pickTab, waitBucket, type WithdrawalTab } from "@/lib/admin/money";
-import { bankLabel } from "@/lib/admin/players";
+import { WITHDRAWAL_CSV_COLUMNS, exportFilename } from "@/lib/admin/exports";
+import { bankLabel, collectAll } from "@/lib/admin/players";
 import type { AdminWithdrawal, Overview, Page, UserDetail, WalletSummary } from "@/lib/admin/types";
 import { Flags } from "../players/[id]/PlayerPanels";
 
@@ -323,7 +325,20 @@ export function WithdrawalsScreen() {
 
   return (
     <>
-      <PageHeader title="Withdrawals" subtitle={counts.pending ? `${num(counts.pending)} waiting for a moderator.` : "Payouts players asked for."} />
+      <PageHeader
+        title="Withdrawals"
+        subtitle={counts.pending ? `${num(counts.pending)} waiting for a moderator.` : "Payouts players asked for."}
+        actions={
+          <ExportButton<AdminWithdrawal>
+            filename={exportFilename("withdrawals", [tab === "all" ? null : tab, q ? "search" : null])}
+            columns={WITHDRAWAL_CSV_COLUMNS}
+            disabled={!list.data || list.data.total === 0}
+            load={(onProgress, isCancelled) =>
+              collectAll<AdminWithdrawal>((p, limit) => adminGet<Page<AdminWithdrawal>>("withdrawals", { status: tab === "all" ? null : tab, q, page: p, limit }), { onProgress, isCancelled })
+            }
+          />
+        }
+      />
       <p className="mb-4 flex items-start gap-2 rounded-[10px] border border-pending/40 bg-pending/[0.07] px-4 py-3 text-[13px] text-ink">
         <Icon name="info" size={16} className="mt-0.5 flex-none text-pending" />
         Payouts are made and confirmed in the Telegram moderators&apos; chat. This page is read-only.

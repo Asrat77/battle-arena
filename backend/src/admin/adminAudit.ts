@@ -53,13 +53,19 @@ export class AdminAudit {
     return [...this.store.read<AuditEntry[]>(AUDIT_KEY, [])].reverse();
   }
 
-  /** Newest first. `limit` is clamped to 1..200. */
-  page(page = 0, limit = 50): { rows: AuditEntry[]; total: number } {
-    const all = this.store.read<AuditEntry[]>(AUDIT_KEY, []);
+  /**
+   * Newest first. `limit` is clamped to 1..200. `action` (one or more, comma separated in the
+   * route) and `q` (matches actor, target or ip, case blind) narrow the list; `total` counts the matches.
+   */
+  page(page = 0, limit = 50, filter: { action?: readonly string[]; q?: string } = {}): { rows: AuditEntry[]; total: number } {
     const size = Math.min(AUDIT_PAGE_MAX, Math.max(1, Math.floor(limit) || 50));
     const from = Math.max(0, Math.floor(page) || 0) * size;
-    const newest = [...all].reverse();
-    return { rows: newest.slice(from, from + size), total: all.length };
+    const actions = filter.action?.filter(Boolean) ?? [];
+    const q = filter.q?.trim().toLowerCase() ?? "";
+    const hit = (e: AuditEntry) =>
+      (!actions.length || actions.includes(e.action)) && (!q || [e.actor, e.target, e.ip].some((v) => v?.toLowerCase().includes(q)));
+    const found = this.all().filter(hit);
+    return { rows: found.slice(from, from + size), total: found.length };
   }
 
   private clean(text: string): string {
