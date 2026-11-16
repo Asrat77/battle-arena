@@ -60,7 +60,7 @@ export function compactBirr(santim: number | null | undefined): string {
 }
 
 /**
- * Period change as text: "+12.4%", "−3.0%", "0%", or "new" when there was
+ * Period change as text: "+12.4%", "−3.0%", "+705%" (whole numbers from 100%), "0%", or "new" when there was
  * nothing before (previous 0 or unknown) but there is now. `change` is the
  * API's ratio ((value − previous) / previous) or null.
  */
@@ -68,8 +68,9 @@ export function percentChange(change: number | null | undefined, value?: number)
   if (change == null || !Number.isFinite(change)) return value === 0 ? "0%" : "new";
   if (change === 0) return "0%";
   const pct = Math.abs(change * 100);
-  const s = pct >= 1000 ? grouped0.format(pct) : pct.toFixed(1);
-  return `${change > 0 ? "+" : MINUS}${s}%`;
+  // One decimal below 100%, whole numbers above, and absurd values capped so a chip never grows wide.
+  const s = pct >= 10_000 ? "9,999%+" : pct >= 100 ? `${grouped0.format(pct)}%` : `${pct.toFixed(1)}%`;
+  return `${change > 0 ? "+" : MINUS}${s}`;
 }
 
 /** Up, down or flat, for colouring a change chip. */

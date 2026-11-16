@@ -8,13 +8,15 @@ export interface CsvColumn<T> {
 }
 
 const FORMULA_START = /^[=+\-@\t\r]/;
+/** Money text with two decimals such as "-3.00" is a number to a spreadsheet, not a formula, so it keeps its minus and decimals. */
+const PLAIN_NUMBER = /^-?\d+\.\d{2}$/;
 
 export function csvCell(v: string | number | boolean | null | undefined): string {
   if (v == null) return "";
   let s: string;
   if (typeof v === "number") s = Number.isFinite(v) ? String(v) : "";
   else if (typeof v === "boolean") s = v ? "true" : "false";
-  else s = FORMULA_START.test(v) ? `'${v}` : v;
+  else s = FORMULA_START.test(v) && !PLAIN_NUMBER.test(v) ? `'${v}` : v;
   return /[",\r\n]|^\s|\s$/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

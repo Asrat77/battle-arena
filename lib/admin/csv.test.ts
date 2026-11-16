@@ -38,3 +38,9 @@ test("rows become CSV with a header line", () => {
   assert.equal(csv, 'Name,Amount (ETB)\r\n"Abebe, K",12.5\r\n\'=evil,-0.05\r\n');
   assert.equal(toCsv([], [{ header: "x", value: () => 1 }]), "x\r\n");
 });
+
+test("plain numeric text keeps its minus sign and decimals", () => {
+  assert.equal(csvCell("-3.00"), "-3.00");
+  assert.equal(csvCell("12.50"), "12.50");
+  assert.equal(csvCell("-1+1"), "'-1+1");
+});
