@@ -185,6 +185,14 @@ export interface AdjustResult {
   txn: Txn;
 }
 
+/** GET wallet/reconcile (log replayed against the stored balances) */
+export interface Reconcile {
+  ok: boolean;
+  entries: number;
+  chain: "intact" | { at: number; reason: string };
+  books: { book: Book; ok: boolean; txns: number; total: number; held: number; mismatches: unknown[]; escrows: unknown[] }[];
+}
+
 /** GET system */
 export interface SystemInfo {
   time: number;

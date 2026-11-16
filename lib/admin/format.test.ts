@@ -56,6 +56,10 @@ test("percent change, with 'new' when there was nothing before", () => {
   assert.equal(percentChange(null, 5), "new");
   assert.equal(percentChange(null, 0), "0%");
   assert.equal(percentChange(12.5), "+1,250%");
+  assert.equal(percentChange(7.051), "+705%");
+  assert.equal(percentChange(-1.5), `${M}150%`);
+  assert.equal(percentChange(0.999), "+99.9%");
+  assert.equal(percentChange(250), "+9,999%+");
   assert.equal(trendOf(0.1), "up");
   assert.equal(trendOf(-0.1), "down");
   assert.equal(trendOf(null, 0), "flat");

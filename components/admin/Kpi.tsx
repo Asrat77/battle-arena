@@ -33,6 +33,8 @@ export function Kpi({
   info,
   compareLabel = "vs previous period",
   loading = false,
+  muted = false,
+  hint,
 }: {
   label: string;
   /** Already formatted, e.g. "18.1k" or "1,234.50". */
@@ -49,9 +51,12 @@ export function Kpi({
   info?: React.ReactNode;
   compareLabel?: string;
   loading?: boolean;
+  /** Greyed out (the number does not apply here); `hint` says why, in place of the change chip. */
+  muted?: boolean;
+  hint?: string;
 }) {
   return (
-    <section className="flex min-w-0 flex-col rounded-[10px] border border-line bg-sf">
+    <section className={`flex min-w-0 flex-col rounded-[10px] border border-line bg-sf ${muted ? "opacity-55" : ""}`}>
       <div className="flex min-h-[84px] items-start gap-3 px-3.5 pb-3 pt-3.5 sm:min-h-[96px] sm:px-4">
         <div className="min-w-0 flex-1">
           <h3 className="label truncate">{label}</h3>
@@ -64,12 +69,13 @@ export function Kpi({
             </p>
           )}
         </div>
-        {bars && bars.length > 0 && !loading && <MiniBars values={bars} label={barsLabel ?? `${label} per day`} className="mt-1 hidden sm:flex" />}
+        {bars && bars.length > 0 && !loading && !muted && <MiniBars values={bars} label={barsLabel ?? `${label} per day`} className="mt-1 hidden sm:flex" />}
       </div>
       <div className="mt-auto flex min-h-[36px] items-center gap-2 border-t border-line px-3.5 py-2 sm:px-4">
         {info ? <InfoTip label={`About ${label}`}>{info}</InfoTip> : <span />}
-        {bars && bars.length > 0 && !loading && <MiniBars values={bars} label={barsLabel ?? `${label} per day`} height={16} max={10} className="sm:hidden" />}
-        {change !== undefined && !loading && (
+        {bars && bars.length > 0 && !loading && !muted && <MiniBars values={bars} label={barsLabel ?? `${label} per day`} height={16} max={10} className="sm:hidden" />}
+        {muted && hint && <p className="ml-auto truncate text-[12px] text-ink-3">{hint}</p>}
+        {!muted && change !== undefined && !loading && (
           <p className="ml-auto flex items-center gap-1.5 text-[12px] text-ink-3">
             <ChangeChip change={change} value={rawValue} invert={invert} />
             <span className="hidden sm:inline">{compareLabel}</span>
