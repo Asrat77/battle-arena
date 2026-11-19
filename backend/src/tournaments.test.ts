@@ -251,7 +251,12 @@ describe("tournament", () => {
     assert.ok(t.champion && !t.champion.bot);
     assert.deepEqual(t.champion, t.rounds[2].matches[0].winner);
     await settle(100);
-    assert.ok(rewards.player(t.champion.id).badges.some((x) => x.id === "champion" && x.source === id));
+    // The badge is granted once per player, so a champion who already won an
+    // earlier tournament in this file keeps that badge's source. The win itself
+    // is always recorded against this tournament.
+    const r = rewards.player(t.champion.id);
+    assert.ok(r.badges.some((x) => x.id === "champion"));
+    assert.ok(r.history.some((h) => h.source === id && h.reasons.includes("tournamentWin")));
   });
 
   test("a 16-bot tournament runs four rounds to a champion", () => {

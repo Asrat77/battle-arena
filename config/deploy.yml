@@ -63,8 +63,11 @@ registry:
 
 builder:
   arch: amd64
-  # Build on the server itself: it is amd64, the Mac is not.
+  # Build on the server itself: it is amd64, the Mac is not. The GitHub deploy
+  # workflow sets ARENA_BUILD_LOCAL=1 and builds on its own amd64 runner.
+<% unless ENV["ARENA_BUILD_LOCAL"] == "1" %>
   remote: ssh://ubuntu@100.85.9.76
+<% end %>
   args:
     # NEXT_PUBLIC_* values are baked into the browser bundle at build time.
     NEXT_PUBLIC_API_URL: https://api.34.252.38.138.sslip.io
@@ -72,4 +75,4 @@ builder:
 ssh:
   user: ubuntu
   keys:
-    - ~/.ssh/battle-arena
+    - <%= ENV.fetch("ARENA_SSH_KEY", "~/.ssh/battle-arena") %>
