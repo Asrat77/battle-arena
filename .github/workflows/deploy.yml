@@ -159,14 +159,22 @@ jobs:
           check https://34.252.38.138.sslip.io/
           check https://api.34.252.38.138.sslip.io/health
 
-      - name: Tell Telegram the deploy failed
-        if: failure()
+      - name: Tell Telegram how the deploy went
+        if: always()
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT: ${{ secrets.TELEGRAM_MODERATOR_CHAT }}
+          STATUS: ${{ job.status }}
+          ACTION: ${{ inputs.action || 'deploy' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$CHAT" ] || exit 0
+          commit="$(git log -1 --pretty='%h %s' 2>/dev/null || echo "$GITHUB_SHA")"
+          case "$STATUS" in
+            success)   text="✅ battle-arena $ACTION is live: $commit https://34.252.38.138.sslip.io" ;;
+            cancelled) text="⚪ battle-arena $ACTION was cancelled: $commit $RUN_URL" ;;
+            *)         text="❌ battle-arena $ACTION failed. Production keeps the previous version unless the log says otherwise. $commit $RUN_URL" ;;
+          esac
           curl -fsS "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
             --data-urlencode "chat_id=$CHAT" \
-            --data-urlencode "text=battle-arena deploy failed. Production keeps the previous version unless the log says otherwise. $RUN_URL" >/dev/null
+            --data-urlencode "text=$text" >/dev/null

@@ -50,7 +50,7 @@ kamal deploy
 lint, test, build) passes on it. The runner joins the tailnet as an ephemeral
 node tagged `tag:ci`, which may reach only `100.85.9.76:22`; port 22 stays closed
 to the internet. It builds the image on the runner, runs `npm run migrate`
-against Neon, then `kamal deploy`, and checks `/` and `/health`. A failure pings
+against Neon, then `kamal deploy`, and checks `/` and `/health`. Every deploy (success or failure) pings
 `TELEGRAM_MODERATOR_CHAT`. `.kamal/hooks/pre-deploy` runs
 `battle-arena-backup-offsite` on the server before every deploy, from the Mac
 too; skip it with `ARENA_SKIP_PREDEPLOY_BACKUP=1`.
