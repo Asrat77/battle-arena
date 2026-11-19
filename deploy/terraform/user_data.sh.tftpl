@@ -4,6 +4,18 @@
 # inputs so a running server's user_data is unchanged.
 set -euxo pipefail
 export DEBIAN_FRONTEND=noninteractive
+# Data volume (data_volume.tf): Docker volumes live on it, bind-mounted at
+# /var/lib/docker/volumes. Terraform attaches it after boot starts, so wait.
+# A rebuilt server finds the old volume with its data and mounts it as is.
+dev=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${data_volume}
+for i in $(seq 120); do [ -e "$dev" ] && break; sleep 5; done
+blkid "$dev" >/dev/null 2>&1 || mkfs.ext4 -q -L arena-data "$dev"
+mkdir -p /data /var/lib/docker/volumes
+echo "LABEL=arena-data /data ext4 defaults,nofail 0 2" >> /etc/fstab
+echo "/data/docker-volumes /var/lib/docker/volumes none bind,nofail,x-systemd.requires-mounts-for=/data 0 0" >> /etc/fstab
+mount /data && mkdir -p /data/docker-volumes && mount /var/lib/docker/volumes
+mkdir -p /etc/systemd/system/docker.service.d
+printf '[Unit]\nRequiresMountsFor=/var/lib/docker/volumes\n' > /etc/systemd/system/docker.service.d/data-volume.conf
 apt-get update
 apt-get install -y docker.io
 systemctl enable --now docker

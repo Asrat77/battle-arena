@@ -4,10 +4,12 @@
 service: battle-arena
 image: asrat77/battle-arena
 
+# Hosts and the builder use the server's Tailscale address: port 22 on the
+# public IP is closed. The public names stay in the proxy hosts below.
 servers:
   web:
     hosts:
-      - 34.252.38.138
+      - 100.85.9.76
     cmd: npm run start -- -p 3000
     proxy:
       host: 34.252.38.138.sslip.io
@@ -17,7 +19,7 @@ servers:
         path: /
   api:
     hosts:
-      - 34.252.38.138
+      - 100.85.9.76
     cmd: npm run server
     env:
       clear:
@@ -62,7 +64,7 @@ registry:
 builder:
   arch: amd64
   # Build on the server itself: it is amd64, the Mac is not.
-  remote: ssh://ubuntu@34.252.38.138
+  remote: ssh://ubuntu@100.85.9.76
   args:
     # NEXT_PUBLIC_* values are baked into the browser bundle at build time.
     NEXT_PUBLIC_API_URL: https://api.34.252.38.138.sslip.io

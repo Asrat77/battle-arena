@@ -1,7 +1,9 @@
 # AWS deploy (single EC2 instance, Kamal)
 
 `deploy/terraform` creates the server: Ubuntu 24.04 on a t3.small with a 30 GB
-gp3 disk, an Elastic IP, and a security group open on 22 (your IP), 80 and 443.
+gp3 disk, a separate 20 GB data volume for the Docker volumes, an Elastic IP,
+and a security group open on 80 and 443 only. SSH goes over Tailscale (see
+"Server access and data volume" below).
 Its state is local and gitignored. The instance's disk holds the data of every
 app on it, so Terraform must never replace it: `aws_instance.web` ignores
 changes to the startup script and to the AMI, and has `prevent_destroy`. A plan
@@ -160,3 +162,81 @@ Two things can be written, both recorded in the audit log with who did it:
 The browser may only make those two writes (the web server refuses any other
 write), and both need the site's own Origin and an `X-Admin-CSRF` header.
 There are no bans or password resets.
+
+## Server access and data volume
+
+Added after the 2026-11-10 incident. Three things protect the server now:
+
+- **Data volume.** Every Docker volume (both apps' data, kamal-proxy's config)
+  lives on `aws_ebs_volume.data`, bind-mounted at `/var/lib/docker/volumes`,
+  so paths inside the containers and in the backup scripts did not change.
+  The volume has `prevent_destroy` and is not deleted with the instance; a
+  rebuilt server's first-boot script mounts it again. Docker refuses to start
+  if it is not mounted, so the apps never come up on empty volumes.
+- **Nightly snapshots.** A Data Lifecycle Manager policy snapshots the data
+  volume and the root disk at 01:00 UTC and keeps 14 days. They stay in this
+  AWS account; the encrypted age+rclone backups to R2 cover losing the account.
+- **No public SSH.** Port 22 is closed to the internet. SSH goes over
+  Tailscale with the usual key. If Tailscale ever breaks, Session Manager still
+  opens a shell with no open port:
+  `aws ssm start-session --target $(terraform output -raw instance_id)`
+  (needs `brew install --cask session-manager-plugin`). For a one-off, an apply
+  with `-var ssh_cidr=<your ip>/32` opens 22 to one address again.
+
+### One-time setup, in this order
+
+1. **Tailscale on the server** (port 22 is still open at this point):
+
+   ```sh
+   ssh -i ~/.ssh/battle-arena ubuntu@34.252.38.138
+   curl -fsSL https://tailscale.com/install.sh | sh
+   sudo tailscale up --hostname=battle-arena   # open the URL it prints, sign in
+   tailscale ip -4                              # note the 100.x.y.z address
+   ```
+
+   In the Tailscale admin console (Machines, battle-arena, the ... menu), choose
+   **Disable key expiry**, or the server drops off the tailnet in 180 days.
+   Install Tailscale on the Mac (`brew install --cask tailscale`), sign in to
+   the same account, and check `ssh -i ~/.ssh/battle-arena ubuntu@100.x.y.z`
+   works. Do not go on until it does.
+
+2. **Point Kamal at the Tailscale address.** Done: `config/deploy.yml` uses
+   the server's Tailscale IP `100.85.9.76` for `hosts:` and `builder.remote`
+   (the `proxy.host` lines keep the public names). Bunna reads
+   `BUNNA_DEPLOY_HOST` from its `.env.deploy`.
+
+3. **Terraform.** Read the plan before applying:
+
+   ```sh
+   cd deploy/terraform
+   terraform plan -out=harden.plan
+   ```
+
+   Expect `8 to add, 2 to change, 0 to destroy`: the data volume and its
+   attachment, the snapshot policy and its role, the Session Manager role and
+   instance profile; in place, the instance (instance profile, root disk tags)
+   and the security group (SSH rule removed). **Stop if any line says "must be
+   replaced" or the destroy count is not 0.** Then:
+
+   ```sh
+   terraform apply harden.plan
+   ```
+
+   An `AccessDenied` on the IAM or DLM resources means the deploy user cannot
+   create roles: run the same two commands with an admin profile
+   (`AWS_PROFILE=...`).
+
+4. **Move the Docker volumes** (both apps down for about a minute; pick a quiet
+   time, not 00:10 to 00:30 UTC when the backups run):
+
+   ```sh
+   VOL=$(terraform output -raw data_volume_id)
+   cd ../..
+   ssh -i ~/.ssh/battle-arena ubuntu@100.x.y.z "sudo bash -s $VOL" < deploy/move-volumes-to-ebs.sh
+   ```
+
+   If anything fails after Docker stops, the script puts the old volumes back
+   and starts Docker again. Then check both apps (`/health` here, `/up` on
+   Bunna), and `sudo reboot` once at a quiet time to prove the mounts come back
+   on boot. After a week: `sudo rm -rf /var/lib/docker/volumes.pre-ebs`.
+
