@@ -12,9 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Node 22: `node --test` expands the "**/*.test.ts" glob only from Node 21 on.
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - run: npm ci
