@@ -200,10 +200,10 @@ Added after the 2026-11-10 incident. Three things protect the server now:
    the same account, and check `ssh -i ~/.ssh/battle-arena ubuntu@100.x.y.z`
    works. Do not go on until it does.
 
-2. **Point Kamal at the Tailscale address.** Here: replace `34.252.38.138`
-   under both `hosts:` and in `builder.remote` in `config/deploy.yml` (not the
-   `proxy.host` lines; those are the public names). Bunna: set
-   `BUNNA_DEPLOY_HOST` in its `.env.deploy`.
+2. **Point Kamal at the Tailscale address.** Done: `config/deploy.yml` uses
+   the server's Tailscale IP `100.85.9.76` for `hosts:` and `builder.remote`
+   (the `proxy.host` lines keep the public names). Bunna reads
+   `BUNNA_DEPLOY_HOST` from its `.env.deploy`.
 
 3. **Terraform.** Read the plan before applying:
 
