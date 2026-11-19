@@ -5,7 +5,20 @@ variable "region" {
 
 variable "ssh_cidr" {
   type        = string
-  description = "CIDR allowed to SSH, e.g. 203.0.113.4/32"
+  description = "CIDR allowed to SSH from the internet, e.g. 203.0.113.4/32. Empty (the default) keeps port 22 closed; SSH goes over Tailscale."
+  default     = ""
+}
+
+variable "availability_zone" {
+  type        = string
+  description = "Zone of the server and its data volume. Must stay where the data volume is."
+  default     = "eu-west-1a"
+}
+
+variable "data_volume_size" {
+  type        = number
+  description = "Size in GB of the volume that holds the Docker volumes. Can grow later, never shrink."
+  default     = 20
 }
 
 variable "ssh_public_key_path" {
