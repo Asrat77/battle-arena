@@ -65,7 +65,15 @@ builder:
   arch: amd64
   # Build on the server itself: it is amd64, the Mac is not. The GitHub deploy
   # workflow sets ARENA_BUILD_LOCAL=1 and builds on its own amd64 runner.
-<% unless ENV["ARENA_BUILD_LOCAL"] == "1" %>
+<% if ENV["ARENA_BUILD_LOCAL"] == "1" %>
+  # Each runner starts with an empty Docker cache, so keep the build layers
+  # (npm modules, Next.js build) in the registry next to the app image, under
+  # the build-cache tag. Unchanged layers are then reused, not rebuilt.
+  cache:
+    type: registry
+    image: asrat77/battle-arena:build-cache
+    options: mode=max,image-manifest=true,oci-mediatypes=true
+<% else %>
   remote: ssh://ubuntu@100.85.9.76
 <% end %>
   args:

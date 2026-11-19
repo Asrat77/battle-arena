@@ -5,6 +5,8 @@ on:
   push:
     branches: [ main ]
 
+# Lint + tests and the production build run as two jobs at the same time;
+# together they used to take ~3 minutes in a row.
 jobs:
   check:
     runs-on: ubuntu-24.04
@@ -25,6 +27,28 @@ jobs:
 
       - name: Test
         run: npm test
+
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Next.js reuses compiled output from .next/cache when sources are unchanged.
+      - name: Restore Next.js build cache
+        uses: actions/cache@v6
+        with:
+          path: .next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
 
       - name: Build
         env:
