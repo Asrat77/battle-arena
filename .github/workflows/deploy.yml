@@ -137,11 +137,12 @@ jobs:
           REAL_MONEY_LEGAL_OK: ${{ secrets.REAL_MONEY_LEGAL_OK }}
           ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
           ACTION: ${{ inputs.action || 'deploy' }}
-          VERSION: ${{ inputs.version }}
+          # Not VERSION: Kamal reads that as the image tag, and an empty one breaks the build.
+          ROLLBACK_VERSION: ${{ inputs.version }}
         run: |
           if [ "$ACTION" = "rollback" ]; then
-            [ -n "$VERSION" ] || { echo "Rollback needs a version (commit SHA)"; exit 1; }
-            kamal rollback "$VERSION"
+            [ -n "$ROLLBACK_VERSION" ] || { echo "Rollback needs a version (commit SHA)"; exit 1; }
+            kamal rollback "$ROLLBACK_VERSION"
           else
             kamal deploy
           fi
