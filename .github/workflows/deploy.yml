@@ -1,0 +1,171 @@
+name: Deploy
+
+# Deploys main to production once CI has passed on it. The "Run workflow"
+# button deploys by hand, or rolls back. Setup: deploy/README.md,
+# "Automatic deploys".
+
+on:
+  workflow_run:
+    workflows: [ CI ]
+    types: [ completed ]
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: deploy, or rollback to the version below
+        type: choice
+        options: [ deploy, rollback ]
+        default: deploy
+      version:
+        description: For rollback, the commit SHA of the release to go back to
+        required: false
+      skip_backup:
+        description: Skip the pre-deploy backup (only if R2 is down)
+        type: boolean
+        default: false
+
+# One deploy at a time; a newer merge waits for the running one to finish.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://34.252.38.138.sslip.io
+
+    env:
+      DEPLOY_HOST: 100.85.9.76
+      ARENA_SSH_KEY: /home/runner/.ssh/deploy
+      # The runner is amd64, so build here instead of on the server.
+      ARENA_BUILD_LOCAL: "1"
+      ARENA_SKIP_PREDEPLOY_BACKUP: ${{ inputs.skip_backup && '1' || '' }}
+      KAMAL_VERSION: 2.12.0
+
+    steps:
+      - name: Checkout the commit CI passed
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+
+      - name: Install Kamal
+        run: gem install kamal -v "$KAMAL_VERSION" --no-document
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Join the tailnet
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Install the deploy SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          eval "$(ssh-agent -s)" >/dev/null
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          ssh-add ~/.ssh/deploy
+          ssh -o BatchMode=yes -o ConnectTimeout=20 "ubuntu@$DEPLOY_HOST" true
+
+      - name: Write Kamal secrets
+        # Every value is read from the environment when Kamal loads the file.
+        run: |
+          cat > .kamal/secrets <<'SECRETS'
+          KAMAL_REGISTRY_PASSWORD=$KAMAL_REGISTRY_PASSWORD
+          LEDGER_PRIVATE_KEY=$LEDGER_PRIVATE_KEY
+          WALLET_MODE=$WALLET_MODE
+          VERIFY_ET_KEY=$VERIFY_ET_KEY
+          DEPOSIT_TELEBIRR=$DEPOSIT_TELEBIRR
+          DEPOSIT_CBE=$DEPOSIT_CBE
+          TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
+          TELEGRAM_MODERATOR_CHAT=$TELEGRAM_MODERATOR_CHAT
+          DATABASE_URL=$DATABASE_URL
+          DATABASE_URL_UNPOOLED=$DATABASE_URL_UNPOOLED
+          STORE=$STORE
+          REAL_MONEY_LEGAL_OK=$REAL_MONEY_LEGAL_OK
+          ADMIN_TOKEN=$ADMIN_TOKEN
+          SECRETS
+
+      - name: Migrate the database
+        # migrations/*.sql, once each, each in its own transaction. Additive
+        # migrations are safe for the running version; the new one needs them.
+        if: inputs.action != 'rollback'
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: |
+          npm ci
+          npm run migrate
+
+      - name: Kamal ${{ inputs.action || 'deploy' }}
+        env:
+          KAMAL_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          LEDGER_PRIVATE_KEY: ${{ secrets.LEDGER_PRIVATE_KEY }}
+          WALLET_MODE: ${{ secrets.WALLET_MODE }}
+          VERIFY_ET_KEY: ${{ secrets.VERIFY_ET_KEY }}
+          DEPOSIT_TELEBIRR: ${{ secrets.DEPOSIT_TELEBIRR }}
+          DEPOSIT_CBE: ${{ secrets.DEPOSIT_CBE }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_MODERATOR_CHAT: ${{ secrets.TELEGRAM_MODERATOR_CHAT }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          STORE: ${{ secrets.STORE }}
+          REAL_MONEY_LEGAL_OK: ${{ secrets.REAL_MONEY_LEGAL_OK }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          ACTION: ${{ inputs.action || 'deploy' }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$ACTION" = "rollback" ]; then
+            [ -n "$VERSION" ] || { echo "Rollback needs a version (commit SHA)"; exit 1; }
+            kamal rollback "$VERSION"
+          else
+            kamal deploy
+          fi
+
+      - name: Check the live app
+        run: |
+          check() {
+            for i in 1 2 3 4 5 6; do
+              curl -fsS --max-time 10 -o /dev/null "$1" && { echo "ok $1"; return 0; }
+              sleep 10
+            done
+            echo "$1 did not answer 200"; return 1
+          }
+          check https://34.252.38.138.sslip.io/
+          check https://api.34.252.38.138.sslip.io/health
+
+      - name: Tell Telegram the deploy failed
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT: ${{ secrets.TELEGRAM_MODERATOR_CHAT }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$CHAT" ] || exit 0
+          curl -fsS "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+            --data-urlencode "chat_id=$CHAT" \
+            --data-urlencode "text=battle-arena deploy failed. Production keeps the previous version unless the log says otherwise. $RUN_URL" >/dev/null

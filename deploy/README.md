@@ -44,6 +44,44 @@ export KAMAL_REGISTRY_PASSWORD=$(gh auth token)   # needs write:packages
 kamal deploy
 ```
 
+### Automatic deploys
+
+`.github/workflows/deploy.yml` deploys `main` after CI (`.github/workflows/ci.yml`:
+lint, test, build) passes on it. The runner joins the tailnet as an ephemeral
+node tagged `tag:ci`, which may reach only `100.85.9.76:22`; port 22 stays closed
+to the internet. It builds the image on the runner, runs `npm run migrate`
+against Neon, then `kamal deploy`, and checks `/` and `/health`. A failure pings
+`TELEGRAM_MODERATOR_CHAT`. `.kamal/hooks/pre-deploy` runs
+`battle-arena-backup-offsite` on the server before every deploy, from the Mac
+too; skip it with `ARENA_SKIP_PREDEPLOY_BACKUP=1`.
+
+Manual deploy or rollback: Actions → Deploy → Run workflow (`rollback` takes the
+commit SHA of a release; `kamal app versions` lists them). Deploying from the
+Mac still works as before.
+
+One-time setup. The Tailscale `tag:ci` policy rule, the OAuth client and the
+`~/.ssh/deploy-ci` key are shared with bunna-passport (see its
+docs/OPERATIONS.md, "Automatic deploys"). Then:
+
+1. https://github.com/users/Asrat77/packages/container/battle-arena/settings →
+   Manage Actions access → add `battle-arena` with the **Write** role.
+2. From this folder on the Mac:
+
+   ```sh
+   R=Asrat77/battle-arena
+   gh secret set TS_OAUTH_CLIENT_ID -R $R      # paste, Enter
+   gh secret set TS_OAUTH_SECRET -R $R         # paste, Enter
+   gh secret set DEPLOY_SSH_KEY -R $R < ~/.ssh/deploy-ci
+   gh secret set DEPLOY_SSH_KNOWN_HOSTS -R $R -b "$(ssh-keyscan -t ed25519 100.85.9.76 2>/dev/null)"
+   KAMAL_REGISTRY_PASSWORD=x kamal secrets print | while IFS='=' read -r k v; do
+     case "$k" in
+       LEDGER_PRIVATE_KEY|WALLET_MODE|VERIFY_ET_KEY|DEPOSIT_TELEBIRR|DEPOSIT_CBE|TELEGRAM_BOT_TOKEN|TELEGRAM_MODERATOR_CHAT|DATABASE_URL|DATABASE_URL_UNPOOLED|STORE|REAL_MONEY_LEGAL_OK|ADMIN_TOKEN)
+         gh secret set "$k" -R $R -b "$v" ;;
+     esac
+   done
+   gh secret list -R $R    # expect 16 names
+   ```
+
 ### Database (Neon Postgres)
 
 The Neon project is linked by `neon.ts`. `neon deploy` (or `neon env pull`)

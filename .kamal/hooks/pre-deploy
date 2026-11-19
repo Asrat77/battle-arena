@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Take a fresh off-host backup of the arena-data volume right before the new
+# version boots. Runs for every `kamal deploy`, from the Mac or from the GitHub
+# deploy workflow. Postgres (Neon) has its own point-in-time restore.
+#
+# Skip it (for example when R2 is down) with ARENA_SKIP_PREDEPLOY_BACKUP=1.
+set -euo pipefail
+
+if [ "${ARENA_SKIP_PREDEPLOY_BACKUP:-}" = "1" ]; then
+  echo "pre-deploy: backup skipped (ARENA_SKIP_PREDEPLOY_BACKUP=1)"
+  exit 0
+fi
+
+key="${ARENA_SSH_KEY:-$HOME/.ssh/battle-arena}"
+IFS=',' read -ra hosts <<< "${KAMAL_HOSTS:?KAMAL_HOSTS is not set}"
+for host in "${hosts[@]}"; do
+  echo "pre-deploy: backing up $host before $KAMAL_COMMAND"
+  ssh -o BatchMode=yes -o ConnectTimeout=20 -i "${key/#\~/$HOME}" "ubuntu@$host" \
+    sudo -n /usr/local/bin/battle-arena-backup-offsite
+done
