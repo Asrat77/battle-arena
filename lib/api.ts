@@ -105,7 +105,7 @@ export interface RoomState {
 /** One balance change, as wallet:get sends it (amounts in santim). */
 export interface WalletTxn {
   id: string;
-  kind: "faucet" | "deposit" | "withdrawal" | "withdrawal-refund" | "hold" | "release" | "win" | "fee";
+  kind: "faucet" | "deposit" | "withdrawal" | "withdrawal-refund" | "hold" | "release" | "win" | "fee" | "adjust";
   amount: number;
   balance: number;
   ref: string | null;
