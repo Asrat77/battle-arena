@@ -28,7 +28,11 @@ const TXN: Record<WalletTxn["kind"], { label: string; icon: Icon3DName }> = {
   release: { label: "Stake returned", icon: "refresh" },
   win: { label: "Match won", icon: "trophy" },
   fee: { label: "Fee", icon: "token" },
+  adjust: { label: "Balance adjusted", icon: "refresh" },
 };
+
+/** Any entry kind this page does not know yet still shows, rather than crashing the page. */
+const FALLBACK_TXN = { label: "Balance change", icon: "refresh" } as const;
 
 export function WalletScreen() {
   const { ready, profile } = useSession();
@@ -166,9 +170,9 @@ export function WalletScreen() {
           <ul className="card flex flex-col divide-y divide-line p-0">
             {wallet.history.map((t) => (
               <li key={t.id} className="flex items-center gap-3 px-4 py-3">
-                <Icon3D name={TXN[t.kind].icon} size={28} />
+                <Icon3D name={(TXN[t.kind] ?? FALLBACK_TXN).icon} size={28} />
                 <div className="min-w-0 flex-1">
-                  <div className="font-semibold">{TXN[t.kind].label}</div>
+                  <div className="font-semibold">{(TXN[t.kind] ?? FALLBACK_TXN).label}</div>
                   <div className="text-small text-ink-3">{new Date(t.ts).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</div>
                 </div>
                 <div className="text-right">
